@@ -1,0 +1,17 @@
+node_modules/
+dist/
+.env
+pgdata/
+uploads/
+# Go binaries
+*.exe
+*.out
+backend/edu
+backend/api
+runner/runner
+
+# logs
+*.log
+
+# saved third-party reference page (not our code)
+Skillbox*

@@ -1,0 +1,50 @@
+services:
+  db:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: edu
+      POSTGRES_PASSWORD: edu
+      POSTGRES_DB: edu
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U edu -d edu"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  api:
+    build: ./backend
+    restart: unless-stopped
+    ports:
+      - "8082:8080"
+    environment:
+      DATABASE_URL: postgres://edu:edu@db:5432/edu?sslmode=disable
+      SESSION_SECRET: ${SESSION_SECRET:-change-me}
+      PAYMENTS_PROVIDER: ${PAYMENTS_PROVIDER:-mock}
+      COMMISSION_PCT: ${COMMISSION_PCT:-15}
+      PORT: "8080"
+      RUNNER_URL: http://runner:8081
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+    depends_on:
+      db:
+        condition: service_healthy
+
+  web:
+    build: ./frontend
+    restart: unless-stopped
+    ports:
+      - "3000:80"
+    depends_on:
+      - api
+
+  runner:
+    build: ./runner
+    restart: unless-stopped
+    ports:
+      - "8081:8081"
+
+volumes:
+  pgdata:

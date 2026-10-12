@@ -1,0 +1,174 @@
+openapi: 3.0.3
+info:
+  title: Edu Platform API
+  version: 1.0.0
+  description: MVP-ядро — каталог, конструктор, оплата, прогресс. Все ответы на русском для ошибок.
+servers:
+  - url: /api/v1
+paths:
+  /auth/register:
+    post:
+      summary: Регистрация по email+пароль
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email: {type: string, format: email}
+                password: {type: string, minLength: 8}
+                inviteToken: {type: string, description: 'токен приглашения учителя, опционально'}
+      responses:
+        '201': {description: Создан}
+        '400': {description: Невалидные данные / email занят}
+  /auth/login:
+    post:
+      summary: Вход
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email: {type: string}
+                password: {type: string}
+      responses:
+        '200': {description: OK, ставится httpOnly cookie}
+        '401': {description: Неверный логин или пароль}
+  /courses:
+    get:
+      summary: Каталог опубликованных курсов
+      parameters:
+        - {name: q, in: query, schema: {type: string}}
+        - {name: page, in: query, schema: {type: integer, default: 1}}
+        - {name: limit, in: query, schema: {type: integer, default: 20}}
+      responses:
+        '200': {description: Список с рейтингом и ценой}
+  /courses/{slug}:
+    get:
+      summary: Страница курса
+      parameters:
+        - {name: slug, in: path, required: true, schema: {type: string}}
+      responses:
+        '200': {description: Курс + модули + уроки (без скрытых тестов)}
+        '404': {description: Нет курса}
+  /teacher/courses:
+    post:
+      summary: Создать черновик курса
+      responses:
+        '201': {description: Создан черновик}
+        '403': {description: Только учитель}
+    get:
+      summary: Мои курсы преподавания
+      responses:
+        '200': {description: Список}
+  /teacher/courses/{id}/submit:
+    post:
+      summary: Отправить на модерацию
+      responses:
+        '200': {description: Статус review}
+        '400': {description: Пустой курс нельзя}
+  /teacher/courses/{id}/modules:
+    post:
+      summary: Создать модуль / переупорядочить
+      responses:
+        '201': {description: Модуль создан}
+  /teacher/courses/{id}/lessons:
+    post:
+      summary: Создать урок (video_text|live|quiz|code)
+      responses:
+        '201': {description: Урок создан}
+  /admin/invites:
+    post:
+      summary: Пригласить учителя
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email: {type: string, format: email}
+      responses:
+        '201': {description: Приглашение отправлено}
+  /admin/courses/review:
+    get:
+      summary: Очередь модерации
+      responses:
+        '200': {description: Курсы в review}
+  /admin/courses/{id}/moderate:
+    post:
+      summary: Одобрить/отклонить с комментарием
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [decision]
+              properties:
+                decision: {type: string, enum: [approve, reject]}
+                comment: {type: string}
+      responses:
+        '200': {description: Статус published или draft}
+  /enrollments:
+    post:
+      summary: Создать платеж и запись (покупка)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [courseId]
+              properties:
+                courseId: {type: string, format: uuid}
+                provider: {type: string, enum: [mock, stripe, yookassa], default: mock}
+      responses:
+        '201': {description: Платеж создан, есть redirectUrl}
+        '409': {description: Уже куплен}
+  /payments/webhook/{provider}:
+    post:
+      summary: Webhook провайдера (идемпотентный)
+      responses:
+        '200': {description: Обработан или дубликат}
+  /me/courses:
+    get:
+      summary: Мои курсы с прогрессом
+      responses:
+        '200': {description: Список + percent + nextLesson}
+  /me/courses/{id}/lessons/{lessonId}/complete:
+    post:
+      summary: Отметить урок пройденным / сдать квиз / сдать код
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                quizAnswers: {type: object}
+                code: {type: string}
+                language: {type: string, enum: [python, js, htmlcss]}
+      responses:
+        '200': {description: Вердикт + обновленный прогресс}
+  /courses/{id}/reviews:
+    get:
+      summary: Отзывы курса
+      responses:
+        '200': {description: Список}
+    post:
+      summary: Оставить отзыв (1 на ученика)
+      responses:
+        '201': {description: Создан}
+        '403': {description: Только записанные}
+  /healthz:
+    get:
+      summary: Healthcheck
+      responses:
+        '200': {description: OK}
