@@ -30,9 +30,43 @@ docker-compose.yml                          — sandbox runner, лимиты, en
 | Источник | Что зарегистрировать |
 |---|---|
 | T07 | `a.RegisterAdminPaymentsRoutes(...)` → `GET /admin/payments`, `GET/PUT /admin/settings` под `requireRole(admin)` |
-| T09 | маршрут mock-страницы оплаты (`/pay/mock/{id}`), если он описан в отчёте T09 |
+| T09 | **`r.Get("/pay/mock/{id}", payments.MockConfirmHandler())`** — см. ниже |
 | T10 | `GET /auth/yandex/start`, `GET /auth/yandex/callback` (если описаны в отчёте T10); вешай `rateLimit` на `/auth/login`, `/auth/register` |
 | T13 | `path`-обслуживание `/uploads/*` — если `internal/storage` решено подключить (см. п.4) |
+
+### Требование T09 — mock-страница оплаты (точные координаты)
+
+В `backend/internal/handler/middleware.go`, функция `NewRouter`, **после строки 44**
+(`r.Get("/healthz", healthz)`), на верхнем уровне роутера — **не под `/api/v1`**,
+потому что `redirectUrl = "/pay/mock/{id}"`:
+
+```go
+r.Get("/pay/mock/{id}", payments.MockConfirmHandler())
+```
+плюс импорт `"edu-platform/backend/internal/payments"`.
+
+Без этого маршрута **мок-покупка не работает вообще** — `redirectUrl`,
+который возвращает провайдер, ведёт в никуда. Это блокирует
+сквозной сценарий покупки из `qa-abc.ps1` (T12).
+
+Обязательно проверь, что:
+- `mock.go` из T09 экспортирует именно `MockConfirmHandler()`;
+- страница шлёт `POST /api/v1/payments/webhook/mock` (маршрут уже есть в `NewRouter`);
+- `payments.MockConfirmPath(id)` — то, что возвращает `CreatePayment` как `redirectUrl`.
+
+### Env-переменные, добавленные T09 — передать в сервис `api`
+
+| Переменная | Обязательна | Назначение |
+|---|---|---|
+| `STRIPE_SECRET_KEY` | для stripe | Bearer-авторизация |
+| `STRIPE_WEBHOOK_SECRET` | для stripe | HMAC-секрет `Stripe-Signature` |
+| `YOOKASSA_SHOP_ID` | для yookassa | Basic-авторизация |
+| `YOOKASSA_SECRET_KEY` | для yookassa | Basic-авторизация |
+| `YOOKASSA_TRUSTED_IPS` | нет | CIDR/IP доверенных источников вебхуков |
+| `MOCK_WEBHOOK_SECRET` | нет | если задан — mock-вебхук требует `X-Mock-Signature` |
+| `PAYMENTS_RETURN_URL` | нет | URL возврата после оплаты |
+
+Передавай через `${VAR:-}` из `.env`, чтобы не падать без ключей.
 
 Обязательно проверь и исправь:
 - `POST /api/v1/payments/webhook/{provider}` — должен идти **после** rate-limit,
