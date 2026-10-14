@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
 
 	"edu-platform/backend/internal/payments"
 	"edu-platform/backend/internal/repo"
@@ -40,7 +41,7 @@ func (a *App) CreateEnrollment(w http.ResponseWriter, r *http.Request) {
 	}
 	// Повторный запрос при pending-платеже — вернуть ту же ссылку (идемпотентность).
 	if p, pending := a.Store.FindPendingPayment(u.ID, c.ID); pending {
-		writeJSON(w, http.StatusOK, enrollmentResponse(p, p.ProviderPaymentID, false))
+		writeJSON(w, http.StatusOK, enrollmentResponse(p, payments.ResumeURL(p.Provider, p.ProviderPaymentID), false))
 		return
 	}
 
@@ -72,13 +73,20 @@ func (a *App) CreateEnrollment(w http.ResponseWriter, r *http.Request) {
 
 	prov, err := payments.NewProvider(providerName)
 	if err != nil {
+		if errors.Is(err, payments.ErrNotConfigured) {
+			// Провайдер существует, но не настроен — это сбой конфигурации, не запроса.
+			writeErr(w, http.StatusBadGateway, "Платёжный сервис не настроен")
+			return
+		}
 		writeErr(w, http.StatusBadRequest, err.Error())
 		return
 	}
 	res, err := prov.CreatePayment(r.Context(), payments.CreatePaymentRequest{
+		PaymentID:   uuid.NewString(), // клиентский ключ идемпотентности у провайдера (платёж ещё не в БД)
 		AmountCents: c.PriceCents,
 		Currency:    c.Currency,
 		Description: "Оплата курса: " + c.Title,
+		ReturnURL:   payments.DefaultReturnURL(),
 	})
 	if err != nil {
 		writeErr(w, http.StatusBadGateway, "Платёжный сервис недоступен: "+err.Error())
@@ -106,18 +114,29 @@ func enrollmentResponse(p *repo.Payment, redirectURL string, active bool) map[st
 	}
 }
 
-// PaymentWebhook — POST /payments/webhook/{provider}: идемпотентная обработка.
-// Повторный webhook по тому же providerPaymentID возвращает duplicate.
+// PaymentWebhook — POST /payments/webhook/{provider}: проверка подписи и
+// идемпотентная обработка события. Подпись проверяется ДО разбора тела;
+// повторный webhook по тому же providerPaymentID возвращает duplicate.
 func (a *App) PaymentWebhook(w http.ResponseWriter, r *http.Request) {
 	providerName := chi.URLParam(r, "provider")
 	prov, err := payments.NewProvider(providerName)
 	if err != nil {
+		if errors.Is(err, payments.ErrNotConfigured) {
+			writeErr(w, http.StatusBadGateway, "Платёжный сервис не настроен")
+			return
+		}
 		writeErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	// Критически важно: подпись/источник проверяются до применения события,
+	// иначе кто угодно может получить доступ к платному курсу.
+	if err := prov.VerifyWebhook(r, nil); err != nil {
+		writeWebhookErr(w, err)
 		return
 	}
 	event, err := prov.HandleWebhook(r)
 	if err != nil {
-		writeErr(w, http.StatusBadRequest, err.Error())
+		writeWebhookErr(w, err)
 		return
 	}
 	p, found := a.Store.GetPaymentByProviderID(event.ProviderPaymentID)
@@ -125,19 +144,50 @@ func (a *App) PaymentWebhook(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusNotFound, "Платёж не найден")
 		return
 	}
-	if p.Status == repo.PaymentSucceeded {
-		writeJSON(w, http.StatusOK, map[string]any{"status": "duplicate"})
-		return
-	}
 	switch event.Status {
 	case "succeeded":
+		if p.Status == repo.PaymentSucceeded {
+			writeJSON(w, http.StatusOK, map[string]any{"status": "duplicate"})
+			return
+		}
 		a.Store.SetPaymentStatus(p.ID, repo.PaymentSucceeded)
 		a.Store.EnsureEnrollment(p.StudentID, p.CourseID)
 		writeJSON(w, http.StatusOK, map[string]any{"status": "processed"})
 	case "failed":
+		if p.Status == repo.PaymentFailed {
+			writeJSON(w, http.StatusOK, map[string]any{"status": "duplicate"})
+			return
+		}
 		a.Store.SetPaymentStatus(p.ID, repo.PaymentFailed)
+		writeJSON(w, http.StatusOK, map[string]any{"status": "processed"})
+	case "refunded":
+		if p.Status == repo.PaymentRefunded {
+			writeJSON(w, http.StatusOK, map[string]any{"status": "duplicate"})
+			return
+		}
+		if p.Status != repo.PaymentSucceeded {
+			// Возвращать можно только оплаченный платёж.
+			writeJSON(w, http.StatusOK, map[string]any{"status": "ignored"})
+			return
+		}
+		a.Store.SetPaymentStatus(p.ID, repo.PaymentRefunded)
+		// Перевод записи в EnrollmentRefunded требует метода SetEnrollmentStatus
+		// в StoreAPI — его добавление относится к зоне T07/T13 (см. отчёт T09).
 		writeJSON(w, http.StatusOK, map[string]any{"status": "processed"})
 	default:
 		writeJSON(w, http.StatusOK, map[string]any{"status": "ignored"})
+	}
+}
+
+// writeWebhookErr мапит ошибки проверки подписи/провайдера на HTTP-коды:
+// 401 — неверная подпись, 502 — внешний платёжный сервис недоступен, 400 — прочее.
+func writeWebhookErr(w http.ResponseWriter, err error) {
+	switch {
+	case errors.Is(err, payments.ErrUnauthorized):
+		writeErr(w, http.StatusUnauthorized, "Недействительная подпись вебхука")
+	case errors.Is(err, payments.ErrUpstream):
+		writeErr(w, http.StatusBadGateway, "Платёжный сервис недоступен: "+err.Error())
+	default:
+		writeErr(w, http.StatusBadRequest, err.Error())
 	}
 }
