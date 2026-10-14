@@ -25,14 +25,26 @@ docker-compose.yml                          — sandbox runner, лимиты, en
 
 ### 1. Маршруты (`middleware.go`)
 
-Собери в `NewRouter` всё, что подготовили другие задачи. Ожидаемые кандидаты:
+Собери в `NewRouter` всё, что подготовили другие задачи. **Прочитай раздел
+«Проверенные координаты вставки» в самом конце этой задачи — там верные
+точки вставки, проверенные по исходникам после смержения T07/T09/T10.**
 
-| Источник | Что зарегистрировать |
-|---|---|
-| T07 | `a.RegisterAdminPaymentsRoutes(...)` → `GET /admin/payments`, `GET/PUT /admin/settings` под `requireRole(admin)` |
-| T09 | **`r.Get("/pay/mock/{id}", payments.MockConfirmHandler())`** — см. ниже |
-| T10 | `GET /auth/yandex/start`, `GET /auth/yandex/callback` (если описаны в отчёте T10); вешай `rateLimit` на `/auth/login`, `/auth/register` |
-| T13 | `path`-обслуживание `/uploads/*` — если `internal/storage` решено подключить (см. п.4) |
+| Источник | Что зарегистрировать | Где |
+|---|---|---|
+| T07 | `app.RegisterAdminPaymentsRoutes(r)` | **на уровне `/api/v1`**, между строками 95 и 97 (после `POST /enrollments`) |
+| T09 | `r.Get("/pay/mock/{id}", payments.MockConfirmHandler())` | **на верхнем уровне роутера**, сразу после `r.Get("/healthz", healthz)` — **не** под `/api/v1` |
+| T10 | `GET /auth/yandex/start`, `GET /auth/yandex/callback` | внутри `/api/v1`; лимитер auth уже навешен T10 |
+| T13 | `path`-обслуживание `/uploads/*` — если `internal/storage` решено подключить (см. п.4) | по усмотрению |
+
+### ⚠️ Исправленные координаты — не следуй старым комментариям-маркерам
+
+Агент T10 оставил в `middleware.go` два маркера-подсказки. **Оба неверны**,
+проверено по исходникам. Не повторяй ошибку:
+
+1. **Маркер в `r.Route("/admin", ...)` предлагал `app.RegisterAdminPaymentsRoutes(r)` внутри блока `/admin`.** Это неверно: метод регистрирует **абсолютные** пути `/admin/payments`, `/admin/settings` (`handler/admin_payments.go:20-27`, строки `Get("/admin/payments", ...)`). Монтирование внутри `r.Route("/admin", ...)` даст `/admin/admin/payments`. Плюс middleware `requireAuth` + `requireRole(admin)` метод вешает **сам** через `.With(...)` — двойная обёртка не нужна.
+2. **Маркер под webhook предлагал `app.PaymentCheckoutPage` по пути `/payments/{provider}/checkout`.** Такого хендлера **не существует**. T09 экспортирует `payments.MockConfirmHandler() http.Handler` (`payments/mock.go:246`), а путь — `/pay/mock/{id}`, см. `payments.MockConfirmPath(id)` (`mock.go:50`).
+
+Эти маркеры я исправил в `middleware.go` на верные инструкции.
 
 ### Требование T09 — mock-страница оплаты (точные координаты)
 
@@ -127,6 +139,28 @@ r.Get("/pay/mock/{id}", payments.MockConfirmHandler())
     (это артефакт процесса). Вместо правки — в отчёте перечисли,
     какие задачи из `tasks.md` фактически были закрыты этой волной.
 13. Прогони `go build`, `go vet`, `go test` для `backend` и `runner`.
+
+### 6. Бэклог от T06 — недостающие эндпоинты конструктора
+
+T06 честно отказался рисовать кнопки переименования/удаления/перестановки,
+потому что API этого не умеет. Реализуй хотя бы первые три — они разблокируют
+основные сценарии преподавателя. Остальные — по остаточному принципу.
+
+| Эндпоинт | Тело | Зачем | Приоритет |
+|---|---|---|---|
+| `GET /teacher/courses/{id}` | — → Course + modules | редактор по id без обхода «список → slug → /courses/{slug}» | высокий |
+| `PATCH /teacher/courses/{id}` | `{ title?, description?, priceCents?, slug? }` → Course | правка карточки курса | высокий |
+| `PATCH /teacher/courses/{id}/modules/{moduleId}` | `{ title }` → Module | переименование модуля (повторный POST создаёт новый) | высокий |
+| `PATCH /teacher/courses/{id}/lessons/{lessonId}` | тело как в POST lessons (по kind) → Lesson | редактирование урока после создания | средний |
+| `DELETE /teacher/courses/{id}/modules/{moduleId}` | — → 204 (409 при непустых уроках) | удаление модуля | средний |
+| `DELETE /teacher/courses/{id}/lessons/{lessonId}` | — → 204 | удаление урока | средний |
+| `POST /teacher/courses/{id}/modules/reorder` | `{ items: [{ id, position }] }` | порядок модулей | низкий |
+| `POST /teacher/courses/{id}/lessons/reorder` | `{ items: [{ id, position }] }` | порядок уроков | низкий |
+| `DELETE /teacher/courses/{id}` | — → 204 | удаление курса | низкий |
+| обогатить `GET /teacher/courses` | + `modulesCount`, `lessonsCount` | счётчики в списках без N+1 | средний |
+
+Каждый новый эндпоинт — **в отдельном файле** с `Register...Routes`,
+как сделал T07, чтобы не раздувать `middleware.go` и не создавать конфликтов.
 
 ## Критерии приёмки
 

@@ -55,6 +55,15 @@ func NewRouter(app *App) http.Handler {
 	r.Use(app.cors)
 
 	r.Get("/healthz", healthz)
+	// ⚠️ T13 (волна 3): mock-страница оплаты (T09). Регистрируется НА ВЕРХНЕМ
+	// УРОВНЕ роутера, а не под /api/v1 — потому что redirectUrl, который
+	// возвращает провайдер, равен "/pay/mock/{id}" и браузер пойдёт именно туда.
+	// Страница сама шлёт POST /api/v1/payments/webhook/mock, поэтому доступ
+	// к курсу активируется тем же кодом, что и для реальных провайдеров.
+	// Добавить ТОЛЬКО когда будет подтверждена сигнатура payments.MockConfirmHandler():
+	//   r.Get("/pay/mock/{id}", payments.MockConfirmHandler())  // плюс импорт payments
+	// Без этого маршрута покупка в mock-режиме (PAYMENTS_PROVIDER=mock) не работает
+	// вообще — redirectUrl ведёт в никуда. Это блокирует сквозной сценарий T12.
 	r.Route("/api/v1", func(r chi.Router) {
 		// T10: глобальный мягкий лимит от флуда + CSRF-проверка меняющих методов.
 		r.Use(app.rateLimit("global", app.Config.RateLimitGlobalPerMin))
@@ -87,19 +96,18 @@ func NewRouter(app *App) http.Handler {
 			r.Post("/invites", app.AdminCreateInvite)
 			r.Get("/courses/review", app.AdminReviewQueue)
 			r.Post("/courses/{id}/moderate", app.AdminModerateCourse)
-			// T13 (волна 3): сюда подключить маршруты T07 — журнал платежей
-			// и комиссия платформы: app.RegisterAdminPaymentsRoutes(r)
-			// (см. Task/T07-admin-us6-backend.md, handler/admin_payments.go).
+			// ⚠️ T13: НЕ подключать RegisterAdminPaymentsRoutes сюда!
+			// Этот метод регистрирует АБСОЛЮТНЫЕ пути /admin/payments и
+			// /admin/settings (см. handler/admin_payments.go:20-27). Монтирование
+			// внутри блока r.Route("/admin", ...) даст /admin/admin/payments.
+			// Строка app.RegisterAdminPaymentsRoutes(r) добавляется НА УРОВНЕ
+			// /api/v1 — см. Task/T13-integration-wiring.md.
 		})
 
 		r.With(app.requireAuth).Post("/enrollments", app.CreateEnrollment)
 		// Webhook-и провайдеров оплачивают CSRF-проверку подписью (T09),
 		// поэтому исключены из csrfProtect — платёжки шлют их без Origin.
 		r.With(app.rateLimit("webhook", app.Config.RateLimitWebhookPerMin)).Post("/payments/webhook/{provider}", app.PaymentWebhook)
-		// T13 (волна 3): сюда подключить T09 — mock-страница оплаты
-		// (редирект после создания платежа, например):
-		// r.Get("/payments/{provider}/checkout", app.PaymentCheckoutPage)
-		// (см. Task/T09-payments-providers.md).
 
 		r.With(app.requireAuth).Get("/me/courses", app.MyCourses)
 		r.With(app.requireAuth).Post("/me/courses/{id}/lessons/{lessonId}/complete", app.CompleteLesson)
