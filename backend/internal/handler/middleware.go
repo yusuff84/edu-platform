@@ -3,10 +3,18 @@ package handler
 
 import (
 	"context"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/base64"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"io"
+	"net"
 	"net/http"
+	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -21,6 +29,11 @@ import (
 type App struct {
 	Store  repo.StoreAPI
 	Config *config.Config
+
+	// Лениво создаваемые rate-limiter'ы по имени группы (T10).
+	limitersMu   sync.Mutex
+	limitersOnce sync.Once
+	limiters     map[string]*rateLimiter
 }
 
 type ctxKey string
@@ -36,17 +49,22 @@ const sessionTTL = 7 * 24 * time.Hour
 func NewRouter(app *App) http.Handler {
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID)
-	r.Use(middleware.RealIP)
+	r.Use(app.realIP)
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
 	r.Use(app.cors)
 
 	r.Get("/healthz", healthz)
 	r.Route("/api/v1", func(r chi.Router) {
+		// T10: глобальный мягкий лимит от флуда + CSRF-проверка меняющих методов.
+		r.Use(app.rateLimit("global", app.Config.RateLimitGlobalPerMin))
+		r.Use(app.csrfProtect)
+
 		r.Get("/healthz", healthz)
 
-		r.Post("/auth/register", app.Register)
-		r.Post("/auth/login", app.Login)
+		// T10: жёсткий лимит на перебор паролей и спам регистрациями (10/мин на IP).
+		r.With(app.rateLimit("auth", app.Config.RateLimitAuthPerMin)).Post("/auth/register", app.Register)
+		r.With(app.rateLimit("auth", app.Config.RateLimitAuthPerMin)).Post("/auth/login", app.Login)
 		r.Post("/auth/logout", app.Logout)
 		r.Get("/auth/me", app.Me)
 
@@ -69,10 +87,19 @@ func NewRouter(app *App) http.Handler {
 			r.Post("/invites", app.AdminCreateInvite)
 			r.Get("/courses/review", app.AdminReviewQueue)
 			r.Post("/courses/{id}/moderate", app.AdminModerateCourse)
+			// T13 (волна 3): сюда подключить маршруты T07 — журнал платежей
+			// и комиссия платформы: app.RegisterAdminPaymentsRoutes(r)
+			// (см. Task/T07-admin-us6-backend.md, handler/admin_payments.go).
 		})
 
 		r.With(app.requireAuth).Post("/enrollments", app.CreateEnrollment)
-		r.Post("/payments/webhook/{provider}", app.PaymentWebhook)
+		// Webhook-и провайдеров оплачивают CSRF-проверку подписью (T09),
+		// поэтому исключены из csrfProtect — платёжки шлют их без Origin.
+		r.With(app.rateLimit("webhook", app.Config.RateLimitWebhookPerMin)).Post("/payments/webhook/{provider}", app.PaymentWebhook)
+		// T13 (волна 3): сюда подключить T09 — mock-страница оплаты
+		// (редирект после создания платежа, например):
+		// r.Get("/payments/{provider}/checkout", app.PaymentCheckoutPage)
+		// (см. Task/T09-payments-providers.md).
 
 		r.With(app.requireAuth).Get("/me/courses", app.MyCourses)
 		r.With(app.requireAuth).Post("/me/courses/{id}/lessons/{lessonId}/complete", app.CompleteLesson)
@@ -97,61 +124,108 @@ func writeErr(w http.ResponseWriter, status int, msg string) {
 	writeJSON(w, status, map[string]string{"error": msg})
 }
 
-// decodeJSON читает JSON-тело с лимитом 1 МБ.
+// decodeJSON читает JSON-тело с лимитом 1 МБ и переводит ошибки
+// декодера на понятный русский текст (без технических подробностей).
 func decodeJSON(w http.ResponseWriter, r *http.Request, dst any) bool {
 	defer r.Body.Close()
 	dec := json.NewDecoder(io.LimitReader(r.Body, 1<<20))
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(dst); err != nil {
-		writeErr(w, http.StatusBadRequest, "Некорректное тело запроса")
+		var typeErr *json.UnmarshalTypeError
+		switch {
+		case errors.As(err, &typeErr):
+			writeErr(w, http.StatusBadRequest, fmt.Sprintf("Некорректное поле «%s»: неверный тип значения", typeErr.Field))
+		case strings.HasPrefix(err.Error(), "json: unknown field "):
+			name := strings.Trim(strings.TrimPrefix(err.Error(), "json: unknown field "), `"`)
+			writeErr(w, http.StatusBadRequest, fmt.Sprintf("Некорректное тело запроса: неизвестное поле %s", name))
+		default:
+			writeErr(w, http.StatusBadRequest, "Некорректное тело запроса")
+		}
 		return false
 	}
 	return true
 }
 
-// ---- Sessions / auth ----
+// ---- Sessions / auth (T10: cookie со HMAC-SHA256-подписью) ----
 
-// currentUser возвращает пользователя из контекста (после requireAuth).
-func (a *App) currentUser(r *http.Request) (*repo.User, bool) {
-	u, ok := r.Context().Value(userCtxKey).(*repo.User)
-	if !ok || u == nil {
-		return nil, false
-	}
-	fresh, ok := a.Store.GetUserByID(u.ID)
-	if !ok {
-		return nil, false
-	}
-	return fresh, true
+// signSessionID считает подпись sessionID: base64url(HMAC-SHA256(secret, sessionID)).
+func signSessionID(secret, sessionID string) string {
+	mac := hmac.New(sha256.New, []byte(secret))
+	mac.Write([]byte(sessionID))
+	return base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
 }
 
-// startSession создаёт сессию и ставит httpOnly cookie (SameSite=Lax — CSRF-минимум).
-func (a *App) startSession(w http.ResponseWriter, userID string) {
-	sess := a.Store.CreateSession(userID, sessionTTL)
-	http.SetCookie(w, &http.Cookie{
+// sessionValue возвращает значение cookie: "<sessionID>.<подпись>",
+// либо голый sessionID, если подпись отключена (dev без SESSION_SECRET).
+func (a *App) sessionValue(sessionID string) string {
+	secret := strings.TrimSpace(a.Config.SessionSecret)
+	if secret == "" {
+		// Dev-режим без секрета: подпись не используется (предупреждение пишет config.Load).
+		return sessionID
+	}
+	return sessionID + "." + signSessionID(secret, sessionID)
+}
+
+// parseSessionValue разбирает "<sessionID>.<подпись>" и проверяет подпись
+// через hmac.Equal (защита от тайминг-атак). Подделка значения → не ok.
+// Голый sessionID принимается только когда подпись отключена (dev без секрета).
+func (a *App) parseSessionValue(v string) (string, bool) {
+	secret := strings.TrimSpace(a.Config.SessionSecret)
+	if secret == "" {
+		return v, v != ""
+	}
+	id, sig, ok := strings.Cut(v, ".")
+	if !ok || id == "" || sig == "" {
+		return "", false
+	}
+	if !hmac.Equal([]byte(sig), []byte(signSessionID(secret, id))) {
+		return "", false
+	}
+	return id, true
+}
+
+// isHTTPS определяет HTTPS по TLS-соединению или заголовку балансировщика.
+func isHTTPS(r *http.Request) bool {
+	return r.TLS != nil || strings.EqualFold(strings.TrimSpace(r.Header.Get("X-Forwarded-Proto")), "https")
+}
+
+// sessionCookieFor собирает httpOnly cookie сессии: Secure — по HTTPS-запросу
+// (и всегда при SameSite=None — браузеры такое требуют), SameSite — из конфига.
+func (a *App) sessionCookieFor(r *http.Request, value string, maxAge int) *http.Cookie {
+	samesite := a.Config.CookieSameSite
+	if samesite == 0 {
+		samesite = http.SameSiteLaxMode
+	}
+	secure := isHTTPS(r) || samesite == http.SameSiteNoneMode
+	return &http.Cookie{
 		Name:     sessionCookie,
-		Value:    sess.ID,
+		Value:    value,
 		Path:     "/",
 		HttpOnly: true,
-		SameSite: http.SameSiteLaxMode,
-		MaxAge:   int(sessionTTL.Seconds()),
-	})
+		Secure:   secure,
+		SameSite: samesite,
+		MaxAge:   maxAge,
+	}
+}
+
+// startSession создаёт сессию и ставит подписанную httpOnly cookie.
+func (a *App) startSession(w http.ResponseWriter, r *http.Request, userID string) {
+	sess := a.Store.CreateSession(userID, sessionTTL)
+	http.SetCookie(w, a.sessionCookieFor(r, a.sessionValue(sess.ID), int(sessionTTL.Seconds())))
 }
 
 func (a *App) clearSession(w http.ResponseWriter, r *http.Request) {
 	if c, err := r.Cookie(sessionCookie); err == nil {
-		a.Store.DeleteSession(c.Value)
+		// Удаляем сессию по разобранному sessionID, а не по сырым "<id>.<подпись>".
+		if id, ok := a.parseSessionValue(c.Value); ok {
+			a.Store.DeleteSession(id)
+		}
 	}
-	http.SetCookie(w, &http.Cookie{
-		Name:     sessionCookie,
-		Value:    "",
-		Path:     "/",
-		HttpOnly: true,
-		SameSite: http.SameSiteLaxMode,
-		MaxAge:   -1,
-	})
+	http.SetCookie(w, a.sessionCookieFor(r, "", -1))
 }
 
-// requireAuth требует валидную сессию и кладёт пользователя в контекст.
+// requireAuth требует валидную (и корректно подписанную) сессию
+// и кладёт пользователя в контекст. CSRF-проверку см. csrfProtect.
 func (a *App) requireAuth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		c, err := r.Cookie(sessionCookie)
@@ -159,7 +233,12 @@ func (a *App) requireAuth(next http.Handler) http.Handler {
 			writeErr(w, http.StatusUnauthorized, "Требуется вход в аккаунт")
 			return
 		}
-		sess, ok := a.Store.GetSession(c.Value)
+		id, ok := a.parseSessionValue(c.Value)
+		if !ok {
+			writeErr(w, http.StatusUnauthorized, "Некорректная сессия, войдите снова")
+			return
+		}
+		sess, ok := a.Store.GetSession(id)
 		if !ok {
 			writeErr(w, http.StatusUnauthorized, "Сессия истекла, войдите снова")
 			return
@@ -168,13 +247,6 @@ func (a *App) requireAuth(next http.Handler) http.Handler {
 		if !ok {
 			writeErr(w, http.StatusUnauthorized, "Пользователь не найден")
 			return
-		}
-		// CSRF-минимум: для меняющих методов проверяем Origin/Referer.
-		if r.Method != http.MethodGet && r.Method != http.MethodHead && r.Method != http.MethodOptions {
-			if !a.allowedOrigin(r) {
-				writeErr(w, http.StatusForbidden, "Недопустимый источник запроса")
-				return
-			}
 		}
 		ctx := context.WithValue(r.Context(), userCtxKey, u)
 		next.ServeHTTP(w, r.WithContext(ctx))
@@ -209,7 +281,11 @@ func (a *App) optionalUser(r *http.Request) *repo.User {
 	if err != nil {
 		return nil
 	}
-	sess, ok := a.Store.GetSession(c.Value)
+	id, ok := a.parseSessionValue(c.Value)
+	if !ok {
+		return nil
+	}
+	sess, ok := a.Store.GetSession(id)
 	if !ok {
 		return nil
 	}
@@ -218,6 +294,175 @@ func (a *App) optionalUser(r *http.Request) *repo.User {
 		return nil
 	}
 	return u
+}
+
+// currentUser возвращает пользователя из контекста (после requireAuth).
+func (a *App) currentUser(r *http.Request) (*repo.User, bool) {
+	u, ok := r.Context().Value(userCtxKey).(*repo.User)
+	if !ok || u == nil {
+		return nil, false
+	}
+	fresh, ok := a.Store.GetUserByID(u.ID)
+	if !ok {
+		return nil, false
+	}
+	return fresh, true
+}
+
+// ---- Rate-limit (T10) ----
+//
+// In-memory token bucket без внешних зависимостей: у каждой IP и именованной
+// группы (auth, global, webhook) — своё ведро ёмкостью perMin с непрерывным
+// пополнением perMin/мин. Протухшие ведра вычищает фоновая горутина,
+// чтобы карта не росла по памяти.
+
+// rlBucket — состояние одного IP внутри лимитера.
+type rlBucket struct {
+	tokens float64
+	seen   time.Time // последняя активность: по ней считаем пополнение и TTL
+}
+
+// rateLimiter — потокобезопасный лимитер token bucket.
+// Поле now инжектируется в тестах для детерминированности.
+type rateLimiter struct {
+	mu       sync.Mutex
+	buckets  map[string]*rlBucket
+	capacity float64        // максимум токенов (= perMin)
+	refill   float64        // токенов в секунду
+	ttl      time.Duration  // неактивность ведра после которой удаляем
+	now      func() time.Time
+}
+
+func newRateLimiter(perMin int, window time.Duration, now func() time.Time) *rateLimiter {
+	if now == nil {
+		now = time.Now
+	}
+	if window <= 0 {
+		window = time.Minute
+	}
+	return &rateLimiter{
+		buckets:  make(map[string]*rlBucket),
+		capacity: float64(perMin),
+		refill:   float64(perMin) / window.Seconds(),
+		ttl:      2 * window,
+		now:      now,
+	}
+}
+
+// allow списывает один токен по ключу; при пустом ведре возвращает
+// false и паузу до следующего токена (для заголовка Retry-After).
+func (l *rateLimiter) allow(key string) (bool, time.Duration) {
+	now := l.now()
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	b, ok := l.buckets[key]
+	if !ok {
+		b = &rlBucket{tokens: l.capacity, seen: now}
+		l.buckets[key] = b
+	}
+	if elapsed := now.Sub(b.seen).Seconds(); elapsed > 0 {
+		b.tokens += elapsed * l.refill
+		if b.tokens > l.capacity {
+			b.tokens = l.capacity
+		}
+	}
+	b.seen = now
+	if b.tokens >= 1 {
+		b.tokens--
+		return true, 0
+	}
+	wait := time.Duration((1-b.tokens)/l.refill) * time.Second
+	if wait < time.Second {
+		wait = time.Second
+	}
+	return false, wait
+}
+
+// cleanup удаляет ведра, неактивные дольше ttl (защита от утечки памяти).
+func (l *rateLimiter) cleanup() {
+	now := l.now()
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	for k, b := range l.buckets {
+		if now.Sub(b.seen) > l.ttl {
+			delete(l.buckets, k)
+		}
+	}
+}
+
+// startJanitor запускает периодическую очистку карты ведёр
+// (горутина живёт вместе с процессом — лимитер создаётся один раз).
+func (l *rateLimiter) startJanitor(interval time.Duration) {
+	if interval <= 0 {
+		interval = time.Minute
+	}
+	go func() {
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+		for range ticker.C {
+			l.cleanup()
+		}
+	}()
+}
+
+// rateLimit возвращает middleware «name» с лимитом perMin запросов в минуту
+// на IP клиента. perMin <= 0 — лимит выключен (pass-through): так тесты
+// и dev не зависят от rate-limit'ов, а прод получает дефолты из config.Load.
+func (a *App) rateLimit(name string, perMin int) func(http.Handler) http.Handler {
+	if perMin <= 0 {
+		return func(next http.Handler) http.Handler { return next }
+	}
+	a.limitersOnce.Do(func() { a.limiters = make(map[string]*rateLimiter) })
+	a.limitersMu.Lock()
+	l, ok := a.limiters[name]
+	if !ok {
+		l = newRateLimiter(perMin, time.Minute, time.Now)
+		l.startJanitor(time.Minute)
+		a.limiters[name] = l
+	}
+	a.limitersMu.Unlock()
+
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			allowed, wait := l.allow(clientIP(r))
+			if !allowed {
+				w.Header().Set("Retry-After", strconv.Itoa(int(wait.Seconds())+1))
+				writeErr(w, http.StatusTooManyRequests, "Слишком много запросов, повторите позже")
+				return
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
+// clientIP извлекает IP из RemoteAddr (после realIP).
+func clientIP(r *http.Request) string {
+	if host, _, err := net.SplitHostPort(r.RemoteAddr); err == nil {
+		return host
+	}
+	return r.RemoteAddr
+}
+
+// realIP подставляет клиента из заголовков балансировщика (X-Real-IP /
+// X-Forwarded-For), но только когда реальный RemoteAddr — loopback или
+// приватная сеть (доверенный прокси). Иначе заголовкам доверять нельзя:
+// браузер умеет подставлять X-Forwarded-For сам и обходил бы rate-limit по IP.
+func (a *App) realIP(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if host, _, err := net.SplitHostPort(r.RemoteAddr); err == nil {
+			if ip := net.ParseIP(host); ip != nil && (ip.IsLoopback() || ip.IsPrivate()) {
+				if v := strings.TrimSpace(r.Header.Get("X-Real-IP")); v != "" {
+					r.RemoteAddr = v
+				} else if v := strings.TrimSpace(r.Header.Get("X-Forwarded-For")); v != "" {
+					if first, _, ok := strings.Cut(v, ","); ok {
+						v = first
+					}
+					r.RemoteAddr = strings.TrimSpace(v)
+				}
+			}
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 // ---- CORS / CSRF ----
@@ -229,12 +474,12 @@ func originOf(r *http.Request) string {
 	return strings.TrimSpace(r.Header.Get("Referer"))
 }
 
-// allowedOrigin: без заголовков — разрешаем (curl, тесты, same-origin);
-// с заголовком — только из allowlist.
+// allowedOrigin: с заголовком Origin/Referer — только из allowlist;
+// без заголовков — см. allowMissingOrigin.
 func (a *App) allowedOrigin(r *http.Request) bool {
 	o := originOf(r)
 	if o == "" {
-		return true
+		return a.allowMissingOrigin(r)
 	}
 	for _, allow := range a.Config.AllowedOrigins {
 		if o == allow || strings.HasPrefix(o, strings.TrimRight(allow, "/")+"/") {
@@ -242,6 +487,55 @@ func (a *App) allowedOrigin(r *http.Request) bool {
 		}
 	}
 	return false
+}
+
+// allowMissingOrigin решает судьбу меняющих запросов без Origin/Referer:
+//   - CSRF_ALLOW_MISSING_ORIGIN=true — пропускаем (локальные qa-скрипты, curl);
+//   - dev-режим — пропускаем (контрактные тесты, локальная отладка);
+//   - прод — пропускаем только «заведомо безопасные» запросы: с bearer-заголовком
+//     или multipart/form-data (см. Task/T10-auth-security.md §3).
+func (a *App) allowMissingOrigin(r *http.Request) bool {
+	if a.Config.CSRFAllowMissingOrigin {
+		return true
+	}
+	if a.Config.IsDev() {
+		return true
+	}
+	if strings.TrimSpace(r.Header.Get("Authorization")) != "" {
+		return true
+	}
+	if strings.HasPrefix(strings.ToLower(strings.TrimSpace(r.Header.Get("Content-Type"))), "multipart/form-data") {
+		return true
+	}
+	return false
+}
+
+// csrfProtect проверяет Origin/Referer всех меняющих методов /api/v1.
+// Браузеры всегда шлют Origin на cross-site POST, поэтому в проде отсутствие
+// обоих заголовков означает не-браузерный запрос — отклоняем. Проверка была
+// перенесена из requireAuth сюда, чтобы накрыть и неавторизованные маршруты
+// (login, register, enrollments). Webhook-и платежек исключены: их шлют
+// серверы провайдеров без Origin, а подпись проверяет T09.
+func (a *App) csrfProtect(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodGet, http.MethodHead, http.MethodOptions:
+			next.ServeHTTP(w, r)
+			return
+		}
+		// Webhook-и платежек исключены: их шлют серверы провайдеров без Origin,
+		// подпись проверяет T09. Проверяем по пути запроса — RoutePattern
+		// в chi-middleware ещё не заполнен.
+		if strings.Contains(r.URL.Path, "/payments/webhook/") {
+			next.ServeHTTP(w, r)
+			return
+		}
+		if !a.allowedOrigin(r) {
+			writeErr(w, http.StatusForbidden, "Недопустимый источник запроса: нет Origin/Referer")
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 // cors разрешает запросы с фронтенда (localhost:3000) с cookie.
