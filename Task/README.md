@@ -52,6 +52,7 @@
 | [T12](T12-contract-tests.md) | Недостающие контрактные тесты + qa-скрипт | 3 | backend | ☐ |
 | [T13](T13-integration-wiring.md) | Сквозная проводка маршрутов и compose | 3 | full | ☐ |
 | [T14](T14-docs-cleanup.md) | Документация, env, чистка долгов | 3 | docs | ☐ |
+| [T15](T15-auth-flow-redirect.md) | Переход после входа: `Auth.tsx` и `state.from` | 2 | frontend | ☐ |
 
 ## Карта владения файлами (не пересекается между задачами)
 
@@ -72,6 +73,7 @@ frontend/src/pages/Constructor.tsx          → T06
 frontend/src/styles/constructor.css         → T06
 frontend/src/pages/Admin.tsx                → T08
 frontend/src/styles/admin.css               → T08
+frontend/src/pages/Auth.tsx                 → T15
 backend/internal/repo/**                    → T07
 backend/internal/handler/admin_payments.go  → T07  (новый)
 backend/internal/service/billing.go         → T07
