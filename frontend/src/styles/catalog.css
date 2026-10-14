@@ -1,0 +1,124 @@
+/* T04 — стили каталога, страницы курса и отзывов.
+   Импортируются из моих компонентов (Catalog, Course, CourseCard, Reviews).
+   Общий styles.css не трогаем; переопределения — только внутри своих блоков. */
+
+/* ---------- Каталог: поиск ---------- */
+
+.catalog-search {
+  display: flex;
+  gap: 0.5rem;
+  align-items: flex-end;
+  margin: 1rem 0;
+}
+
+.catalog-search input {
+  flex: 1;
+  margin-top: 0;
+}
+
+.catalog-search button {
+  margin-top: 0;
+}
+
+/* ---------- Каталог: скелетоны загрузки ---------- */
+
+.catalog-skeletons {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.catalog-skeleton {
+  height: 140px;
+  border-radius: 8px;
+  background: #e6e6eb;
+  animation: catalog-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes catalog-pulse {
+  50% {
+    opacity: 0.45;
+  }
+}
+
+/* ---------- Каталог: пагинация ---------- */
+
+.catalog-pager {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+.catalog-pager button {
+  margin-top: 0;
+}
+
+.catalog-pager button:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+/* ---------- Страница курса ---------- */
+
+.course-banner {
+  border: 1px solid #e0a800;
+  background: #fff8e1;
+  border-radius: 8px;
+  padding: 0.75rem 1rem;
+  margin: 1rem 0;
+}
+
+.course-banner p {
+  margin: 0.5rem 0 0;
+}
+
+.course-module {
+  margin-bottom: 1rem;
+}
+
+/* ---------- Отзывы ---------- */
+
+.reviews {
+  margin-top: 2rem;
+}
+
+.review-item {
+  margin-top: 0.75rem;
+}
+
+.review-form {
+  margin-top: 1rem;
+  border: 1px solid #e5e5e5;
+  border-radius: 8px;
+  padding: 1rem;
+  background: #fff;
+}
+
+/* Радиогруппа оценки: нативные radio → клавиатурное управление бесплатно. */
+.rating-group {
+  border: 0;
+  padding: 0;
+  margin: 0 0 0.5rem;
+}
+
+.rating-group legend {
+  padding: 0;
+  font-weight: 600;
+}
+
+.rating-group .radio {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  margin: 0 0.75rem 0.5rem 0;
+}
+
+.rating-group input {
+  margin-top: 0;
+}
+
+.review-form textarea {
+  margin-top: 0.25rem;
+}
