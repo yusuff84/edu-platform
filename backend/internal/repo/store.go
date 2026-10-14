@@ -14,6 +14,9 @@ import (
 // ErrAlreadyExists возвращается при нарушении уникальности (email, отзыв, запись).
 var ErrAlreadyExists = errors.New("запись уже существует")
 
+// ErrNotFound возвращается, когда запись не найдена (SetEnrollmentStatus).
+var ErrNotFound = errors.New("запись не найдена")
+
 // Store — потокобезопасное in-memory хранилище MVP.
 // Границы методов повторяют будущие pgx-репозитории.
 type Store struct {
@@ -437,6 +440,23 @@ func (s *Store) EnsureEnrollment(studentID, courseID string) (*Enrollment, bool)
 	return e, true
 }
 
+// SetEnrollmentStatus меняет статус записи на курсе (возврат средств →
+// refunded, отзыв доступа → revoked). ErrNotFound — записи нет.
+func (s *Store) SetEnrollmentStatus(studentID, courseID string, status EnrollmentStatus) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	id, ok := s.enrollIdx[enrollKey(studentID, courseID)]
+	if !ok {
+		return ErrNotFound
+	}
+	e, ok := s.enrollments[id]
+	if !ok {
+		return ErrNotFound
+	}
+	e.Status = status
+	return nil
+}
+
 // ListEnrollmentsByStudent возвращает записи ученика.
 func (s *Store) ListEnrollmentsByStudent(studentID string) []*Enrollment {
 	s.mu.RLock()
@@ -561,6 +581,70 @@ func (s *Store) SetPaymentStatus(id string, status PaymentStatus) bool {
 		p.ProcessedAt = &now
 	}
 	return true
+}
+
+// ListPaymentsJournal возвращает журнал платежей для админки (US6).
+// Фильтры Status и CourseID комбинируются через AND, сортировка created_at DESC,
+// total — количество до пагинации, totals — суммы по всем отфильтрованным
+// записям (без пагинации). Пагинация 1-based, limit 20..100 (защитный
+// clamp дублирует проверку на уровне handler). Ошибок не бывает — nil.
+func (s *Store) ListPaymentsJournal(f PaymentFilter) ([]PaymentJournalRow, int, PaymentTotals, error) {
+	limit := f.Limit
+	if limit <= 0 {
+		limit = 20
+	}
+	if limit > 100 {
+		limit = 100
+	}
+	page := f.Page
+	if page <= 0 {
+		page = 1
+	}
+
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	matched := make([]*Payment, 0, len(s.payments))
+	for _, p := range s.payments {
+		if f.Status != "" && p.Status != f.Status {
+			continue
+		}
+		if f.CourseID != "" && p.CourseID != f.CourseID {
+			continue
+		}
+		matched = append(matched, p)
+	}
+	// Новые платежи первыми.
+	sort.Slice(matched, func(i, j int) bool {
+		return matched[i].CreatedAt.After(matched[j].CreatedAt)
+	})
+
+	total := len(matched)
+	var totals PaymentTotals
+	for _, p := range matched {
+		totals.AmountCents += p.AmountCents
+		totals.PlatformFeeCents += p.PlatformFeeCents
+		totals.TeacherAmountCents += p.TeacherAmountCents
+	}
+
+	start := (page - 1) * limit
+	if start > total {
+		start = total
+	}
+	end := start + limit
+	if end > total {
+		end = total
+	}
+	rows := make([]PaymentJournalRow, 0, end-start)
+	for _, p := range matched[start:end] {
+		title := ""
+		if c, ok := s.courses[p.CourseID]; ok {
+			title = c.Title
+		}
+		// Копируем значение: в JSON-слой уходит снимок, а не живой указатель.
+		rows = append(rows, PaymentJournalRow{Payment: *p, CourseTitle: title})
+	}
+	return rows, total, totals, nil
 }
 
 // ---- Reviews ----

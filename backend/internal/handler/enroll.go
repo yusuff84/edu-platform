@@ -171,8 +171,10 @@ func (a *App) PaymentWebhook(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		a.Store.SetPaymentStatus(p.ID, repo.PaymentRefunded)
-		// Перевод записи в EnrollmentRefunded требует метода SetEnrollmentStatus
-		// в StoreAPI — его добавление относится к зоне T07/T13 (см. отчёт T09).
+		// Возврат средств отменяет доступ: запись на курс становится refunded.
+		// Ошибка намеренно игнорируется: платёж уже переведён в refunded,
+		// повторный webhook вернёт duplicate и не дойдёт сюда.
+		_ = a.Store.SetEnrollmentStatus(p.StudentID, p.CourseID, repo.EnrollmentRefunded)
 		writeJSON(w, http.StatusOK, map[string]any{"status": "processed"})
 	default:
 		writeJSON(w, http.StatusOK, map[string]any{"status": "ignored"})
