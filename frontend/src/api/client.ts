@@ -1,9 +1,70 @@
 // Типизированный клиент API. Все запросы идут с credentials:include (cookie-сессии).
 // Базовый URL: /api/v1 (проксируется nginx/vite на api:8080).
+// Доменные типы — в types.ts; здесь только транспорт (apiFetch, ApiError) и функции.
+//
+// ВАЖНО: backend включает DisallowUnknownFields() — любое лишнее поле в теле
+// запроса = 400. Тела собираются явно, только из разрешённых контрактом полей.
+
+import type {
+  AdminSettings,
+  CompleteLessonInput,
+  CompleteResult,
+  Course,
+  CourseDetail,
+  CourseItem,
+  CreateLessonInput,
+  EnrollmentResult,
+  Invite,
+  Module,
+  Lesson,
+  MyCourse,
+  Paged,
+  PaymentJournalPage,
+  PaymentStatus,
+  Provider,
+  ModerationDecision,
+  Review,
+  User,
+} from './types';
+
+// Реэкспорт типов: страницы импортируют типы из '../api/client' без правок.
+export type {
+  AdminSettings,
+  CodeTask,
+  CodeTest,
+  CompleteLessonInput,
+  CompleteResult,
+  Course,
+  CourseDetail,
+  CourseItem,
+  CourseStatus,
+  CreateLessonInput,
+  EnrollmentResult,
+  Invite,
+  Lesson,
+  LessonKind,
+  Module,
+  ModerationDecision,
+  MyCourse,
+  NextLesson,
+  Paged,
+  PaymentJournalItem,
+  PaymentJournalPage,
+  PaymentStatus,
+  PaymentTotals,
+  Provider,
+  QuizData,
+  QuizQuestion,
+  QuizQuestionInput,
+  Review,
+  Role,
+  User,
+} from './types';
 
 const BASE: string =
   (import.meta.env.VITE_API_URL as string | undefined) ?? '/api/v1';
 
+/** Ошибка API: HTTP-статус + текст из envelope {"error": "..."} или запасной текст. */
 export class ApiError extends Error {
   status: number;
   constructor(status: number, message: string) {
@@ -12,113 +73,42 @@ export class ApiError extends Error {
   }
 }
 
+// ---------- Транспорт ----------
+
 async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
     credentials: 'include',
     headers: { 'Content-Type': 'application/json', ...(init?.headers ?? {}) },
     ...init,
   });
+  // 204 No Content (например, logout) — тела нет, возвращаем undefined.
   if (res.status === 204) return undefined as T;
   const text = await res.text();
-  const data: unknown = text ? (JSON.parse(text) as unknown) : undefined;
+  let data: unknown;
+  try {
+    data = text ? (JSON.parse(text) as unknown) : undefined;
+  } catch {
+    data = undefined; // не-JSON тело — считаем пустым
+  }
   if (!res.ok) {
-    const msg =
-      typeof data === 'object' && data !== null && ('error' in data || 'message' in data)
-        ? String((data as Record<string, unknown>).error ?? (data as Record<string, unknown>).message)
-        : `Ошибка запроса (${res.status})`;
+    const errObj = typeof data === 'object' && data !== null ? (data as Record<string, unknown>) : {};
+    let msg = typeof errObj.error === 'string' ? errObj.error : '';
+    if (res.status === 401 && !msg) msg = 'Требуется вход в аккаунт';
+    if (!msg) msg = `Ошибка запроса (${res.status})`;
     throw new ApiError(res.status, msg);
   }
   return data as T;
 }
 
-// ---------- Типы ----------
-
-export type Role = 'student' | 'teacher' | 'admin';
-export type LessonKind = 'video_text' | 'live' | 'quiz' | 'code';
-export type CourseStatus = 'draft' | 'review' | 'published' | 'rejected';
-
-export interface User {
-  id: string;
-  email: string;
-  role: Role;
-}
-
-export interface QuizQuestion {
-  id: string;
-  question: string;
-  options: string[];
-}
-
-export interface Lesson {
-  id: string;
-  title: string;
-  kind: LessonKind;
-  position: number;
-  videoUrl?: string;
-  textContent?: string;
-  liveUrl?: string;
-  scheduledAt?: string;
-  quiz?: QuizQuestion[];
-}
-
-export interface Module {
-  id: string;
-  title: string;
-  position: number;
-  lessons: Lesson[];
-}
-
-export interface Course {
-  id: string;
-  slug: string;
-  title: string;
-  description: string;
-  priceCents: number;
-  status: CourseStatus;
-  avgRating: number;
-  reviewsCount: number;
-  teacherName?: string;
-  teacherId?: string;
-  coverUrl?: string;
-  modules?: Module[];
-  lessonsCount?: number;
-  modulesCount?: number;
-}
-
-export interface Paged<T> {
-  items: T[];
-  total: number;
-  page: number;
-  limit: number;
-}
-
-export interface MyCourse {
-  courseId: string;
-  slug: string;
-  title: string;
-  coverUrl?: string;
-  percent: number;
-  nextLessonId?: string | null;
-  nextLessonTitle?: string | null;
-}
-
-export interface Review {
-  id: string;
-  authorEmail: string;
-  rating: number;
-  text: string;
-  createdAt: string;
-}
-
-export interface CompleteResult {
-  accepted: boolean;
-  message?: string;
-  percent: number;
-  nextLessonId?: string | null;
-}
-
-export interface ModerationItem extends Course {
-  submittedAt?: string;
+/** Собирает строку query из параметров, пропуская пустые значения. */
+function buildQuery(params?: Record<string, string | number | undefined>): string {
+  if (!params) return '';
+  const qs = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value !== undefined && value !== '') qs.set(key, String(value));
+  }
+  const s = qs.toString();
+  return s ? `?${s}` : '';
 }
 
 // ---------- Auth ----------
@@ -128,20 +118,27 @@ export function register(input: {
   password: string;
   inviteToken?: string;
 }): Promise<User> {
+  // Тело собираем явно: inviteToken уходит только если передан.
+  const body: Record<string, string> = {
+    email: input.email,
+    password: input.password,
+  };
+  if (input.inviteToken) body.inviteToken = input.inviteToken;
   return apiFetch<User>('/auth/register', {
     method: 'POST',
-    body: JSON.stringify(input),
+    body: JSON.stringify(body),
   });
 }
 
 export function login(input: { email: string; password: string }): Promise<User> {
   return apiFetch<User>('/auth/login', {
     method: 'POST',
-    body: JSON.stringify(input),
+    body: JSON.stringify({ email: input.email, password: input.password }),
   });
 }
 
 export function logout(): Promise<void> {
+  // Backend отвечает 204 (обрабатывается в apiFetch) или 200 {"status":"ok"}.
   return apiFetch<void>('/auth/logout', { method: 'POST' });
 }
 
@@ -155,17 +152,17 @@ export function listCourses(params?: {
   q?: string;
   page?: number;
   limit?: number;
-}): Promise<Paged<Course>> {
-  const qs = new URLSearchParams();
-  if (params?.q) qs.set('q', params.q);
-  if (params?.page) qs.set('page', String(params.page));
-  if (params?.limit) qs.set('limit', String(params.limit));
-  const suffix = qs.toString() ? `?${qs.toString()}` : '';
-  return apiFetch<Paged<Course>>(`/courses${suffix}`);
+}): Promise<Paged<CourseItem>> {
+  return apiFetch<Paged<CourseItem>>(
+    `/courses${buildQuery({ q: params?.q, page: params?.page, limit: params?.limit })}`,
+  );
 }
 
-export function getCourse(slug: string): Promise<Course> {
-  return apiFetch<Course>(`/courses/${encodeURIComponent(slug)}`);
+/** Страница курса: конверт { course, modules } распаковывается в CourseDetail. */
+export function getCourse(slug: string): Promise<CourseDetail> {
+  return apiFetch<{ course: Course; modules: Module[] }>(
+    `/courses/${encodeURIComponent(slug)}`,
+  ).then((res) => ({ ...res.course, modules: res.modules }));
 }
 
 // ---------- Учитель ----------
@@ -174,15 +171,30 @@ export function createCourse(input: {
   title: string;
   description: string;
   priceCents: number;
+  /** Кастомный slug (латиница, цифры, дефис, 3–120); если пуст — backend сгенерирует. */
+  slug?: string;
+  /** По умолчанию backend ставит RUB. */
+  currency?: string;
 }): Promise<Course> {
+  // Тело строго из createCourseRequest: title, description, slug, priceCents, currency.
+  const body: Record<string, string | number> = {
+    title: input.title,
+    description: input.description,
+    priceCents: input.priceCents,
+  };
+  if (input.slug) body.slug = input.slug;
+  if (input.currency) body.currency = input.currency;
   return apiFetch<Course>('/teacher/courses', {
     method: 'POST',
-    body: JSON.stringify(input),
+    body: JSON.stringify(body),
   });
 }
 
+/** Свои курсы: конверт { items, total } → массив. */
 export function myTeaching(): Promise<Course[]> {
-  return apiFetch<Course[]>('/teacher/courses');
+  return apiFetch<{ items: Course[]; total: number }>('/teacher/courses').then(
+    (res) => res.items,
+  );
 }
 
 export function createModule(
@@ -191,27 +203,49 @@ export function createModule(
 ): Promise<Module> {
   return apiFetch<Module>(`/teacher/courses/${courseId}/modules`, {
     method: 'POST',
-    body: JSON.stringify(input),
+    body: JSON.stringify({ title: input.title }),
   });
 }
 
+/**
+ * Создание урока. Тело собирается динамически: отправляются только поля,
+ * относящиеся к kind, — иначе DisallowUnknownFields ответит 400.
+ */
 export function createLesson(
   courseId: string,
-  input: {
-    moduleId: string;
-    title: string;
-    kind: LessonKind;
-    videoUrl?: string;
-    textContent?: string;
-    liveUrl?: string;
-    scheduledAt?: string;
-    quiz?: QuizQuestion[];
-    codeTask?: string;
-  },
+  input: CreateLessonInput,
 ): Promise<Lesson> {
+  const body: Record<string, unknown> = {
+    moduleId: input.moduleId,
+    title: input.title,
+    kind: input.kind,
+  };
+  switch (input.kind) {
+    case 'video_text':
+      if (input.bodyMd) body.bodyMd = input.bodyMd;
+      if (input.videoUrl) body.videoUrl = input.videoUrl;
+      break;
+    case 'live':
+      if (input.liveUrl) body.liveUrl = input.liveUrl;
+      if (input.startsAt) body.startsAt = input.startsAt;
+      break;
+    case 'quiz':
+      if (input.quiz) body.quiz = { questions: input.quiz.questions };
+      break;
+    case 'code':
+      if (input.codeTask) {
+        const task: Record<string, unknown> = {
+          language: input.codeTask.language,
+          tests: input.codeTask.tests,
+        };
+        if (input.codeTask.template) task.template = input.codeTask.template;
+        body.codeTask = task;
+      }
+      break;
+  }
   return apiFetch<Lesson>(`/teacher/courses/${courseId}/lessons`, {
     method: 'POST',
-    body: JSON.stringify(input),
+    body: JSON.stringify(body),
   });
 }
 
@@ -223,24 +257,60 @@ export function submitCourse(courseId: string): Promise<Course> {
 
 // ---------- Админ ----------
 
-export function createInvite(email: string): Promise<{ token: string }> {
-  return apiFetch<{ token: string }>('/admin/invites', {
+/** Токен приглашения показывается один раз — сохранять в UI сразу. */
+export function createInvite(email: string): Promise<Invite> {
+  return apiFetch<Invite>('/admin/invites', {
     method: 'POST',
     body: JSON.stringify({ email }),
   });
 }
 
+/** Очередь модерации: конверт { items, total } → массив. */
 export function reviewQueue(): Promise<Course[]> {
-  return apiFetch<Course[]>('/admin/courses/review');
+  return apiFetch<{ items: Course[]; total: number }>('/admin/courses/review').then(
+    (res) => res.items,
+  );
 }
 
 export function moderateCourse(
   courseId: string,
-  input: { decision: 'approve' | 'reject'; comment?: string },
+  input: { decision: ModerationDecision; comment?: string },
 ): Promise<Course> {
+  // comment обязателен при reject — backend сам вернёт 400 без него.
+  const body: Record<string, string> = { decision: input.decision };
+  if (input.comment) body.comment = input.comment;
   return apiFetch<Course>(`/admin/courses/${courseId}/moderate`, {
     method: 'POST',
-    body: JSON.stringify(input),
+    body: JSON.stringify(body),
+  });
+}
+
+// ---------- US6: журнал платежей и настройки ----------
+
+export function paymentJournal(params?: {
+  page?: number;
+  limit?: number;
+  status?: PaymentStatus;
+  courseId?: string;
+}): Promise<PaymentJournalPage> {
+  return apiFetch<PaymentJournalPage>(
+    `/admin/payments${buildQuery({
+      page: params?.page,
+      limit: params?.limit,
+      status: params?.status,
+      courseId: params?.courseId,
+    })}`,
+  );
+}
+
+export function getAdminSettings(): Promise<AdminSettings> {
+  return apiFetch<AdminSettings>('/admin/settings');
+}
+
+export function updateAdminSettings(commissionPct: number): Promise<AdminSettings> {
+  return apiFetch<AdminSettings>('/admin/settings', {
+    method: 'PUT',
+    body: JSON.stringify({ commissionPct }),
   });
 }
 
@@ -248,42 +318,66 @@ export function moderateCourse(
 
 export function enroll(
   courseId: string,
-  provider: 'mock' | 'stripe' | 'yookassa' = 'mock',
-): Promise<{ redirectUrl?: string; enrolled?: boolean }> {
-  return apiFetch<{ redirectUrl?: string; enrolled?: boolean }>('/enrollments', {
+  provider: Provider = 'mock',
+): Promise<EnrollmentResult> {
+  return apiFetch<EnrollmentResult>('/enrollments', {
     method: 'POST',
     body: JSON.stringify({ courseId, provider }),
   });
 }
 
+/** Мои курсы: конверт { items, total } → массив (MyCourse уже плоский). */
 export function myCourses(): Promise<MyCourse[]> {
-  return apiFetch<MyCourse[]>('/me/courses');
+  return apiFetch<{ items: MyCourse[]; total: number }>('/me/courses').then(
+    (res) => res.items,
+  );
 }
 
+/**
+ * Завершение урока. Для video_text/live тело можно не слать вовсе
+ * (пустой объект = 400 на backend) — body ставим только если есть данные.
+ */
 export function completeLesson(
   courseId: string,
   lessonId: string,
-  input: { quizAnswers?: Record<string, number>; code?: string; language?: string },
+  input?: CompleteLessonInput,
 ): Promise<CompleteResult> {
+  const body: Record<string, unknown> = {};
+  if (input?.quizAnswers && Object.keys(input.quizAnswers).length > 0) {
+    body.quizAnswers = input.quizAnswers;
+  }
+  if (input?.code) {
+    body.code = input.code;
+    if (input.language) body.language = input.language;
+  }
+  const init: RequestInit = { method: 'POST' };
+  if (Object.keys(body).length > 0) init.body = JSON.stringify(body);
   return apiFetch<CompleteResult>(
     `/me/courses/${courseId}/lessons/${lessonId}/complete`,
-    { method: 'POST', body: JSON.stringify(input) },
+    init,
   );
 }
 
 // ---------- Отзывы ----------
 
+/** Список отзывов: конверт { items, total, avgRating, ratingsCount } → массив. */
 export function listReviews(courseId: string): Promise<Review[]> {
-  return apiFetch<Review[]>(`/courses/${courseId}/reviews`);
+  return apiFetch<{
+    items: Review[];
+    total: number;
+    avgRating: number;
+    ratingsCount: number;
+  }>(`/courses/${encodeURIComponent(courseId)}/reviews`).then((res) => res.items);
 }
 
 export function createReview(
   courseId: string,
-  input: { rating: number; text: string },
+  input: { rating: number; body: string },
 ): Promise<Review> {
-  return apiFetch<Review>(`/courses/${courseId}/reviews`, {
+  // Ключ текста отзыва — body, не text.
+  return apiFetch<Review>(`/courses/${encodeURIComponent(courseId)}/reviews`, {
     method: 'POST',
-    body: JSON.stringify(input),
+    body: JSON.stringify({ rating: input.rating, body: input.body }),
   });
 }
 
@@ -293,6 +387,20 @@ export function formatPrice(priceCents: number): string {
   if (priceCents <= 0) return 'Бесплатно';
   const rub = priceCents / 100;
   return `${new Intl.NumberFormat('ru-RU').format(rub)} ₽`;
+}
+
+/** RFC3339 → локальная дата-время ru-RU. Пустое или некорректное значение → «—». */
+export function formatDate(value: string | null | undefined): string {
+  if (!value) return '—';
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return '—';
+  return d.toLocaleString('ru-RU', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
 }
 
 export function useApiBase(): string {
