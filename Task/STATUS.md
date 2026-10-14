@@ -3,28 +3,48 @@
 Каждая задача = ключ сессии. Ключ нужен для продолжения работы
 конкретным агентом (`sessionID`) и для отслеживания, кто что сделал.
 
-## Волна 1 — завершена (частично смержено)
+## Сводная ведомость
 
-| Ключ сессии | Задача | Worktree | Ветка | Session ID | Статус |
-|---|---|---|---|---|---|
-| `T01-api-client-contract` | Контракт API-клиента | `../wt-T01-api-client-contract` | `task/T01-api-client-contract` | `ses_ec3cf8177ffeIHA35StIW9HilK` | ✅ смержен `390b87a` |
-| `T02-i18n-contract` | Словарь и типы ключей | `../wt-T02-i18n-contract` | `task/T02-i18n-contract` | `ses_ec3cf8170ffeJctWWn443BCxLZ` | ✅ смержен `63d1bb4` |
-| `T07-admin-us6-backend` | US6 backend (журнал, комиссия) | `../wt-T07-admin-us6-backend` | `task/T07-admin-us6-backend` | `ses_ec3cccbd4ffeM8Io5nlWhYCZCH` | 🔄 в работе |
-| `T09-payments-providers` | Stripe, YooKassa, подписи | `../wt-T09-payments-providers` | `task/T09-payments-providers` | `ses_ec3cccbd1ffe3v8XWcVatQ2lnQ` | 🔄 в работе |
-| `T10-auth-security` | OAuth, cookie, rate-limit | `../wt-T10-auth-security` | `task/T10-auth-security` | `ses_ec3ca8f63ffejNIndhuvCsgwUf` | 🔄 в работе (+ задание на `displayName`) |
-| `T11-runner-sandbox` | Песочница runner | `../wt-T11-runner-sandbox` | `task/T11-runner-sandbox` | `ses_ec3ca8f5affedrpc8wAoe2M43W` | 🔄 в работе |
-
-## Волна 2 — запущена
-
-Работают поверх смерженных T01 + T02, от базы `38fd645`.
-
-| Ключ сессии | Задача | Worktree | Session ID | Статус |
+| Ключ сессии | Задача | Волна | Статус | Коммит |
 |---|---|---|---|---|
-| `T03-learn-experience` | Экран обучения, просмотр урока | `../wt-T03-learn-experience` | `ses_ec3a901a9ffe7HhZmkWoq858gG` | 🔄 в работе |
-| `T04-catalog-reviews` | Каталог, страница курса, отзывы | `../wt-T04-catalog-reviews` | `ses_ec3a901a6ffeq5MhM9TTcVgWBx` | 🔄 в работе |
-| `T05-routing-guards` | Роутинг, гварды, 404, `MyCourses.tsx` | `../wt-T05-routing-guards` | `ses_ec3a6df86ffetEge6pKclwnxs0` | 🔄 в работе |
-| `T06-constructor-editor` | Конструктор курса | `../wt-T06-constructor-editor` | `ses_ec3a6df76ffeSToHvgEjuSlsUF` | 🔄 в работе |
-| `T08-admin-us6-frontend` | Админ-панель US6 | `../wt-T08-admin-us6-frontend` | `ses_ec3a589b6ffeMKcoLqoS3TfZQV` | 🔄 в работе |
+| `T01-api-client-contract` | Контракт API-клиента | 1 | ✅ смержен | `390b87a` |
+| `T02-i18n-contract` | Словарь и типы ключей | 1 | ✅ смержен | `63d1bb4` |
+| `T09-payments-providers` | Stripe, YooKassa, подписи | 1 | ✅ смержен | `d25706e` |
+| `T11-runner-sandbox` | Песочница runner | 1 | ✅ смержен | `2ae7ab4` |
+| `T10-auth-security` | OAuth, cookie, rate-limit | 1 | ✅ смержен | `771dfc1` |
+| `T07-admin-us6-backend` | US6 backend: журнал, комиссия | 1 | ✅ смержен | `65e548e` |
+| `T03-learn-experience` | Экран обучения, просмотр урока | 2 | ✅ смержен | `8d70b8d` |
+| `T04-catalog-reviews` | Каталог, курс, отзывы | 2 | ✅ смержен | `4c28016` |
+| `T05-routing-guards` | Роутинг, гварды, 404 | 2 | ✅ смержен | `d3408dc` |
+| `T06-constructor-editor` | Конструктор курса | 2 | ✅ смержен | `00bb9db` |
+| `T08-admin-us6-frontend` | Админ-панель US6 | 2 | ✅ смержен | `2132da3` |
+| `T15-auth-flow-redirect` | Редирект после входа | 2 | ✅ смержен | `3d5d5ec` |
+| `T13-integration-wiring` | Проводка маршрутов, compose | 3 | 🔄 в работе | — |
+| `T14-docs-cleanup` | README, env, `docs/API.md` | 3 | 🔄 в работе | — |
+| `T12-contract-tests` | Контрактные тесты + `qa-abc.ps1` | 3 | ⏸ ждёт T13 | — |
+
+## Ключи сессий активных агентов
+
+| Задача | Session ID | Worktree |
+|---|---|---|
+| `T13-integration-wiring` | `ses_ec378cc65ffe05LDvP2i0mrgHn` | `../wt-T13-integration-wiring` |
+| `T14-docs-cleanup` | `ses_ec3773bb0ffeupzpYUChJtheJD` | `../wt-T14-docs-cleanup` |
+
+T12 запускается после смержения T13 — его контрактные тесты проверяют
+маршруты, которые регистрирует именно T13.
+
+## Проверенное состояние интеграционной ветки
+
+На коммите `65e534d` (после смержения всех задач волн 1–2):
+
+| Проверка | Результат |
+|---|---|
+| `cd backend && go build ./...` | ✅ |
+| `cd backend && go vet ./...` | ✅ |
+| `cd backend && go test ./... -count=1` | ✅ `ok internal/payments`, `ok tests/contract 2.200s` |
+| `cd frontend && npx tsc --noEmit` | ✅ **0 ошибок** |
+| `cd frontend && npx vite build` | ✅ 413.67 КБ JS, 12.14 КБ CSS |
+| `cd runner && go test ./...` | ✅ `ok runner 1.600s` |
 
 ## Волна 3 — ожидает все
 
@@ -112,12 +132,40 @@ npm run build
 
 ## Найденные расхождения с контрактом
 
-Обновляется по мере работы. Полная версия — в `Task/00-api-contract.md`,
-раздел «Расхождения, найденные агентами».
+Полная версия — в `Task/00-api-contract.md`, раздел «Расхождения, найденные агентами».
 
 | # | Расхождение | Статус |
 |---|---|---|
-| 1 | `User.displayName` обещан контрактом, `handler/auth.go` не отдаёт | ✅ в работе T10 |
-| 2 | `POST /auth/logout` возвращает `200 {"status":"ok"}`, а не `204` | ✅ в работе T10 |
-| 3 | `listReviews` теряет `avgRating`/`ratingsCount` → T04 берёт рейтинг из `getCourse()` | ✅ учтено в контракте |
-| 4 | `POST .../lessons` принимает `startsAt`, но **не сохраняет** его в урок | ❌ бэкенд-баг, отдан в бэклог T13 |
+| 1 | `User.displayName` обещан контрактом, `handler/auth.go` не отдаёт | ✅ закрыто T10 — добавлен в `Register`/`Login`/`Me` |
+| 2 | `POST /auth/logout` возвращает `200 {"status":"ok"}`, а не `204` | ✅ решено оставить `200` — существующий тест `tests/contract/auth_test.go:44` требует `StatusOK`. **Контракт нужно поправить на 200** (T14) |
+| 3 | `listReviews` теряет `avgRating`/`ratingsCount` | ✅ учтено — T04 берёт рейтинг из `getCourse()` |
+| 4 | `POST .../lessons` принимает `startsAt`, но **не сохраняет** его в урок | ❌ открыт — подтверждено T03 и T06. Бэкенд-баг, файл `handler/teacher.go` у T13 |
+| 5 | `GET /admin/payments` не отдаёт email/имя студента — только `studentId` | ❌ открыт — T08 показывает укороченный UUID. Требует расширения контракта |
+| 6 | `formatPrice(0)` возвращает «Бесплатно», что неверно для итогов журнала | ⚠️ T08 обошёл локальным форматтером, `client.ts` не тронут |
+
+## Опасности, которые удалось предотвратить
+
+**T10 оставил два неверных маркера-подсказки для T13** в `middleware.go`.
+Проверено по исходникам и исправлено координатором перед запуском T13:
+
+1. Предлагал `app.RegisterAdminPaymentsRoutes(r)` **внутри** `r.Route("/admin", ...)`.
+   Метод регистрирует **абсолютные** пути `/admin/payments`, `/admin/settings`
+   (`handler/admin_payments.go:20-27`) — монтирование дало бы `/admin/admin/payments`.
+2. Предлагал `app.PaymentCheckoutPage` по пути `/payments/{provider}/checkout`.
+   Такого хендлера **не существует**; T09 экспортирует `payments.MockConfirmHandler()`
+   на верхнем уровне роутера по пути `/pay/mock/{id}`.
+
+Правка внесена в `middleware.go` комментариями и в `Task/T13-integration-wiring.md`
+разделом «⚠️ Исправленные координаты вставки».
+
+## Прочие отложенные находки
+
+| Находка | Кто нашёл | Куда девать |
+|---|---|---|
+| `Auth.tsx` читает `inviteToken` как поле формы, ссылка `/register?inviteToken=...` никуда не ведёт | T15 | бэклог |
+| `Auth.tsx` не редиректит уже авторизованного с `/login` | T15 | бэклог |
+| При провале квиза/кода в ответе нет `percent`/`nextLesson` | T03 | бэклог фронта |
+| `EnsureEnrollment` при повторной покупке не сбрасывает `refunded` в `active` | T07 | бэклог |
+| `SetCommissionPct` в Postgres глотает ошибку записи (`_, _ =`) | T07 | бэклог |
+| Эндпоинта `POST /admin/enrollments/revoke` не существует, а `EnrollmentRevoked` никем не выставляется | T07 | бэклог T13 |
+| 10 недостающих эндпоинтов CRUD конструктора | T06 | частично в T13 |
