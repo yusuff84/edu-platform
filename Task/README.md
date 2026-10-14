@@ -65,7 +65,7 @@ frontend/src/pages/{Catalog,Course}.tsx     → T04
 frontend/src/components/{CourseCard,Reviews}.tsx → T04
 frontend/src/styles/catalog.css             → T04
 frontend/src/app/router.tsx                 → T05
-frontend/src/pages/{Cabinets,NotFound}.tsx  → T05
+frontend/src/pages/{Cabinets,MyCourses,NotFound}.tsx → T05
 frontend/src/components/ErrorBoundary.tsx   → T05
 frontend/src/styles/shell.css               → T05
 frontend/src/pages/Constructor.tsx          → T06

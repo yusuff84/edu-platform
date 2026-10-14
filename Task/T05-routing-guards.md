@@ -23,6 +23,7 @@
 ```
 frontend/src/app/router.tsx
 frontend/src/pages/Cabinets.tsx
+frontend/src/pages/MyCourses.tsx          — обязательно! тут 11 ошибок tsc
 frontend/src/pages/NotFound.tsx        — создать
 frontend/src/components/ErrorBoundary.tsx — создать
 frontend/src/components/RouteGuards.tsx   — создать (гарды как компоненты)
@@ -30,6 +31,15 @@ frontend/src/styles/shell.css         — создать, импортирова
 ```
 
 ## Что сделать
+
+0. **Сначала почини `MyCourses.tsx` — это 11 из 43 ошибок `tsc`.**
+   Клиент возвращает `MyCourse = { course: CourseItem, percent, nextLesson }`,
+   а страница читает плоские `courseId`, `slug`, `title`, `nextLessonId`
+   (`MyCourses.tsx:28-39`). Перепиши на реальную форму:
+   `item.course.slug`, `item.course.title`, `item.percent`,
+   `item.nextLesson?.lessonId`. Добавь состояния загрузки, пустого списка,
+   ошибки сети. Это первая страница, куда попадает студент после входа,
+   она обязана работать.
 
 1. **Убрать дубли.** Оставить канонические пути:
    `/`, `/courses/:slug`, `/login`, `/register`, `/me`,
