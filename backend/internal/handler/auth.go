@@ -21,10 +21,17 @@ type registerRequest struct {
 	InviteToken string `json:"inviteToken"`
 }
 
+// userResponse — единый формат пользователя для контракта API (Task/00-api-contract.md).
+// DisplayName — всегда строка (пустая, если не задана), чтобы фронт получал "", а не null.
 type userResponse struct {
-	ID    string    `json:"id"`
-	Email string    `json:"email"`
-	Role  repo.Role `json:"role"`
+	ID          string    `json:"id"`
+	Email       string    `json:"email"`
+	Role        repo.Role `json:"role"`
+	DisplayName string    `json:"displayName"`
+}
+
+func userResponseOf(u *repo.User) userResponse {
+	return userResponse{ID: u.ID, Email: u.Email, Role: u.Role, DisplayName: u.DisplayName}
 }
 
 // Register — POST /auth/register. inviteToken повышает роль до teacher.
@@ -76,8 +83,8 @@ func (a *App) Register(w http.ResponseWriter, r *http.Request) {
 	if invite != nil {
 		a.Store.AcceptInvite(invite)
 	}
-	a.startSession(w, u.ID)
-	writeJSON(w, http.StatusCreated, userResponse{ID: u.ID, Email: u.Email, Role: u.Role})
+	a.startSession(w, r, u.ID)
+	writeJSON(w, http.StatusCreated, userResponseOf(u))
 }
 
 type loginRequest struct {
@@ -85,7 +92,7 @@ type loginRequest struct {
 	Password string `json:"password"`
 }
 
-// Login — POST /auth/login, ставит httpOnly cookie.
+// Login — POST /auth/login, ставит подписанную httpOnly cookie.
 func (a *App) Login(w http.ResponseWriter, r *http.Request) {
 	var req loginRequest
 	if !decodeJSON(w, r, &req) {
@@ -100,11 +107,14 @@ func (a *App) Login(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusUnauthorized, "Неверный email или пароль")
 		return
 	}
-	a.startSession(w, u.ID)
-	writeJSON(w, http.StatusOK, userResponse{ID: u.ID, Email: u.Email, Role: u.Role})
+	a.startSession(w, r, u.ID)
+	writeJSON(w, http.StatusOK, userResponseOf(u))
 }
 
-// Logout — POST /auth/logout, удаляет сессию.
+// Logout — POST /auth/logout, удаляет сессию и чистит cookie.
+// Отвечает 200 {"status":"ok"}: контракт обещает 204, но существующий
+// контрактный тест (tests/contract/auth_test.go) требует 200, а тесты
+// принадлежат T12; фронтенд обрабатывает оба варианта. См. отчёт T10.
 func (a *App) Logout(w http.ResponseWriter, r *http.Request) {
 	a.clearSession(w, r)
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
@@ -117,5 +127,5 @@ func (a *App) Me(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusUnauthorized, "Требуется вход в аккаунт")
 		return
 	}
-	writeJSON(w, http.StatusOK, userResponse{ID: u.ID, Email: u.Email, Role: u.Role})
+	writeJSON(w, http.StatusOK, userResponseOf(u))
 }
