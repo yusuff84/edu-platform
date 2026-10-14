@@ -47,6 +47,7 @@ type StoreAPI interface {
 	// Enrollments
 	GetEnrollment(studentID, courseID string) (*Enrollment, bool)
 	EnsureEnrollment(studentID, courseID string) (*Enrollment, bool)
+	SetEnrollmentStatus(studentID, courseID string, status EnrollmentStatus) error
 	ListEnrollmentsByStudent(studentID string) []*Enrollment
 	// Progress
 	CompleteLesson(studentID, lessonID string) (*LessonProgress, bool)
@@ -58,6 +59,7 @@ type StoreAPI interface {
 	GetPaymentByProviderID(id string) (*Payment, bool)
 	FindPendingPayment(studentID, courseID string) (*Payment, bool)
 	SetPaymentStatus(id string, status PaymentStatus) bool
+	ListPaymentsJournal(f PaymentFilter) (items []PaymentJournalRow, total int, totals PaymentTotals, err error)
 	// Reviews
 	CreateReview(studentID, courseID string, rating int, body string) (*Review, error)
 	ListReviewsByCourse(courseID string) []*Review
@@ -65,6 +67,30 @@ type StoreAPI interface {
 	// Settings
 	GetCommissionPct() int
 	SetCommissionPct(n int)
+}
+
+// PaymentFilter — параметры журнала платежей для админки (US6).
+// Пагинация 1-based: Limit по умолчанию 20, максимум 100; Page по умолчанию 1.
+// Status "" и CourseID "" означают «любой»; фильтры комбинируются через AND.
+type PaymentFilter struct {
+	Page, Limit int
+	Status      PaymentStatus
+	CourseID    string
+}
+
+// PaymentJournalRow — строка журнала платежей: платёж + название курса
+// (название подтягивается из courses, в in-memory — из map, в PG — через JOIN).
+type PaymentJournalRow struct {
+	Payment
+	CourseTitle string
+}
+
+// PaymentTotals — итоговые суммы журнала по ВСЕМ записям с учётом фильтров,
+// но без пагинации (контракт US6: totals в ответе GET /admin/payments).
+type PaymentTotals struct {
+	AmountCents        int
+	PlatformFeeCents   int
+	TeacherAmountCents int
 }
 
 // Проверка, что in-memory Store реализует интерфейс.
