@@ -19,8 +19,8 @@
 | `T06-constructor-editor` | Конструктор курса | 2 | ✅ смержен | `00bb9db` |
 | `T08-admin-us6-frontend` | Админ-панель US6 | 2 | ✅ смержен | `2132da3` |
 | `T15-auth-flow-redirect` | Редирект после входа | 2 | ✅ смержен | `3d5d5ec` |
+| `T14-docs-cleanup` | README, env, `docs/API.md` | 3 | ✅ смержен | `efe7fc8` |
 | `T13-integration-wiring` | Проводка маршрутов, compose | 3 | 🔄 в работе | — |
-| `T14-docs-cleanup` | README, env, `docs/API.md` | 3 | 🔄 в работе | — |
 | `T12-contract-tests` | Контрактные тесты + `qa-abc.ps1` | 3 | ⏸ ждёт T13 | — |
 
 ## Ключи сессий активных агентов
