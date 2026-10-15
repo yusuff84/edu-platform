@@ -82,6 +82,20 @@ h3 {
   color: var(--muted);
 }
 
+.page p a:not(.btn),
+.page li a:not(.btn),
+.empty a:not(.btn) {
+  color: var(--cta-blue);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.page p a:not(.btn):hover,
+.page li a:not(.btn):hover,
+.empty a:not(.btn):hover {
+  color: #1f3ae0;
+}
+
 .error {
   color: var(--danger);
 }
