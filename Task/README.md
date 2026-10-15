@@ -1,4 +1,4 @@
-# Task — план доработок edu-platform
+﻿# Task — план доработок edu-platform
 
 Папка `Task/` — **единый источник правды** по доработкам репозитория.
 Каждая задача = один Markdown-файл = один агент = один git-worktree = один ключ сессии.
@@ -38,19 +38,19 @@
 
 | Ключ | Название | Волна | Слой | Статус |
 |------|----------|-------|------|--------|
-| [T01](T01-api-client-contract.md) | Контракт API-клиента фронтенда | 1 | frontend | ☐ |
-| [T02](T02-i18n-contract.md) | Словарь и типизированные i18n-ключи | 1 | frontend | ☐ |
-| [T03](T03-learn-experience.md) | Экран обучения и просмотр урока | 2 | frontend | ☐ |
-| [T04](T04-catalog-reviews.md) | Каталог, страница курса, отзывы | 2 | frontend | ☐ |
-| [T05](T05-routing-guards.md) | Роутинг, гварды ролей, 404, error boundary | 2 | frontend | ☐ |
-| [T06](T06-constructor-editor.md) | Конструктор курса: редактирование | 2 | frontend | ☐ |
-| [T07](T07-admin-us6-backend.md) | US6: журнал платежей и комиссия (Go) | 1 | backend | ☐ |
-| [T08](T08-admin-us6-frontend.md) | US6: админ-панель (React) | 2 | frontend | ☐ |
-| [T09](T09-payments-providers.md) | Stripe, YooKassa, подпись вебхуков | 1 | backend | ☐ |
-| [T10](T10-auth-security.md) | Yandex OAuth, cookie, rate-limit, CSRF | 1 | backend | ☐ |
-| [T11](T11-runner-sandbox.md) | Песочница и лимиты runner | 1 | runner | ☐ |
-| [T12](T12-contract-tests.md) | Недостающие контрактные тесты + qa-скрипт | 3 | backend | ☐ |
-| [T13](T13-integration-wiring.md) | Сквозная проводка маршрутов и compose | 3 | full | ☐ |
+| [T01](T01-api-client-contract.md) | Контракт API-клиента фронтенда | 1 | frontend | ☑ |
+| [T02](T02-i18n-contract.md) | Словарь и типизированные i18n-ключи | 1 | frontend | ☑ |
+| [T03](T03-learn-experience.md) | Экран обучения и просмотр урока | 2 | frontend | ☑ |
+| [T04](T04-catalog-reviews.md) | Каталог, страница курса, отзывы | 2 | frontend | ☑ |
+| [T05](T05-routing-guards.md) | Роутинг, гварды ролей, 404, error boundary | 2 | frontend | ☑ |
+| [T06](T06-constructor-editor.md) | Конструктор курса: редактирование | 2 | frontend | ☑ |
+| [T07](T07-admin-us6-backend.md) | US6: журнал платежей и комиссия (Go) | 1 | backend | ☑ |
+| [T08](T08-admin-us6-frontend.md) | US6: админ-панель (React) | 2 | frontend | ☑ |
+| [T09](T09-payments-providers.md) | Stripe, YooKassa, подпись вебхуков | 1 | backend | ☑ |
+| [T10](T10-auth-security.md) | Yandex OAuth, cookie, rate-limit, CSRF | 1 | backend | ☑ |
+| [T11](T11-runner-sandbox.md) | Песочница и лимиты runner | 1 | runner | ☑ |
+| [T12](T12-contract-tests.md) | Недостающие контрактные тесты + qa-скрипт | 3 | backend | ☑ |
+| [T13](T13-integration-wiring.md) | Сквозная проводка маршрутов и compose | 3 | full | ☑ |
 | [T14](T14-docs-cleanup.md) | Документация, env, чистка долгов | 3 | docs | ☑ |
 | [T15](T15-auth-flow-redirect.md) | Переход после входа: `Auth.tsx` и `state.from` | 2 | frontend | ☑ |
 
@@ -58,21 +58,21 @@
 
 | Задача | Что | Слой | Статус |
 |---|---|---|---|
-| [T16](T16-backend-bugs.md) | 7 бэкенд-багов: `startsAt`, прогресс, email в журнале, возвраты, **демо-учётки** | backend | ☐ |
-| [T17](T17-frontend-bugs.md) | `inviteToken` из ссылки, редирект с `/login`, `formatPrice(0)` | frontend | ☐ |
-| [T18](T18-frontend-perf.md) | Code splitting, дедуп CSS, мемоизации — **с цифрами до/после** | frontend | ☐ |
+| [T16](T16-backend-bugs.md) | 7 бэкенд-багов: `startsAt`, прогресс, email в журнале, возвраты, **демо-учётки** | backend | ☑ |
+| [T17](T17-frontend-bugs.md) | `inviteToken` из ссылки, редирект с `/login`, `formatPrice(0)` | frontend | ☑ |
+| [T18](T18-frontend-perf.md) | Code splitting, дедуп CSS, мемоизации — **с цифрами до/после** | frontend | ☑ |
 
 ### Волна B — после T16
 
 | Задача | Что | Слой | Статус |
 |---|---|---|---|
-| [T19](T19-constructor-crud.md) | CRUD конструктора: правка, удаление, порядок | full | ☐ |
+| [T19](T19-constructor-crud.md) | CRUD конструктора: правка, удаление, порядок | full | ☑ |
 
 ### Волна C — финал
 
 | Задача | Что | Слой | Статус |
 |---|---|---|---|
-| [T20](T20-tests-coverage.md) | Тесты, сверка контракта, сквозной прогон 39/39 | full | ☐ |
+| [T20](T20-tests-coverage.md) | Тесты, сверка контракта, сквозной прогон 49/49 | full | ☑ |
 
 ## Карта владения файлами (не пересекается между задачами)
 
