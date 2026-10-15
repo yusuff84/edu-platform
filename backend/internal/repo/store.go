@@ -323,6 +323,81 @@ func (s *Store) TouchCourse(id string) {
 	s.mu.Unlock()
 }
 
+// DeleteCourse удаляет курс и всё, что на него ссылается (уроки, прогресс,
+// записи, отзывы, платежи) — зеркало ON DELETE CASCADE из 001_init.sql (T19).
+// Ограничение «только draft» накладывает handler: каскадное удаление
+// платежей недопустимо для курсов с историей оплат.
+func (s *Store) DeleteCourse(id string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, ok := s.courses[id]; !ok {
+		return ErrNotFound
+	}
+	delete(s.courses, id)
+	mods := make(map[string]bool)
+	for mid, m := range s.modules {
+		if m.CourseID == id {
+			mods[mid] = true
+			delete(s.modules, mid)
+		}
+	}
+	for lid, l := range s.lessons {
+		if mods[l.ModuleID] {
+			delete(s.lessons, lid)
+			s.dropProgressLocked(lid)
+		}
+	}
+	for key, e := range s.enrollments {
+		if e.CourseID == id {
+			delete(s.enrollIdx, enrollKey(e.StudentID, e.CourseID))
+			delete(s.enrollments, key)
+		}
+	}
+	for key, r := range s.reviews {
+		if r.CourseID == id {
+			delete(s.reviewIdx, enrollKey(r.StudentID, r.CourseID))
+			delete(s.reviews, key)
+		}
+	}
+	for pid, p := range s.payments {
+		if p.CourseID == id {
+			if p.ProviderPaymentID != "" {
+				delete(s.paymentsByProvider, p.ProviderPaymentID)
+			}
+			delete(s.payments, pid)
+		}
+	}
+	return nil
+}
+
+// CountContentByCourses считает модули и уроки по курсам преподавателя
+// одним проходом по картам (T19: GET /teacher/courses без N+1).
+func (s *Store) CountContentByCourses(teacherID string) map[string]ContentCounts {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	out := make(map[string]ContentCounts)
+	for _, c := range s.courses {
+		if c.TeacherID == teacherID {
+			out[c.ID] = ContentCounts{}
+		}
+	}
+	for _, m := range s.modules {
+		if cc, ok := out[m.CourseID]; ok {
+			cc.Modules++
+			out[m.CourseID] = cc
+		}
+	}
+	for _, l := range s.lessons {
+		if m, ok := s.modules[l.ModuleID]; ok {
+			if cc, ok := out[m.CourseID]; ok {
+				cc.Lessons++
+				out[m.CourseID] = cc
+			}
+		}
+	}
+	return out
+}
+
 // ---- Modules ----
 
 // CreateModule создаёт модуль в конце списка курса.
@@ -360,6 +435,45 @@ func (s *Store) ListModulesByCourse(courseID string) []*Module {
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Position < out[j].Position })
 	return out
+}
+
+// DeleteModule удаляет модуль вместе с его уроками и прогрессом по ним —
+// зеркало ON DELETE CASCADE в Postgres (T19). ErrNotFound — модуля нет.
+// Позиции оставшихся модулей НЕ уплотняются (так же ведёт себя Postgres
+// без триггера): дырки в порядках допустимы, их закроет reorder.
+func (s *Store) DeleteModule(id string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	_, ok := s.modules[id]
+	if !ok {
+		return ErrNotFound
+	}
+	delete(s.modules, id)
+	for lid, l := range s.lessons {
+		if l.ModuleID == id {
+			delete(s.lessons, lid)
+			s.dropProgressLocked(lid)
+		}
+	}
+	return nil
+}
+
+// ReorderModules применяет полный список позиций модулей курса одной
+// операцией под локом (T19: повтор с тем же списком идемпотентен).
+// ErrNotFound — среди пунктов есть модуль не этого курса.
+func (s *Store) ReorderModules(courseID string, items []PositionItem) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, it := range items {
+		m, ok := s.modules[it.ID]
+		if !ok || m.CourseID != courseID {
+			return ErrNotFound
+		}
+	}
+	for _, it := range items {
+		s.modules[it.ID].Position = it.Position
+	}
+	return nil
 }
 
 // ---- Lessons ----
@@ -416,6 +530,71 @@ func (s *Store) ListLessonsByCourse(courseID string) []*Lesson {
 // CountLessonsByCourse считает уроки курса.
 func (s *Store) CountLessonsByCourse(courseID string) int {
 	return len(s.ListLessonsByCourse(courseID))
+}
+
+// dropProgressLocked удаляет прогресс всех студентов по уроку;
+// вызывать только под держащимся локом (T19).
+func (s *Store) dropProgressLocked(lessonID string) {
+	for key := range s.progress {
+		if strings.HasSuffix(key, "|"+lessonID) {
+			delete(s.progress, key)
+		}
+	}
+}
+
+// UpdateLesson перезаписывает контент урока (title/данные по kind); позицию,
+// модуль и kind не меняет — kind фиксируется при создании (T19).
+func (s *Store) UpdateLesson(l *Lesson) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	cur, ok := s.lessons[l.ID]
+	if !ok {
+		return ErrNotFound
+	}
+	cur.Title = l.Title
+	cur.BodyMD = l.BodyMD
+	cur.VideoURL = l.VideoURL
+	cur.LiveURL = l.LiveURL
+	cur.StartsAt = l.StartsAt
+	cur.Quiz = l.Quiz
+	cur.CodeTask = l.CodeTask
+	return nil
+}
+
+// DeleteLesson удаляет урок и прогресс по нему (каскад; T19).
+// ErrNotFound — урока нет.
+func (s *Store) DeleteLesson(id string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, ok := s.lessons[id]; !ok {
+		return ErrNotFound
+	}
+	delete(s.lessons, id)
+	s.dropProgressLocked(id)
+	return nil
+}
+
+// ReorderLessons применяет полный список позиций уроков курса одной
+// операцией под локом (T19). ErrNotFound — среди пунктов есть урок не
+// этого курса.
+func (s *Store) ReorderLessons(courseID string, items []PositionItem) error {
+	mods := s.ListModulesByCourse(courseID)
+	inCourse := make(map[string]bool, len(mods))
+	for _, m := range mods {
+		inCourse[m.ID] = true
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, it := range items {
+		l, ok := s.lessons[it.ID]
+		if !ok || !inCourse[l.ModuleID] {
+			return ErrNotFound
+		}
+	}
+	for _, it := range items {
+		s.lessons[it.ID].Position = it.Position
+	}
+	return nil
 }
 
 // ---- Enrollments ----

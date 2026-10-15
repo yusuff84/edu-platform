@@ -1115,3 +1115,177 @@ func (s *PostgresStore) SetCommissionPct(n int) error {
 	s.mu.Unlock()
 	return nil
 }
+
+// ---- T19: CRUD конструктора (удаление, порядок, счётчики) ----
+//
+// Методы вынесены в конец файла, чтобы не конфликтовать при слиянии волн.
+// Ошибки БД пробрасываются завёрнутыми (не глотаются, в отличие от
+// исторических методов `return nil, false`).
+
+// DeleteModule удаляет модуль; уроки уходят каскадом (ON DELETE CASCADE,
+// 001_init). ErrNotFound — модуля нет.
+func (s *PostgresStore) DeleteModule(id string) error {
+	ctx, cancel := s.ctx()
+	defer cancel()
+	tag, err := s.pool.Exec(ctx, `DELETE FROM modules WHERE id=$1::uuid`, id)
+	if err != nil {
+		return fmt.Errorf("не удалось удалить модуль: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+// DeleteLesson удаляет урок; прогресс уходит каскадом (001_init).
+// ErrNotFound — урока нет.
+func (s *PostgresStore) DeleteLesson(id string) error {
+	ctx, cancel := s.ctx()
+	defer cancel()
+	tag, err := s.pool.Exec(ctx, `DELETE FROM lessons WHERE id=$1::uuid`, id)
+	if err != nil {
+		return fmt.Errorf("не удалось удалить урок: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+// DeleteCourse удаляет курс; записи, платежи, отзывы, модули и уроки уходят
+// каскадом (001_init). ErrNotFound — курса нет. Handler ограничивает вызов
+// черновиком, чтобы не терять историю оплат.
+func (s *PostgresStore) DeleteCourse(id string) error {
+	ctx, cancel := s.ctx()
+	defer cancel()
+	tag, err := s.pool.Exec(ctx, `DELETE FROM courses WHERE id=$1::uuid`, id)
+	if err != nil {
+		return fmt.Errorf("не удалось удалить курс: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+// UpdateLesson перезаписывает контент урока; kind, позицию и модуль не меняет
+// (T19). ErrNotFound — урока нет.
+func (s *PostgresStore) UpdateLesson(l *Lesson) error {
+	ctx, cancel := s.ctx()
+	defer cancel()
+	var quiz, code any = lessonToJSON(l.Quiz), lessonToJSON(l.CodeTask)
+	var body, video, live any = nilIfEmpty(l.BodyMD), nilIfEmpty(l.VideoURL), nilIfEmpty(l.LiveURL)
+	var starts any
+	if l.StartsAt != nil {
+		starts = *l.StartsAt
+	}
+	tag, err := s.pool.Exec(ctx,
+		`UPDATE lessons SET title=$2, body_md=$3, video_url=$4, live_url=$5,
+		 starts_at=$6, quiz=$7::jsonb, code_task=$8::jsonb
+		 WHERE id=$1::uuid`,
+		l.ID, l.Title, body, video, live, starts, quiz, code)
+	if err != nil {
+		return fmt.Errorf("не удалось обновить урок: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+// ReorderModules применяет полный список позиций модулей курса одной
+// транзакцией (T19). Сначала позиции уводятся в отрицательные: иначе обмен
+// местами нарушал бы UNIQUE (course_id, position) до завершения транзакции.
+// ErrNotFound — пункт списка не относится к курсу.
+func (s *PostgresStore) ReorderModules(courseID string, items []PositionItem) error {
+	ctx, cancel := s.ctx()
+	defer cancel()
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("перестановка модулей: %w", err)
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck // откат после Commit безвреден
+	if _, err := tx.Exec(ctx,
+		`UPDATE modules SET position = -position WHERE course_id=$1::uuid`, courseID); err != nil {
+		return fmt.Errorf("перестановка модулей: %w", err)
+	}
+	for _, it := range items {
+		tag, err := tx.Exec(ctx,
+			`UPDATE modules SET position=$2 WHERE id=$1::uuid AND course_id=$3::uuid`,
+			it.ID, it.Position, courseID)
+		if err != nil {
+			return fmt.Errorf("перестановка модулей: %w", err)
+		}
+		if tag.RowsAffected() == 0 {
+			return ErrNotFound
+		}
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("перестановка модулей: %w", err)
+	}
+	return nil
+}
+
+// ReorderLessons применяет полный список позиций уроков курса одной
+// транзакцией (T19). Как и у модулей, позиции сначала уводятся в
+// отрицательные — из-за UNIQUE (module_id, position).
+// ErrNotFound — пункт списка не относится к курсу.
+func (s *PostgresStore) ReorderLessons(courseID string, items []PositionItem) error {
+	ctx, cancel := s.ctx()
+	defer cancel()
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("перестановка уроков: %w", err)
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck // откат после Commit безвреден
+	if _, err := tx.Exec(ctx,
+		`UPDATE lessons l SET position = -l.position
+		 FROM modules m WHERE m.id = l.module_id AND m.course_id=$1::uuid`, courseID); err != nil {
+		return fmt.Errorf("перестановка уроков: %w", err)
+	}
+	for _, it := range items {
+		tag, err := tx.Exec(ctx,
+			`UPDATE lessons SET position=$2
+			 WHERE id=$1::uuid
+			 AND module_id IN (SELECT id FROM modules WHERE course_id=$3::uuid)`,
+			it.ID, it.Position, courseID)
+		if err != nil {
+			return fmt.Errorf("перестановка уроков: %w", err)
+		}
+		if tag.RowsAffected() == 0 {
+			return ErrNotFound
+		}
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("перестановка уроков: %w", err)
+	}
+	return nil
+}
+
+// CountContentByCourses считает модули и уроки по курсам преподавателя
+// одним запросом (T19: убирает N+1 в GET /teacher/courses).
+func (s *PostgresStore) CountContentByCourses(teacherID string) map[string]ContentCounts {
+	ctx, cancel := s.ctx()
+	defer cancel()
+	out := make(map[string]ContentCounts)
+	rows, err := s.pool.Query(ctx,
+		`SELECT c.id::text, COUNT(DISTINCT m.id)::int, COUNT(l.id)::int
+		 FROM courses c
+		 LEFT JOIN modules m ON m.course_id = c.id
+		 LEFT JOIN lessons l ON l.module_id = m.id
+		 WHERE c.teacher_id=$1::uuid
+		 GROUP BY c.id`, teacherID)
+	if err != nil {
+		log.Printf("postgres CountContentByCourses: %v", err)
+		return out
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id string
+		var cc ContentCounts
+		if err := rows.Scan(&id, &cc.Modules, &cc.Lessons); err == nil {
+			out[id] = cc
+		}
+	}
+	return out
+}

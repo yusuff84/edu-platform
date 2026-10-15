@@ -2,10 +2,14 @@
 // /teach/:id — редактирование существующего курса (программа, модули, уроки,
 // отправка на модерацию).
 //
-// Ограничения API (см. Task/00-api-contract.md): единственное управление
-// контентом — создание модуля и урока. Переименование, удаление и изменение
-// порядка модулей/уроков, а также редактирование после создания в API нет —
-// в UI они не рисуются как рабочие действия (teach.apiLimitNote).
+// T19 закрыл бэклог T06: правка карточки и переименование модуля (T13),
+// правка урока, удаление модулей/уроков/курса, изменение порядка, счётчики
+// модулей и уроков в карточках списка. Контент (уроки, порядок, удаление)
+// правится только в черновике — API отвечает 409 иначе; карточка курса и
+// название модуля — метаданные, правятся в любом статусе.
+//
+// API-вызовы CRUD (PATCH/DELETE/reorder) объявлены локально: api/client.ts —
+// чужая зона (T16), расширить его в T19 нельзя. crudFetch повторяет apiFetch.
 //
 // Все тела запросов собираются только из полей, относящихся к kind урока:
 // backend включает DisallowUnknownFields() — лишнее поле = 400.
@@ -29,7 +33,7 @@ import {
   myTeaching,
   submitCourse,
 } from '../api/client';
-import type { Course, CourseStatus, CreateLessonInput, LessonKind } from '../api/client';
+import type { Course, CourseStatus, CreateLessonInput, Lesson, LessonKind, Module } from '../api/client';
 import { t } from '../i18n/t';
 import '../styles/constructor.css';
 
@@ -64,6 +68,114 @@ const MSG_QUIZ_CORRECT = 'Отметьте правильный вариант �
 const MSG_CODE_NO_TESTS = 'Добавьте хотя бы один тест';
 const MSG_TEST_NAME = 'Укажите название теста';
 const MSG_TEST_EXPECTED = 'Укажите ожидаемый результат';
+// T19: подтверждения удаления — teach.confirmDelete существует в словаре;
+// отдельного ключа для модуля/урока нет (см. отчёт: teach.confirmDeleteModule).
+const MSG_DELETE = t('teach.confirmDelete');
+
+// ---------- T19: локальный транспорт CRUD (client.ts не менялся) ----------
+
+const API_BASE: string =
+  (import.meta.env.VITE_API_URL as string | undefined) ?? '/api/v1';
+
+/** Локальный аналог apiFetch из api/client.ts (PATCH/DELETE/reorder). */
+async function crudFetch<T>(path: string, init?: RequestInit): Promise<T> {
+  const res = await fetch(`${API_BASE}${path}`, {
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json', ...(init?.headers ?? {}) },
+    ...init,
+  });
+  if (res.status === 204) return undefined as T;
+  const text = await res.text();
+  let data: unknown;
+  try {
+    data = text ? (JSON.parse(text) as unknown) : undefined;
+  } catch {
+    data = undefined;
+  }
+  if (!res.ok) {
+    const errObj =
+      typeof data === 'object' && data !== null ? (data as Record<string, unknown>) : {};
+    let msg = typeof errObj.error === 'string' ? errObj.error : '';
+    if (res.status === 401 && !msg) msg = 'Требуется вход в аккаунт';
+    if (!msg) msg = `Ошибка запроса (${res.status})`;
+    throw new ApiError(res.status, msg);
+  }
+  return data as T;
+}
+
+/** Строка GET /teacher/courses с T19-счётчиками программы. */
+interface TeacherCourse extends Course {
+  modulesCount?: number;
+  lessonsCount?: number;
+}
+
+interface ReorderItem {
+  id: string;
+  position: number;
+}
+
+function patchCourseCard(
+  courseId: string,
+  body: { title?: string; description?: string; priceCents?: number },
+): Promise<Course> {
+  // Тело только из переданных полей: пустые не шлём, чтобы не затереть данные.
+  const b: Record<string, unknown> = {};
+  if (body.title !== undefined) b.title = body.title;
+  if (body.description !== undefined) b.description = body.description;
+  if (body.priceCents !== undefined) b.priceCents = body.priceCents;
+  return crudFetch<Course>(`/teacher/courses/${courseId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(b),
+  });
+}
+
+function patchModuleTitle(courseId: string, moduleId: string, title: string): Promise<Module> {
+  return crudFetch<Module>(`/teacher/courses/${courseId}/modules/${moduleId}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ title }),
+  });
+}
+
+function patchLesson(
+  courseId: string,
+  lessonId: string,
+  body: Record<string, unknown>,
+): Promise<Lesson> {
+  return crudFetch<Lesson>(`/teacher/courses/${courseId}/lessons/${lessonId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(body),
+  });
+}
+
+function deleteCourse(courseId: string): Promise<void> {
+  return crudFetch<void>(`/teacher/courses/${courseId}`, { method: 'DELETE' });
+}
+
+function deleteModule(courseId: string, moduleId: string): Promise<void> {
+  return crudFetch<void>(`/teacher/courses/${courseId}/modules/${moduleId}`, {
+    method: 'DELETE',
+  });
+}
+
+function deleteLesson(courseId: string, lessonId: string): Promise<void> {
+  return crudFetch<void>(`/teacher/courses/${courseId}/lessons/${lessonId}`, {
+    method: 'DELETE',
+  });
+}
+
+function reorderModules(courseId: string, items: ReorderItem[]): Promise<void> {
+  return crudFetch<void>(`/teacher/courses/${courseId}/modules/reorder`, {
+    method: 'POST',
+    body: JSON.stringify({ items }),
+  });
+}
+
+function reorderLessons(courseId: string, items: ReorderItem[]): Promise<void> {
+  return crudFetch<void>(`/teacher/courses/${courseId}/lessons/reorder`, {
+    method: 'POST',
+    body: JSON.stringify({ items }),
+  });
+}
 
 // ---------- Схема создания курса ----------
 
@@ -79,6 +191,8 @@ type CourseForm = z.infer<typeof courseSchema>;
 
 /** Вопрос квиза в форме (до отправки; id вопросов генерирует backend). */
 interface QuestionState {
+  /** T19: id исходного вопроса при редактировании — сохраняем, чтобы ответы студентов не «отвязались». */
+  id?: string;
   text: string;
   options: string[];
   /** Индекс правильного варианта [0, options.length). */
@@ -128,6 +242,61 @@ function emptyLesson(moduleId: string): LessonDraft {
     template: '',
     tests: [{ name: '', input: '', expected: '', hidden: false }],
   };
+}
+
+// ---------- T19: редактирование урока ----------
+
+/** RFC3339 → значение input[type=datetime-local] (локальное время). */
+function toLocalInput(iso: string | undefined): string {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  const pad = (n: number): string => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(
+    d.getMinutes(),
+  )}`;
+}
+
+/**
+ * Урок (полная форма владельца из GET /courses/{slug}) → состояние формы.
+ * moduleId берём из модуля-владельца: в lessonView его нет.
+ */
+function lessonToDraft(l: Lesson, moduleId: string): LessonDraft {
+  const d = emptyLesson(moduleId);
+  d.title = l.title;
+  d.kind = l.kind;
+  d.bodyMd = l.bodyMd ?? '';
+  d.videoUrl = l.videoUrl ?? '';
+  d.liveUrl = l.liveUrl ?? '';
+  d.startsAt = toLocalInput(l.startsAt);
+  if (l.kind === 'quiz' && l.quiz) {
+    d.questions = l.quiz.questions.map((q) => ({
+      id: q.id,
+      text: q.text,
+      options: [...q.options],
+      correct: q.correct ?? 0,
+      explanation: q.explanation ?? '',
+    }));
+    if (d.questions.length === 0) {
+      d.questions = [{ text: '', options: ['', ''], correct: 0, explanation: '' }];
+    }
+  }
+  if (l.kind === 'code' && l.codeTask) {
+    d.language = (LANGUAGES as readonly string[]).includes(l.codeTask.language)
+      ? (l.codeTask.language as Language)
+      : 'python';
+    d.template = l.codeTask.template ?? '';
+    d.tests = l.codeTask.tests.map((x) => ({
+      name: x.name,
+      input: x.input,
+      expected: x.expected,
+      hidden: x.hidden ?? false,
+    }));
+    if (d.tests.length === 0) {
+      d.tests = [{ name: '', input: '', expected: '', hidden: false }];
+    }
+  }
+  return d;
 }
 
 // ---------- Валидация формы урока ----------
@@ -234,10 +403,67 @@ function buildLessonInput(d: LessonDraft): CreateLessonInput {
           return x.hidden ? { ...test, hidden: true } : test;
         }),
       };
-      if (d.template.trim()) codeTask.template = d.template;
+      if (d.template.trim()) codeTask.template = d.template.trim();
       return { ...base, codeTask };
     }
   }
+}
+
+/**
+ * T19: тело PATCH .../lessons/{id}. В отличие от создания, отправляем ВСЕ
+ * поля kind — пустая строка очищает значение на backend (merge по указателям).
+ * moduleId шлём для совместимости с формой (backend его игнорирует), kind —
+ * текущий: смена типа урока запрещена (400).
+ */
+function buildLessonPatchBody(d: LessonDraft): Record<string, unknown> {
+  const body: Record<string, unknown> = {
+    moduleId: d.moduleId,
+    title: d.title.trim(),
+    kind: d.kind,
+  };
+  switch (d.kind) {
+    case 'video_text':
+      body.bodyMd = d.bodyMd.trim();
+      body.videoUrl = d.videoUrl.trim();
+      break;
+    case 'live':
+      body.liveUrl = d.liveUrl.trim();
+      // Пустая строка — очистить дату эфира.
+      body.startsAt = toIso(d.startsAt) ?? '';
+      break;
+    case 'quiz':
+      body.quiz = {
+        questions: d.questions.map((q) => {
+          const question: Record<string, unknown> = {
+            text: q.text.trim(),
+            options: q.options.map((o) => o.trim()),
+            correct: q.correct,
+          };
+          // Сохраняем id исходных вопросов: ответы студентов привязаны к ним.
+          if (q.id) question.id = q.id;
+          const explanation = q.explanation.trim();
+          if (explanation) question.explanation = explanation;
+          return question;
+        }),
+      };
+      break;
+    case 'code':
+      body.codeTask = {
+        language: d.language,
+        template: d.template.trim(),
+        tests: d.tests.map((x) => {
+          const test: Record<string, unknown> = {
+            name: x.name.trim(),
+            input: x.input,
+            expected: x.expected.trim(),
+          };
+          if (x.hidden) test.hidden = true;
+          return test;
+        }),
+      };
+      break;
+  }
+  return body;
 }
 
 // ---------- Утилиты ----------
@@ -295,6 +521,20 @@ export default function Constructor(): JSX.Element {
   const modules = course?.modules ?? [];
   const editable = course?.status === 'draft';
 
+  // ---------- T19: локальное состояние CRUD ----------
+
+  // Правка карточки курса (T13 PATCH /teacher/courses/{id}): в любом статусе.
+  const [cardEditing, setCardEditing] = useState(false);
+  const [cardDraft, setCardDraft] = useState({ title: '', description: '', priceRub: 0 });
+
+  // Переименование модуля (T13 PATCH .../modules/{moduleID}): в любом статусе.
+  const [renamingModuleId, setRenamingModuleId] = useState<string | null>(null);
+  const [renameTitle, setRenameTitle] = useState('');
+
+  // Правка урока (T19 PATCH .../lessons/{lessonID}): только в черновике.
+  // Форма создания и редактирования — одна; editId !== null = режим правки.
+  const [editingLessonId, setEditingLessonId] = useState<string | null>(null);
+
   // ---------- Форма создания курса ----------
   const createMutation = useMutation({
     mutationFn: (v: CourseForm) =>
@@ -337,14 +577,177 @@ export default function Constructor(): JSX.Element {
     moduleMutation.mutate();
   }
 
+  // ---------- T19: карточка курса ----------
+
+  const cardMutation = useMutation({
+    mutationFn: () =>
+      patchCourseCard(course?.id ?? '', {
+        title: cardDraft.title.trim(),
+        description: cardDraft.description.trim(),
+        priceCents: Math.round(cardDraft.priceRub * 100),
+      }),
+    onSuccess: () => {
+      setCardEditing(false);
+      setNotice({ text: t('teach.saved'), kind: 'ok' });
+      void qc.invalidateQueries({ queryKey: ['teaching'] });
+      void qc.invalidateQueries({ queryKey: ['teach-course'] });
+    },
+    onError: (e: unknown) => setNotice({ text: errText(e), kind: 'error' }),
+  });
+
+  function startCardEdit(): void {
+    if (!course) return;
+    setCardDraft({
+      title: course.title,
+      description: course.description,
+      priceRub: course.priceCents / 100,
+    });
+    setCardEditing(true);
+  }
+
+  function onCardSubmit(e: FormEvent): void {
+    e.preventDefault();
+    if (
+      cardDraft.title.trim().length < 3 ||
+      cardDraft.description.trim().length < 10 ||
+      cardDraft.priceRub < 0
+    ) {
+      setNotice({ text: 'Проверьте поля карточки: название от 3 символов, описание от 10, цена не меньше 0', kind: 'error' });
+      return;
+    }
+    cardMutation.mutate();
+  }
+
+  // ---------- T19: переименование модуля ----------
+
+  const renameMutation = useMutation({
+    mutationFn: (v: { moduleId: string; title: string }) =>
+      patchModuleTitle(course?.id ?? '', v.moduleId, v.title),
+    onSuccess: () => {
+      setRenamingModuleId(null);
+      setNotice({ text: t('teach.saved'), kind: 'ok' });
+      void qc.invalidateQueries({ queryKey: ['teach-course'] });
+      void qc.invalidateQueries({ queryKey: ['teaching'] });
+    },
+    onError: (e: unknown) => setNotice({ text: errText(e), kind: 'error' }),
+  });
+
+  function onRenameSubmit(e: FormEvent): void {
+    e.preventDefault();
+    if (!renamingModuleId || !renameTitle.trim()) return;
+    renameMutation.mutate({ moduleId: renamingModuleId, title: renameTitle.trim() });
+  }
+
+  // ---------- T19: удаления (курс, модуль, урок) ----------
+
+  const deleteCourseMutation = useMutation({
+    mutationFn: (courseId: string) => deleteCourse(courseId),
+    onSuccess: () => {
+      setNotice({ text: 'Курс удалён', kind: 'ok' });
+      void qc.invalidateQueries({ queryKey: ['teaching'] });
+      void qc.invalidateQueries({ queryKey: ['teach-course'] });
+    },
+    onError: (e: unknown) => setNotice({ text: errText(e), kind: 'error' }),
+  });
+
+  function onDeleteCourse(courseId: string): void {
+    if (window.confirm(MSG_DELETE)) deleteCourseMutation.mutate(courseId);
+  }
+
+  const deleteModuleMutation = useMutation({
+    mutationFn: (moduleId: string) => deleteModule(course?.id ?? '', moduleId),
+    onSuccess: () => {
+      setNotice({ text: 'Модуль удалён', kind: 'ok' });
+      void qc.invalidateQueries({ queryKey: ['teach-course'] });
+      void qc.invalidateQueries({ queryKey: ['teaching'] });
+    },
+    onError: (e: unknown) => setNotice({ text: errText(e), kind: 'error' }),
+  });
+
+  function onDeleteModule(moduleId: string): void {
+    if (window.confirm(MSG_DELETE)) deleteModuleMutation.mutate(moduleId);
+  }
+
+  const deleteLessonMutation = useMutation({
+    mutationFn: (lessonId: string) => deleteLesson(course?.id ?? '', lessonId),
+    onSuccess: (_data, lessonId) => {
+      // Если удалили редактируемый урок — сбрасываем форму в режим создания.
+      if (editingLessonId === lessonId) {
+        setEditingLessonId(null);
+        setLesson((prev) => emptyLesson(prev.moduleId));
+        setLessonErrors({});
+      }
+      setNotice({ text: 'Урок удалён', kind: 'ok' });
+      void qc.invalidateQueries({ queryKey: ['teach-course'] });
+      void qc.invalidateQueries({ queryKey: ['teaching'] });
+    },
+    onError: (e: unknown) => setNotice({ text: errText(e), kind: 'error' }),
+  });
+
+  function onDeleteLesson(lessonId: string): void {
+    if (window.confirm(MSG_DELETE)) deleteLessonMutation.mutate(lessonId);
+  }
+
+  // ---------- T19: порядок модулей и уроков ----------
+
+  const reorderModulesMutation = useMutation({
+    mutationFn: (items: ReorderItem[]) => reorderModules(course?.id ?? '', items),
+    onSuccess: () => {
+      setNotice({ text: 'Порядок сохранён', kind: 'ok' });
+      void qc.invalidateQueries({ queryKey: ['teach-course'] });
+    },
+    onError: (e: unknown) => setNotice({ text: errText(e), kind: 'error' }),
+  });
+
+  /** Сдвиг модуля на ±1: шлём полный список позиций 1..N (идемпотентно). */
+  function moveModule(index: number, dir: -1 | 1): void {
+    const next = [...modules];
+    const j = index + dir;
+    if (j < 0 || j >= next.length) return;
+    [next[index], next[j]] = [next[j], next[index]];
+    reorderModulesMutation.mutate(next.map((m, i) => ({ id: m.id, position: i + 1 })));
+  }
+
+  const reorderLessonsMutation = useMutation({
+    mutationFn: (items: ReorderItem[]) => reorderLessons(course?.id ?? '', items),
+    onSuccess: () => {
+      setNotice({ text: 'Порядок сохранён', kind: 'ok' });
+      void qc.invalidateQueries({ queryKey: ['teach-course'] });
+    },
+    onError: (e: unknown) => setNotice({ text: errText(e), kind: 'error' }),
+  });
+
+  /**
+   * Сдвиг урока на ±1 внутри модуля. Позиция — порядковый номер внутри модуля;
+   * API ждёт полный список уроков курса, поэтому пересобираем все модули.
+   */
+  function moveLesson(moduleIndex: number, lessonIndex: number, dir: -1 | 1): void {
+    const items: ReorderItem[] = [];
+    for (let mi = 0; mi < modules.length; mi++) {
+      const lessons = [...modules[mi].lessons];
+      if (mi === moduleIndex) {
+        const j = lessonIndex + dir;
+        if (j < 0 || j >= lessons.length) return;
+        [lessons[lessonIndex], lessons[j]] = [lessons[j], lessons[lessonIndex]];
+      }
+      lessons.forEach((l, i) => items.push({ id: l.id, position: i + 1 }));
+    }
+    reorderLessonsMutation.mutate(items);
+  }
+
   // ---------- Урок ----------
   const [lesson, setLesson] = useState<LessonDraft>(() => emptyLesson(''));
   const [lessonErrors, setLessonErrors] = useState<Record<string, string>>({});
 
+  // editId !== null — режим правки (T19 PATCH), иначе создание.
   const lessonMutation = useMutation({
-    mutationFn: (draft: LessonDraft) => createLesson(course?.id ?? '', buildLessonInput(draft)),
-    onSuccess: () => {
+    mutationFn: (v: { draft: LessonDraft; editId: string | null }) =>
+      v.editId
+        ? patchLesson(course?.id ?? '', v.editId, buildLessonPatchBody(v.draft))
+        : createLesson(course?.id ?? '', buildLessonInput(v.draft)),
+    onSuccess: (_data, v) => {
       // moduleId сохраняем: можно добавить ещё урок в тот же модуль.
+      setEditingLessonId(null);
       setLesson((prev) => emptyLesson(prev.moduleId));
       setLessonErrors({});
       setNotice({ text: t('teach.saved'), kind: 'ok' });
@@ -362,7 +765,26 @@ export default function Constructor(): JSX.Element {
       focusField(first);
       return;
     }
-    lessonMutation.mutate(lesson);
+    lessonMutation.mutate({ draft: lesson, editId: editingLessonId });
+  }
+
+  /** T19: переход в режим правки урока — форма заполняется текущими данными. */
+  function startEditLesson(l: Lesson, moduleId: string): void {
+    setEditingLessonId(l.id);
+    setLesson(lessonToDraft(l, moduleId));
+    setLessonErrors({});
+    setNotice(null);
+    // Форма урока выше программы — прокручиваем к ней и ставим фокус.
+    focusField('lesson-title');
+    document.getElementById('lesson-form')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  /** T19: выход из режима правки без сохранения. */
+  function cancelEditLesson(): void {
+    setEditingLessonId(null);
+    setLesson((prev) => emptyLesson(prev.moduleId));
+    setLessonErrors({});
+    setNotice(null);
   }
 
   function setLessonField<K extends keyof LessonDraft>(key: K, value: LessonDraft[K]): void {
@@ -513,7 +935,10 @@ export default function Constructor(): JSX.Element {
             {teachingQuery.data && teachingQuery.data.length === 0 && <p>{t('teach.empty')}</p>}
             {teachingQuery.data && teachingQuery.data.length > 0 && (
               <ul className="teach-card-grid">
-                {teachingQuery.data.map((c) => (
+                {teachingQuery.data.map((raw) => {
+                  // Счётчики T19 приходят в элементах списка (GET /teacher/courses).
+                  const c = raw as TeacherCourse;
+                  return (
                   <li key={c.id} className="card teach-card">
                     <h3>
                       <Link to={`/teach/${c.id}`}>{c.title}</Link>
@@ -530,7 +955,8 @@ export default function Constructor(): JSX.Element {
                       </p>
                     )}
                     <p className="muted teach-note">
-                      Обновлено: {formatDate(c.updatedAt)}
+                      Модулей: {c.modulesCount ?? 0} · Уроков: {c.lessonsCount ?? 0} · Обновлено:{' '}
+                      {formatDate(c.updatedAt)}
                     </p>
                     <div className="teach-card-actions">
                       <Link className="teach-link-btn" to={`/teach/${c.id}`}>
@@ -547,9 +973,23 @@ export default function Constructor(): JSX.Element {
                           {t('teach.submitReview')}
                         </button>
                       )}
+                      {c.status === 'draft' && (
+                        <button
+                          type="button"
+                          className="teach-danger"
+                          onClick={() => onDeleteCourse(c.id)}
+                          disabled={
+                            deleteCourseMutation.isPending &&
+                            deleteCourseMutation.variables === c.id
+                          }
+                        >
+                          {t('common.delete')}
+                        </button>
+                      )}
                     </div>
                   </li>
-                ))}
+                  );
+                })}
               </ul>
             )}
           </section>
@@ -621,6 +1061,68 @@ export default function Constructor(): JSX.Element {
                 <Link to="/teach">{t('common.back')}</Link>
               </p>
 
+              {/* T19: правка карточки (T13 PATCH) — доступна в любом статусе:
+                  это метаданные, а не контент курса. */}
+              <section className="teach-section panel">
+                <h2>{t('teach.courseTitle')}</h2>
+                {!cardEditing ? (
+                  <div className="teach-card-actions">
+                    <button type="button" onClick={startCardEdit}>
+                      Редактировать карточку
+                    </button>
+                    <button
+                      type="button"
+                      className="teach-danger"
+                      onClick={() => onDeleteCourse(course.id)}
+                      disabled={deleteCourseMutation.isPending}
+                    >
+                      {t('common.delete')} курс
+                    </button>
+                  </div>
+                ) : (
+                  <form className="form-grid" onSubmit={onCardSubmit} noValidate>
+                    <label htmlFor="card-title">{t('teach.courseTitle')}</label>
+                    <input
+                      id="card-title"
+                      className="input"
+                      value={cardDraft.title}
+                      onChange={(e) => setCardDraft((p) => ({ ...p, title: e.target.value }))}
+                    />
+                    <label htmlFor="card-desc">{t('teach.courseDesc')}</label>
+                    <textarea
+                      id="card-desc"
+                      className="input"
+                      rows={4}
+                      value={cardDraft.description}
+                      onChange={(e) => setCardDraft((p) => ({ ...p, description: e.target.value }))}
+                    />
+                    <label htmlFor="card-price">{t('teach.coursePrice')}</label>
+                    <input
+                      id="card-price"
+                      className="input"
+                      type="number"
+                      min={0}
+                      value={cardDraft.priceRub}
+                      onChange={(e) =>
+                        setCardDraft((p) => ({ ...p, priceRub: Number(e.target.value) }))
+                      }
+                    />
+                    <div className="teach-card-actions">
+                      <button
+                        type="submit"
+                        className="btn btn-primary"
+                        disabled={cardMutation.isPending}
+                      >
+                        {cardMutation.isPending ? t('teach.saving') : t('teach.save')}
+                      </button>
+                      <button type="button" onClick={() => setCardEditing(false)}>
+                        {t('common.cancel')}
+                      </button>
+                    </div>
+                  </form>
+                )}
+              </section>
+
               {/* Отправка на модерацию — только для черновика. */}
               {editable ? (
                 <div className="teach-section panel">
@@ -668,14 +1170,16 @@ export default function Constructor(): JSX.Element {
                   </section>
 
                   <section className="teach-section panel">
-                    <h2>{t('teach.addLesson')}</h2>
+                    <h2>{editingLessonId ? t('teach.editLesson') : t('teach.addLesson')}</h2>
                     {modules.length === 0 && <p className="muted">{t('teach.hintEmptyCourse')}</p>}
-                    <form onSubmit={onLessonSubmit} noValidate className="form-grid">
+                    <form id="lesson-form" onSubmit={onLessonSubmit} noValidate className="form-grid">
                       <label htmlFor="lesson-module">Модуль</label>
                       <select
                         id="lesson-module"
                         className="select"
                         value={lesson.moduleId}
+                        // T19: перенос урока в другой модуль API не поддерживает.
+                        disabled={Boolean(editingLessonId)}
                         onChange={(e) => setLessonField('moduleId', e.target.value)}
                       >
                         <option value="">—</option>
@@ -705,6 +1209,8 @@ export default function Constructor(): JSX.Element {
                         id="lesson-kind"
                         className="select"
                         value={lesson.kind}
+                        // T19: тип урока после создания менять нельзя (400).
+                        disabled={Boolean(editingLessonId)}
                         onChange={(e) => setLessonField('kind', e.target.value as LessonKind)}
                       >
                         {KINDS.map((k) => (
@@ -919,32 +1425,163 @@ export default function Constructor(): JSX.Element {
                         </div>
                       )}
 
-                      <button type="submit" className="btn btn-primary" disabled={lessonMutation.isPending}>
-                        {lessonMutation.isPending ? t('teach.saving') : t('teach.addLesson')}
-                      </button>
+                      <div className="teach-card-actions">
+                        <button
+                          type="submit"
+                          className="btn btn-primary"
+                          disabled={lessonMutation.isPending}
+                        >
+                          {lessonMutation.isPending
+                            ? t('teach.saving')
+                            : editingLessonId
+                              ? t('teach.save')
+                              : t('teach.addLesson')}
+                        </button>
+                        {editingLessonId && (
+                          <button type="button" onClick={cancelEditLesson}>
+                            {t('common.cancel')}
+                          </button>
+                        )}
+                      </div>
                     </form>
                   </section>
                 </>
               )}
 
-              {/* Программа курса (только чтение). */}
+              {/* Программа курса: порядок и удаление — только в черновике
+                  (T19), переименование модуля — в любом статусе (T13). */}
               <section className="teach-section panel">
                 <h2>{t('course.program')}</h2>
                 {modules.length === 0 ? (
                   <p className="muted">{t('learn.empty')}</p>
                 ) : (
                   <ol className="teach-modules">
-                    {modules.map((m) => (
+                    {modules.map((m, mi) => (
                       <li key={m.id} className="teach-module">
-                        <h3>{m.title}</h3>
+                        {renamingModuleId === m.id ? (
+                          <form className="teach-rename-row" onSubmit={onRenameSubmit} noValidate>
+                            <input
+                              id="module-rename"
+                              className="input"
+                              value={renameTitle}
+                              onChange={(e) => setRenameTitle(e.target.value)}
+                              autoFocus
+                            />
+                            <button
+                              type="submit"
+                              className="btn"
+                              disabled={!renameTitle.trim() || renameMutation.isPending}
+                            >
+                              {renameMutation.isPending ? t('teach.saving') : t('common.save')}
+                            </button>
+                            <button type="button" onClick={() => setRenamingModuleId(null)}>
+                              {t('common.cancel')}
+                            </button>
+                          </form>
+                        ) : (
+                          <div className="teach-module-head">
+                            <h3>{m.title}</h3>
+                            <div className="teach-card-actions">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setRenamingModuleId(m.id);
+                                  setRenameTitle(m.title);
+                                }}
+                              >
+                                {t('teach.editModule')}
+                              </button>
+                              {editable && (
+                                <>
+                                  <button
+                                    type="button"
+                                    onClick={() => moveModule(mi, -1)}
+                                    disabled={
+                                      mi === 0 || reorderModulesMutation.isPending
+                                    }
+                                  >
+                                    {t('teach.moveUp')}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => moveModule(mi, 1)}
+                                    disabled={
+                                      mi === modules.length - 1 ||
+                                      reorderModulesMutation.isPending
+                                    }
+                                  >
+                                    {t('teach.moveDown')}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="teach-danger"
+                                    onClick={() => onDeleteModule(m.id)}
+                                    disabled={
+                                      m.lessons.length > 0 ||
+                                      (deleteModuleMutation.isPending &&
+                                        deleteModuleMutation.variables === m.id)
+                                    }
+                                    title={
+                                      m.lessons.length > 0
+                                        ? 'В модуле есть уроки: сначала удалите их'
+                                        : undefined
+                                    }
+                                  >
+                                    {t('teach.deleteModule')}
+                                  </button>
+                                </>
+                              )}
+                            </div>
+                          </div>
+                        )}
                         {m.lessons.length === 0 ? (
                           <p className="muted">{t('learn.noLessons')}</p>
                         ) : (
                           <ul className="teach-lesson-list">
-                            {m.lessons.map((l) => (
-                              <li key={l.id}>
+                            {m.lessons.map((l, li) => (
+                              <li key={l.id} className="teach-lesson-row">
                                 <span className="teach-lesson-kind">{t(`kind.${l.kind}`)}</span>
-                                {l.title}
+                                <span className="teach-lesson-name">{l.title}</span>
+                                {editable && (
+                                  <span className="teach-row-actions">
+                                    <button
+                                      type="button"
+                                      onClick={() => moveLesson(mi, li, -1)}
+                                      disabled={
+                                        li === 0 || reorderLessonsMutation.isPending
+                                      }
+                                    >
+                                      {t('teach.moveUp')}
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => moveLesson(mi, li, 1)}
+                                      disabled={
+                                        li === m.lessons.length - 1 ||
+                                        reorderLessonsMutation.isPending
+                                      }
+                                    >
+                                      {t('teach.moveDown')}
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => startEditLesson(l, m.id)}
+                                    >
+                                      {t('teach.editLesson')}
+                                    </button>
+                                    <button
+                                      type="button"
+                                      className="teach-danger"
+                                      onClick={() => onDeleteLesson(l.id)}
+                                      disabled={
+                                        deleteLessonMutation.isPending &&
+                                        deleteLessonMutation.variables === l.id
+                                      }
+                                    >
+                                      {t('teach.deleteLesson')}
+                                    </button>
+                                  </span>
+                                )}
                               </li>
                             ))}
                           </ul>
@@ -953,7 +1590,6 @@ export default function Constructor(): JSX.Element {
                     ))}
                   </ol>
                 )}
-                <p className="teach-note">{t('teach.apiLimitNote')}</p>
               </section>
             </>
           )}

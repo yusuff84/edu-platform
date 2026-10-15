@@ -136,6 +136,63 @@
   margin: 0 0 0.25rem;
 }
 
+/* T19: строка модуля с заголовком и действиями. */
+.teach-module-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.teach-module-head .teach-card-actions {
+  margin-top: 0;
+}
+
+/* T19: инлайн-переименование модуля. */
+.teach-rename-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.25rem;
+}
+
+.teach-rename-row .input {
+  max-width: 24rem;
+  flex: 1 1 12rem;
+}
+
+/* T19: строка урока с названием и действиями. */
+.teach-lesson-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+
+.teach-lesson-name {
+  flex: 1 1 auto;
+}
+
+.teach-row-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+}
+
+/* T19: дestructive-действия (удаление) — визуально отличаем. */
+.teach-danger {
+  color: #b00020;
+  border-color: #b00020;
+}
+
+.teach-danger:hover:not(:disabled) {
+  background: #b00020;
+  color: #fff;
+}
+
 .teach-lesson-list {
   list-style: none;
   padding: 0;
