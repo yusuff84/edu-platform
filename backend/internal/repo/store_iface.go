@@ -15,7 +15,11 @@ type StoreAPI interface {
 	CreateUser(email, passwordHash string, role Role) (*User, error)
 	GetUserByEmail(email string) (*User, bool)
 	GetUserByID(id string) (*User, bool)
+	// SetUserRole реализован, но не вызывается ни одним хендлером:
+	// API для будущего (админ-панель управления ролями). См. отчёт T13.
 	SetUserRole(id string, role Role) bool
+	// SetUserDisplayName задаёт отображаемое имя (OAuth-профиль, T13).
+	SetUserDisplayName(id, name string) bool
 	// Sessions
 	CreateSession(userID string, ttl time.Duration) *Session
 	GetSession(id string) (*Session, bool)
@@ -34,10 +38,14 @@ type StoreAPI interface {
 	ListCoursesByStatus(status CourseStatus) []*Course
 	SetCourseStatus(id string, status CourseStatus, comment string) bool
 	TouchCourse(id string)
+	// UpdateCourse — частичное обновление карточки (PATCH, T13/бэклог T06).
+	UpdateCourse(id string, u CourseUpdate) bool
 	// Modules
 	CreateModule(courseID, title string) *Module
 	GetModule(id string) (*Module, bool)
 	ListModulesByCourse(courseID string) []*Module
+	// UpdateModuleTitle — переименование модуля (PATCH, T13/бэклог T06).
+	UpdateModuleTitle(id, title string) bool
 	// Lessons
 	CreateLesson(l *Lesson) *Lesson
 	GetLesson(id string) (*Lesson, bool)
@@ -53,6 +61,8 @@ type StoreAPI interface {
 	CompleteLesson(studentID, lessonID string) (*LessonProgress, bool)
 	BumpAttempt(studentID, lessonID string) int
 	IsLessonCompleted(studentID, lessonID string) bool
+	// CountCompletedLessons реализован, но не вызывается ни одним хендлером:
+	// API для будущего (прогресс-бар «M из N уроков»). См. отчёт T13.
 	CountCompletedLessons(studentID, courseID string) int
 	// Payments
 	CreatePayment(p *Payment) (*Payment, error)

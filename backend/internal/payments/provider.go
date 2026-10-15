@@ -66,6 +66,11 @@ type PaymentProvider interface {
 	// провайдер использует свой секрет из env, прочитанный в конструкторе.
 	VerifyWebhook(r *http.Request, secret []byte) error
 	HandleWebhook(r *http.Request) (WebhookEvent, error)
+	// Refund и GetStatus реализованы всеми тремя провайдерами (включая тесты
+	// mock), но пока не вызываются ни одним хендлером: в MVP возврат средств
+	// и ручная сверка статуса не вынесены в API. Оставлены в интерфейсе как
+	// готовый API для будущего (админ-действия «вернуть платёж»).
+	// См. отчёт T13.
 	Refund(ctx context.Context, providerPaymentID string) error
 	GetStatus(ctx context.Context, providerPaymentID string) (string, error)
 }
