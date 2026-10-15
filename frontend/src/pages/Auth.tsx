@@ -1,10 +1,14 @@
 import { useState } from 'react';
-import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { Link, Navigate, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ApiError, login, register } from '../api/client';
+// Те же опции query ['me'], что у RouteGuards/Layout: один ключ — один запрос,
+// TanStack Query дедуплицирует. Файл не импортируется обратно сюда (нет цикла),
+// а shell.css уже подключён через router.tsx — новых стилей не появляется.
+import { meQueryOptions } from '../components/RouteGuards';
 import { t } from '../i18n/t';
 
 const loginSchema = z.object({
@@ -76,6 +80,10 @@ export function Login(): JSX.Element {
   const [serverError, setServerError] = useState('');
   // Куда вернуться после входа; невалидный/подделанный from → null → уйдём на '/'.
   const fromPath = resolveRedirectFrom(location.state);
+  // Уже вошедший не должен видеть форму входа. Используем ОБЩИЕ опции
+  // query ['me'] (meQueryOptions из RouteGuards) — тот же ключ, что у гвардов
+  // и Layout, поэтому TanStack Query дедуплицирует и второго запроса нет.
+  const meQuery = useQuery(meQueryOptions);
   const {
     register: rf,
     handleSubmit,
@@ -95,6 +103,11 @@ export function Login(): JSX.Element {
       else setServerError(e instanceof Error ? e.message : t('common.error'));
     },
   });
+
+  // Сессия уже есть — уводим со страницы входа: если гвард запомнил, откуда
+  // пришли (state.from), возвращаем туда (та же безопасная валидация from,
+  // что после отправки формы — логику T15 не дублируем), иначе — в кабинет.
+  if (meQuery.data) return <Navigate to={fromPath ?? '/me'} replace />;
 
   return (
     <div className="wrap">
@@ -159,14 +172,28 @@ export function Register(): JSX.Element {
   const navigate = useNavigate();
   const location = useLocation();
   const qc = useQueryClient();
+  const [searchParams] = useSearchParams();
   const [serverError, setServerError] = useState('');
   // Та же валидация from, что и на входе.
   const fromPath = resolveRedirectFrom(location.state);
+  // Приглашение учителя (US3): ссылка вида /register?inviteToken=... — админ
+  // копирует её, преподаватель переходит. Токен берём из query: раньше он
+  // читался только из поля формы, ссылка открывала обычную регистрацию
+  // без роли teacher и приглашение не потреблялось.
+  const inviteFromUrl = searchParams.get('inviteToken')?.trim() ?? '';
+  // Уже зарегистрированный (сессия есть) — уводим со страницы регистрации.
+  // Общие опции query ['me']: дедупликация по ключу, второго запроса нет.
+  const meQuery = useQuery(meQueryOptions);
   const {
     register: rf,
     handleSubmit,
     formState: { errors },
-  } = useForm<RegisterForm>({ resolver: zodResolver(registerSchema) });
+  } = useForm<RegisterForm>({
+    resolver: zodResolver(registerSchema),
+    // Токен из ссылки сразу в поле формы: пользователь видит, что он приглашён,
+    // поле остаётся редактируемым, а при отправке значение уходит в register().
+    defaultValues: { inviteToken: inviteFromUrl },
+  });
 
   const mutation = useMutation({
     mutationFn: (v: RegisterForm) =>
@@ -184,12 +211,23 @@ export function Register(): JSX.Element {
       const invited = Boolean(variables.inviteToken?.trim());
       navigate(fromPath ?? (invited ? '/teach' : '/'), { replace: true });
     },
-    onError: (e: unknown) => {
-      if (e instanceof ApiError && (e.status === 400 || e.status === 409))
-        setServerError(t('auth.errRegisterFailed'));
-      else setServerError(e instanceof Error ? e.message : t('common.error'));
+    onError: (e: unknown, variables: RegisterForm) => {
+      // Отправлен ли токен — решает форма (поле предзаполнено из query).
+      const invited = Boolean(variables.inviteToken?.trim());
+      if (e instanceof ApiError && (e.status === 400 || e.status === 409)) {
+        // Ошибки приглашения приходят из envelope понятным русским текстом
+        // («Срок действия приглашения истёк», «Приглашение недействительно
+        // или уже использовано», «Приглашение выдано на другой email») —
+        // показываем его, а не общий «email уже занят».
+        if (invited && e.message) setServerError(e.message);
+        else setServerError(t('auth.errRegisterFailed'));
+      } else setServerError(e instanceof Error ? e.message : t('common.error'));
     },
   });
+
+  // Сессия уже есть — со страницы регистрации уводим так же, как со входа:
+  // в state.from (если гвард его положил), иначе — в кабинет.
+  if (meQuery.data) return <Navigate to={fromPath ?? '/me'} replace />;
 
   return (
     <div className="wrap">
@@ -197,6 +235,13 @@ export function Register(): JSX.Element {
         <div className="two two-even">
           <div className="panel">
             <h1>{t('auth.registerTitle')}</h1>
+            {inviteFromUrl && (
+              // Понятное состояние «вы приглашены»: ключа словаря под такую
+              // фразу нет (см. отчёт T17) — собираем из существующих.
+              <p className="muted" role="status">
+                {t('admin.inviteCreated')} — {t('cabinet.teacherTitle')}
+              </p>
+            )}
             <form className="form-grid" onSubmit={handleSubmit((v) => mutation.mutate(v))} noValidate>
               <div className="field">
                 <label htmlFor="register-email">{t('auth.email')}</label>
