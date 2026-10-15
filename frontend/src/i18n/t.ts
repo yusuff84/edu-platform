@@ -21,7 +21,10 @@ export type RuKey = PathsOf<typeof ru>;
  * в ru.json: опечатка в ключе — ошибка компиляции.
  */
 export function t(key: RuKey): string {
-  // Словарь сейчас плоский; обход по точкам поддерживает и будущую вложенность.
+  // Словарь плоский ("nav.catalog" — один ключ): сначала прямое совпадение,
+  // затем обход по точкам для будущей вложенности.
+  const flat = (ru as Record<string, unknown>)[key];
+  if (typeof flat === 'string') return flat;
   let node: unknown = ru;
   for (const part of key.split('.')) {
     if (typeof node !== 'object' || node === null) return key;
