@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, NavLink, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ApiError, completeLesson, getCourse, myCourses } from '../api/client';
 import LessonView from '../components/LessonView';
@@ -20,6 +20,8 @@ export default function Learn(): JSX.Element {
     },
     enabled: Boolean(courseId),
   });
+
+  const modules = useMemo(() => courseQuery.data?.modules ?? [], [courseQuery.data]);
 
   const allLessons = useMemo(() => {
     const mods = courseQuery.data?.modules ?? [];
@@ -54,54 +56,67 @@ export default function Learn(): JSX.Element {
   });
 
   const percent = meCourse?.percent ?? 0;
+  const title = courseQuery.data?.title ?? t('common.loading');
+  const isOk = verdict === t('learn.completed');
 
   return (
-    <main>
-      <p>
-        <Link to="/me">{t('common.back')}</Link>
-      </p>
-      <h1>{courseQuery.data?.title ?? t('common.loading')}</h1>
-      <div>
-        <span>
-          {t('learn.progress')}: {percent}%
-        </span>
-        <div className="progress" aria-label={`${t('learn.progress')}: ${percent}%`}>
-          <div className="progress-bar" style={{ width: `${percent}%` }} />
+    <div className="wrap">
+      <div className="page">
+        <div className="crumbs">
+          <Link to="/">{t('nav.catalog')}</Link> / <span>{title}</span>
         </div>
-      </div>
+        <h1>{title}</h1>
+        <div style={{ margin: '14px 0 20px' }}>
+          <span className="muted">
+            {t('learn.progress')}: {percent}%
+          </span>
+          <div className="progress" aria-label={`${t('learn.progress')}: ${percent}%`}>
+            <div className="progress-bar" style={{ width: `${percent}%` }} />
+          </div>
+        </div>
 
-      <div className="learn-grid">
-        <nav aria-label={t('course.program')}>
-          <ul>
-            {allLessons.map((l) => (
-              <li key={l.id}>
-                <Link to={`/learn/${courseId}/${l.id}`}>
-                  {l.moduleTitle} — {l.title}
-                </Link>
-              </li>
+        <div className="lesson-shell">
+          <nav className="side-nav" aria-label={t('course.program')}>
+            {modules.map((m) => (
+              <div key={m.id}>
+                <span className="side-title">{m.title}</span>
+                {m.lessons.map((l) => (
+                  <NavLink
+                    key={l.id}
+                    to={`/learn/${courseId}/${l.id}`}
+                    className={({ isActive }) => (isActive ? 'active' : undefined)}
+                  >
+                    {l.title}
+                  </NavLink>
+                ))}
+              </div>
             ))}
-          </ul>
-          {allLessons.length === 0 && !courseQuery.isLoading && <p>{t('learn.noLessons')}</p>}
-        </nav>
-        <div>
-          {!activeLesson && <p>{t('learn.selectLesson')}</p>}
-          {activeLesson && (
-            <LessonView
-              lesson={activeLesson}
-              completing={mutation.isPending}
-              onComplete={(payload) => mutation.mutateAsync(payload).then(() => undefined)}
-            />
-          )}
-          {verdict && <p role="status">{verdict}</p>}
-          {activeLesson && nextLesson && (
-            <p>
-              <Link to={`/learn/${courseId}/${nextLesson.id}`}>
-                {t('learn.continue')}: {nextLesson.title}
-              </Link>
-            </p>
-          )}
+            {allLessons.length === 0 && !courseQuery.isLoading && <p>{t('learn.noLessons')}</p>}
+          </nav>
+          <div className="lesson-pane">
+            {!activeLesson && <p>{t('learn.selectLesson')}</p>}
+            {activeLesson && (
+              <LessonView
+                lesson={activeLesson}
+                completing={mutation.isPending}
+                onComplete={(payload) => mutation.mutateAsync(payload).then(() => undefined)}
+              />
+            )}
+            {verdict && (
+              <p role="status" className={isOk ? 'verdict ok' : 'verdict fail'}>
+                {verdict}
+              </p>
+            )}
+            {activeLesson && nextLesson && (
+              <div>
+                <Link className="btn" to={`/learn/${courseId}/${nextLesson.id}`}>
+                  {t('learn.continue')}: {nextLesson.title}
+                </Link>
+              </div>
+            )}
+          </div>
         </div>
       </div>
-    </main>
+    </div>
   );
 }

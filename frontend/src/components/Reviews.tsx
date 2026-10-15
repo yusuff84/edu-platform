@@ -61,17 +61,19 @@ export default function Reviews({ courseId }: { courseId: string }): JSX.Element
     : undefined;
 
   return (
-    <section aria-label={t('reviews.title')}>
+    <section className="panel" aria-label={t('reviews.title')}>
       <h2>{t('reviews.title')}</h2>
       {reviewsQuery.isLoading && <p>{t('common.loading')}</p>}
       {reviewsQuery.isError && <p>{t('common.error')}</p>}
       {reviewsQuery.data?.length === 0 && !duplicate && (
         <p className="muted">{t('reviews.empty')}</p>
       )}
-      <ul>
+      <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
         {(reviewsQuery.data ?? []).map((r) => (
-          <li key={r.id}>
-            <strong>{r.authorEmail}</strong> — {'★'.repeat(r.rating)}
+          <li key={r.id} className="review">
+            <div>
+              <strong>{r.authorEmail}</strong> <span className="rating">★ {r.rating}</span>
+            </div>
             <p>{r.text}</p>
           </li>
         ))}
@@ -99,20 +101,38 @@ export default function Reviews({ courseId }: { courseId: string }): JSX.Element
       )}
 
       {meQuery.data && !duplicate && (
-        <form onSubmit={handleSubmit((v) => mutation.mutate(v))}>
-          <label>
-            {t('reviews.yourRating')}
-            <input type="number" min={1} max={5} {...register('rating')} />
-            {errors.rating && <span className="error">{errors.rating.message}</span>}
-          </label>
-          <label>
-            {t('reviews.yourText')}
-            <textarea {...register('text')} rows={4} cols={50} />
-            {errors.text && <span className="error">{errors.text.message}</span>}
-          </label>
-          <button type="submit" disabled={mutation.isPending}>
-            {t('reviews.submit')}
-          </button>
+        <form className="form-grid" onSubmit={handleSubmit((v) => mutation.mutate(v))}>
+          <div className="field">
+            <label htmlFor="review-rating">{t('reviews.yourRating')}</label>
+            <input
+              id="review-rating"
+              className="input"
+              type="number"
+              min={1}
+              max={5}
+              {...register('rating')}
+            />
+            {errors.rating && <p className="err">{errors.rating.message}</p>}
+          </div>
+          <div className="field">
+            <label htmlFor="review-text">{t('reviews.yourText')}</label>
+            <textarea
+              id="review-text"
+              className="input"
+              {...register('text')}
+              rows={4}
+            />
+            {errors.text && <p className="err">{errors.text.message}</p>}
+          </div>
+          <div>
+            <button
+              type="submit"
+              className="btn btn-primary"
+              disabled={mutation.isPending}
+            >
+              {t('reviews.submit')}
+            </button>
+          </div>
         </form>
       )}
       {message && <p role="status">{message}</p>}

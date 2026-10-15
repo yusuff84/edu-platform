@@ -59,6 +59,7 @@ export interface Lesson {
   liveUrl?: string;
   scheduledAt?: string;
   quiz?: QuizQuestion[];
+  codeTemplate?: string;
 }
 
 export interface Module {
@@ -151,6 +152,73 @@ export function me(): Promise<User> {
 
 // ---------- Каталог ----------
 
+// Сервер в ряде мест отдаёт ratingsCount вместо reviewsCount,
+// детали курса — вложенно {course, modules}, списки — {items, total}.
+// Маппим всё к плоским типам ниже, чтобы компоненты не знали о формате API.
+interface RawCourse extends Omit<Course, 'reviewsCount' | 'modules'> {
+  reviewsCount?: number;
+  ratingsCount?: number;
+  modules?: RawModule[];
+}
+
+interface RawQuizQuestion {
+  id: string;
+  text: string;
+  options?: string[];
+}
+
+interface RawLesson {
+  id: string;
+  title: string;
+  kind: string;
+  position: number;
+  bodyMd?: string;
+  videoUrl?: string;
+  liveUrl?: string;
+  startsAt?: string;
+  quiz?: { questions?: RawQuizQuestion[] };
+  codeTask?: { language?: string; template?: string };
+}
+
+interface RawModule {
+  id: string;
+  title: string;
+  position: number;
+  lessons?: RawLesson[];
+}
+
+function toLesson(l: RawLesson): Lesson {
+  return {
+    id: l.id,
+    title: l.title,
+    kind: l.kind as LessonKind,
+    position: l.position,
+    videoUrl: l.videoUrl,
+    textContent: l.bodyMd,
+    liveUrl: l.liveUrl,
+    scheduledAt: l.startsAt,
+    quiz: l.quiz?.questions?.map((q) => ({
+      id: q.id,
+      question: q.text,
+      options: q.options ?? [],
+    })),
+    codeTemplate: l.codeTask?.template,
+  };
+}
+
+function toCourse(c: RawCourse): Course {
+  return {
+    ...(c as Course),
+    reviewsCount: c.reviewsCount ?? c.ratingsCount ?? 0,
+    modules: (c.modules ?? []).map((m) => ({
+      id: m.id,
+      title: m.title,
+      position: m.position,
+      lessons: (m.lessons ?? []).map(toLesson),
+    })),
+  };
+}
+
 export function listCourses(params?: {
   q?: string;
   page?: number;
@@ -161,11 +229,17 @@ export function listCourses(params?: {
   if (params?.page) qs.set('page', String(params.page));
   if (params?.limit) qs.set('limit', String(params.limit));
   const suffix = qs.toString() ? `?${qs.toString()}` : '';
-  return apiFetch<Paged<Course>>(`/courses${suffix}`);
+  return apiFetch<Paged<RawCourse>>(`/courses${suffix}`).then((data) => ({
+    ...data,
+    items: (data.items ?? []).map(toCourse),
+  }));
 }
 
-export function getCourse(slug: string): Promise<Course> {
-  return apiFetch<Course>(`/courses/${encodeURIComponent(slug)}`);
+export async function getCourse(slug: string): Promise<Course> {
+  const data = await apiFetch<{ course: RawCourse; modules?: RawModule[] }>(
+    `/courses/${encodeURIComponent(slug)}`,
+  );
+  return toCourse({ ...data.course, modules: data.modules });
 }
 
 // ---------- Учитель ----------
@@ -181,8 +255,9 @@ export function createCourse(input: {
   });
 }
 
-export function myTeaching(): Promise<Course[]> {
-  return apiFetch<Course[]>('/teacher/courses');
+export async function myTeaching(): Promise<Course[]> {
+  const data = await apiFetch<{ items?: RawCourse[] }>(`/teacher/courses`);
+  return (data.items ?? []).map(toCourse);
 }
 
 export function createModule(
@@ -230,8 +305,9 @@ export function createInvite(email: string): Promise<{ token: string }> {
   });
 }
 
-export function reviewQueue(): Promise<Course[]> {
-  return apiFetch<Course[]>('/admin/courses/review');
+export async function reviewQueue(): Promise<Course[]> {
+  const data = await apiFetch<{ items?: RawCourse[] }>('/admin/courses/review');
+  return (data.items ?? []).map(toCourse);
 }
 
 export function moderateCourse(
@@ -256,25 +332,52 @@ export function enroll(
   });
 }
 
-export function myCourses(): Promise<MyCourse[]> {
-  return apiFetch<MyCourse[]>('/me/courses');
+export async function myCourses(): Promise<MyCourse[]> {
+  const data = await apiFetch<{
+    items?: Array<{
+      course: RawCourse;
+      percent?: number;
+      nextLesson?: { lessonId?: string; title?: string } | null;
+    }>;
+  }>('/me/courses');
+  return (data.items ?? []).map((it) => ({
+    courseId: it.course.id,
+    slug: it.course.slug,
+    title: it.course.title,
+    percent: it.percent ?? 0,
+    nextLessonId: it.nextLesson?.lessonId ?? null,
+    nextLessonTitle: it.nextLesson?.title ?? null,
+  }));
 }
 
-export function completeLesson(
+export async function completeLesson(
   courseId: string,
   lessonId: string,
   input: { quizAnswers?: Record<string, number>; code?: string; language?: string },
 ): Promise<CompleteResult> {
-  return apiFetch<CompleteResult>(
-    `/me/courses/${courseId}/lessons/${lessonId}/complete`,
-    { method: 'POST', body: JSON.stringify(input) },
-  );
+  const data = await apiFetch<{
+    passed?: boolean;
+    completed?: boolean;
+    percent?: number;
+    message?: string;
+    nextLesson?: { lessonId?: string } | null;
+  }>(`/me/courses/${courseId}/lessons/${lessonId}/complete`, {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+  return {
+    accepted: Boolean(data.passed ?? data.completed),
+    message: data.message,
+    percent: data.percent ?? 0,
+    nextLessonId: data.nextLesson?.lessonId ?? null,
+  };
 }
 
 // ---------- Отзывы ----------
 
-export function listReviews(courseId: string): Promise<Review[]> {
-  return apiFetch<Review[]>(`/courses/${courseId}/reviews`);
+export async function listReviews(courseId: string): Promise<Review[]> {
+  const data = await apiFetch<{ items?: Review[] }>(`/courses/${courseId}/reviews`);
+  return data.items ?? [];
 }
 
 export function createReview(

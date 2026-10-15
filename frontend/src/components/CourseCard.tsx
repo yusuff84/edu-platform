@@ -3,6 +3,14 @@ import type { Course } from '../api/client';
 import { formatPrice } from '../api/client';
 import { t } from '../i18n/t';
 
+const COVERS = ['cover-py', 'cover-html', 'cover-js', 'cover-sql', 'cover-fig', 'cover-linux'];
+
+export function coverFor(key: string): string {
+  let h = 0;
+  for (let i = 0; i < key.length; i += 1) h = (h * 31 + key.charCodeAt(i)) >>> 0;
+  return COVERS[h % COVERS.length];
+}
+
 export function Stars({ value }: { value: number }): JSX.Element {
   const filled = Math.round(value);
   return (
@@ -16,23 +24,27 @@ export function Stars({ value }: { value: number }): JSX.Element {
 }
 
 export default function CourseCard({ course }: { course: Course }): JSX.Element {
+  const lessons =
+    course.lessonsCount ?? course.modules?.reduce((n, m) => n + m.lessons.length, 0) ?? 0;
+  const meta = [
+    lessons > 0 ? `${lessons} уроков` : null,
+    course.teacherName ?? null,
+    course.avgRating > 0
+      ? `★ ${course.avgRating.toFixed(1).replace('.', ',')}`
+      : formatPrice(course.priceCents),
+  ]
+    .filter(Boolean)
+    .join(' · ');
   return (
-    <article className="card">
-      <Link to={`/courses/${course.slug}`} aria-label={course.title}>
-        <h3>{course.title}</h3>
+    <article>
+      <Link className="tile" to={`/courses/${course.slug}`} aria-label={course.title}>
+        <div className={`cover ${coverFor(course.slug || course.id)}`} />
+        <span className="tag">Курс</span>
+        <span className="tile-title">
+          {course.title}
+          {meta && <small>{meta}</small>}
+        </span>
       </Link>
-      <p className="muted">{course.description.slice(0, 140)}</p>
-      <div className="card-row">
-        <Stars value={course.avgRating ?? 0} />
-      </div>
-      <div className="card-row">
-        <strong>{formatPrice(course.priceCents)}</strong>
-        {course.teacherName && (
-          <span className="muted">
-            {t('course.teacher')}: {course.teacherName}
-          </span>
-        )}
-      </div>
     </article>
   );
 }

@@ -45,32 +45,60 @@ export function Login(): JSX.Element {
   });
 
   return (
-    <main>
-      <h1>{t('auth.loginTitle')}</h1>
-      <form onSubmit={handleSubmit((v) => mutation.mutate(v))} noValidate>
-        <label>
-          {t('auth.email')}
-          <input type="email" autoComplete="email" {...rf('email')} />
-          {errors.email && <span className="error">{errors.email.message}</span>}
-        </label>
-        <label>
-          {t('auth.password')}
-          <input type="password" autoComplete="current-password" {...rf('password')} />
-          {errors.password && <span className="error">{errors.password.message}</span>}
-        </label>
-        <button type="submit" disabled={mutation.isPending}>
-          {t('auth.submitLogin')}
-        </button>
-      </form>
-      {serverError && (
-        <p role="alert" className="error">
-          {serverError}
-        </p>
-      )}
-      <p>
-        <Link to="/register">{t('auth.noAccount')}</Link>
-      </p>
-    </main>
+    <div className="wrap">
+      <div className="page">
+        <div className="two two-even">
+          <div className="panel">
+            <h1>{t('auth.loginTitle')}</h1>
+            <form className="form-grid" onSubmit={handleSubmit((v) => mutation.mutate(v))} noValidate>
+              <div className="field">
+                <label htmlFor="login-email">{t('auth.email')}</label>
+                <input
+                  id="login-email"
+                  className="input"
+                  type="email"
+                  autoComplete="email"
+                  {...rf('email')}
+                />
+                {errors.email && <span className="err">{errors.email.message}</span>}
+              </div>
+              <div className="field">
+                <label htmlFor="login-password">{t('auth.password')}</label>
+                <input
+                  id="login-password"
+                  className="input"
+                  type="password"
+                  autoComplete="current-password"
+                  {...rf('password')}
+                />
+                {errors.password && <span className="err">{errors.password.message}</span>}
+              </div>
+              <div>
+                <button className="btn btn-primary" type="submit" disabled={mutation.isPending}>
+                  {t('auth.submitLogin')}
+                </button>
+              </div>
+            </form>
+            {serverError && (
+              <p role="alert" className="error">
+                {serverError}
+              </p>
+            )}
+            <p>
+              <Link to="/register">{t('auth.noAccount')}</Link>
+            </p>
+          </div>
+          <div className="panel panel-dark">
+            <h2>Почему Edu Platform</h2>
+            <ul className="checklist">
+              <li>Практика с автопроверкой</li>
+              <li>Живые разборы</li>
+              <li>Доступ навсегда</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -104,41 +132,66 @@ export function Register(): JSX.Element {
   });
 
   return (
-    <main>
-      <h1>{t('auth.registerTitle')}</h1>
-      <form onSubmit={handleSubmit((v) => mutation.mutate(v))} noValidate>
-        <label>
-          {t('auth.email')}
-          <input type="email" autoComplete="email" {...rf('email')} />
-          {errors.email && <span className="error">{errors.email.message}</span>}
-        </label>
-        <label>
-          {t('auth.password')}
-          <input
-            type="password"
-            autoComplete="new-password"
-            {...rf('password')}
-            aria-describedby="pw-hint"
-          />
-          <small id="pw-hint">{t('auth.passwordHint')}</small>
-          {errors.password && <span className="error">{errors.password.message}</span>}
-        </label>
-        <label>
-          {t('auth.inviteToken')}
-          <input type="text" {...rf('inviteToken')} />
-        </label>
-        <button type="submit" disabled={mutation.isPending}>
-          {t('auth.submitRegister')}
-        </button>
-      </form>
-      {serverError && (
-        <p role="alert" className="error">
-          {serverError}
-        </p>
-      )}
-      <p>
-        <Link to="/login">{t('auth.haveAccount')}</Link>
-      </p>
-    </main>
+    <div className="wrap">
+      <div className="page">
+        <div className="two two-even">
+          <div className="panel">
+            <h1>{t('auth.registerTitle')}</h1>
+            <form className="form-grid" onSubmit={handleSubmit((v) => mutation.mutate(v))} noValidate>
+              <div className="field">
+                <label htmlFor="register-email">{t('auth.email')}</label>
+                <input
+                  id="register-email"
+                  className="input"
+                  type="email"
+                  autoComplete="email"
+                  {...rf('email')}
+                />
+                {errors.email && <span className="err">{errors.email.message}</span>}
+              </div>
+              <div className="field">
+                <label htmlFor="register-password">{t('auth.password')}</label>
+                <input
+                  id="register-password"
+                  className="input"
+                  type="password"
+                  autoComplete="new-password"
+                  {...rf('password')}
+                  aria-describedby="pw-hint"
+                />
+                <small id="pw-hint">{t('auth.passwordHint')}</small>
+                {errors.password && <span className="err">{errors.password.message}</span>}
+              </div>
+              <div className="field">
+                <label htmlFor="register-invite">{t('auth.inviteToken')}</label>
+                <input id="register-invite" className="input" type="text" {...rf('inviteToken')} />
+              </div>
+              <div>
+                <button className="btn btn-primary" type="submit" disabled={mutation.isPending}>
+                  {t('auth.submitRegister')}
+                </button>
+              </div>
+            </form>
+            {serverError && (
+              <p role="alert" className="error">
+                {serverError}
+              </p>
+            )}
+            <p>
+              <Link to="/login">{t('auth.haveAccount')}</Link>
+            </p>
+          </div>
+          <div className="panel panel-sun">
+            <h2>Что вы получите</h2>
+            <ul className="checklist">
+              <li>Бесплатный модуль «Старт»</li>
+              <li>Проверка кода</li>
+              <li>Эфиры по четвергам</li>
+              <li>Сертификат</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }

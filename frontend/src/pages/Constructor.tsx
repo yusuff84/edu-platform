@@ -13,7 +13,7 @@ import {
   myTeaching,
   submitCourse,
 } from '../api/client';
-import type { LessonKind } from '../api/client';
+import type { CourseStatus, LessonKind } from '../api/client';
 import { t } from '../i18n/t';
 
 const courseSchema = z.object({
@@ -25,6 +25,12 @@ const courseSchema = z.object({
 type CourseForm = z.infer<typeof courseSchema>;
 
 const KINDS: LessonKind[] = ['video_text', 'live', 'quiz', 'code'];
+
+function statusClass(status: CourseStatus | undefined): string {
+  if (status === 'published') return 'st-ok';
+  if (status === 'rejected') return 'st-bad';
+  return 'st-wait';
+}
 
 export default function Constructor(): JSX.Element {
   const { id } = useParams();
@@ -106,119 +112,155 @@ export default function Constructor(): JSX.Element {
   });
 
   const modules = detailQuery.data?.modules ?? [];
+  const status = detailQuery.data?.status;
 
   return (
-    <main>
-      <h1>{isNew ? t('teach.newTitle') : t('teach.create')}</h1>
-
-      {isNew && (
-        <form onSubmit={handleSubmit((v) => createMutation.mutate(v))}>
-          <label>
-            {t('teach.courseTitle')}
-            <input {...register('title')} />
-            {formState.errors.title && (
-              <span className="error">{formState.errors.title.message}</span>
-            )}
-          </label>
-          <label>
-            {t('teach.courseDesc')}
-            <textarea {...register('description')} rows={4} cols={50} />
-            {formState.errors.description && (
-              <span className="error">{formState.errors.description.message}</span>
-            )}
-          </label>
-          <label>
-            {t('teach.coursePrice')}
-            <input type="number" min={0} {...register('priceRub')} />
-          </label>
-          <button type="submit" disabled={createMutation.isPending}>
-            {createMutation.isPending ? t('teach.saving') : t('teach.save')}
-          </button>
-        </form>
-      )}
-
-      {!isNew && (
-        <>
+    <div className="wrap">
+      <div className="page">
+        <h1>{isNew ? t('teach.newTitle') : t('teach.create')}</h1>
+        {!isNew && (
           <p>
-            {t('teach.status')}: {detailQuery.data?.status ?? '…'}
+            {t('teach.status')}:{' '}
+            <span className={`status ${statusClass(status)}`}>{status ?? '…'}</span>
           </p>
-          <section>
-            <h2>{t('teach.addModule')}</h2>
-            <input
-              value={moduleTitle}
-              onChange={(e) => setModuleTitle(e.target.value)}
-              placeholder={t('teach.moduleTitle')}
-            />
-            <button
-              onClick={() => moduleMutation.mutate()}
-              disabled={!moduleTitle.trim() || moduleMutation.isPending}
-            >
-              {t('teach.addModule')}
-            </button>
-          </section>
+        )}
 
-          <section>
-            <h2>{t('teach.addLesson')}</h2>
-            <label>
-              {t('teach.addModule')}
-              <select value={lessonModuleId} onChange={(e) => setLessonModuleId(e.target.value)}>
-                <option value="">—</option>
-                {modules.map((m) => (
-                  <option key={m.id} value={m.id}>
-                    {m.title}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <input
-              value={lessonTitle}
-              onChange={(e) => setLessonTitle(e.target.value)}
-              placeholder={t('teach.lessonTitle')}
-            />
-            <label>
-              {t('teach.lessonKind')}
-              <select
-                value={lessonKind}
-                onChange={(e) => setLessonKind(e.target.value as LessonKind)}
-              >
-                {KINDS.map((k) => (
-                  <option key={k} value={k}>
-                    {t(`kind.${k}`)}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <button
-              onClick={() => lessonMutation.mutate()}
-              disabled={!lessonModuleId || !lessonTitle.trim() || lessonMutation.isPending}
-            >
-              {t('teach.addLesson')}
-            </button>
-          </section>
-
-          <section>
-            <h2>{t('course.program')}</h2>
-            {modules.map((m) => (
-              <div key={m.id}>
-                <h3>{m.title}</h3>
-                <ul>
-                  {m.lessons.map((l) => (
-                    <li key={l.id}>
-                      {l.title} — {t(`kind.${l.kind}`)}
-                    </li>
-                  ))}
-                </ul>
+        {isNew && (
+          <div className="panel">
+            <form className="form-grid" onSubmit={handleSubmit((v) => createMutation.mutate(v))}>
+              <div className="field">
+                <label htmlFor="course-title">{t('teach.courseTitle')}</label>
+                <input id="course-title" className="input" {...register('title')} />
+                {formState.errors.title && (
+                  <span className="error">{formState.errors.title.message}</span>
+                )}
               </div>
-            ))}
-          </section>
+              <div className="field">
+                <label htmlFor="course-desc">{t('teach.courseDesc')}</label>
+                <textarea id="course-desc" className="input" {...register('description')} rows={4} cols={50} />
+                {formState.errors.description && (
+                  <span className="error">{formState.errors.description.message}</span>
+                )}
+              </div>
+              <div className="field">
+                <label htmlFor="course-price">{t('teach.coursePrice')}</label>
+                <input id="course-price" className="input" type="number" min={0} {...register('priceRub')} />
+              </div>
+              <div>
+                <button type="submit" className="btn btn-primary" disabled={createMutation.isPending}>
+                  {createMutation.isPending ? t('teach.saving') : t('teach.save')}
+                </button>
+              </div>
+            </form>
+          </div>
+        )}
 
-          <button onClick={() => submitMutation.mutate()} disabled={submitMutation.isPending}>
-            {t('teach.submitReview')}
-          </button>
-        </>
-      )}
+        {!isNew && (
+          <div className="constructor">
+            <div className="panel">
+              <h2>{t('teach.addModule')}</h2>
+              <div className="inline-form">
+                <input
+                  className="input"
+                  value={moduleTitle}
+                  onChange={(e) => setModuleTitle(e.target.value)}
+                  placeholder={t('teach.moduleTitle')}
+                  aria-label={t('teach.moduleTitle')}
+                />
+                <button
+                  className="btn"
+                  onClick={() => moduleMutation.mutate()}
+                  disabled={!moduleTitle.trim() || moduleMutation.isPending}
+                >
+                  {t('teach.addModule')}
+                </button>
+              </div>
 
-      {message && <p role="status">{message}</p>}
-    </main>
+              <h3>{t('teach.addLesson')}</h3>
+              <div className="form-grid">
+                <div className="field">
+                  <label htmlFor="lesson-module">{t('teach.addModule')}</label>
+                  <select
+                    id="lesson-module"
+                    className="select"
+                    value={lessonModuleId}
+                    onChange={(e) => setLessonModuleId(e.target.value)}
+                  >
+                    <option value="">—</option>
+                    {modules.map((m) => (
+                      <option key={m.id} value={m.id}>
+                        {m.title}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="field">
+                  <label htmlFor="lesson-title">{t('teach.lessonTitle')}</label>
+                  <input
+                    id="lesson-title"
+                    className="input"
+                    value={lessonTitle}
+                    onChange={(e) => setLessonTitle(e.target.value)}
+                    placeholder={t('teach.lessonTitle')}
+                  />
+                </div>
+                <div className="field">
+                  <label htmlFor="lesson-kind">{t('teach.lessonKind')}</label>
+                  <select
+                    id="lesson-kind"
+                    className="select"
+                    value={lessonKind}
+                    onChange={(e) => setLessonKind(e.target.value as LessonKind)}
+                  >
+                    {KINDS.map((k) => (
+                      <option key={k} value={k}>
+                        {t(`kind.${k}`)}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <button
+                    className="btn"
+                    onClick={() => lessonMutation.mutate()}
+                    disabled={!lessonModuleId || !lessonTitle.trim() || lessonMutation.isPending}
+                  >
+                    {t('teach.addLesson')}
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div className="panel">
+              <h2>{t('course.program')}</h2>
+              {modules.map((m) => (
+                <div key={m.id}>
+                  <h3>{m.title}</h3>
+                  {m.lessons.map((l) => (
+                    <div key={l.id} className="l-item">
+                      <span>{l.title}</span>
+                      <span className="spacer" />
+                      <span className="pill">{t(`kind.${l.kind}`)}</span>
+                    </div>
+                  ))}
+                </div>
+              ))}
+              <div className="btn-row">
+                <button
+                  className="btn btn-primary"
+                  onClick={() => submitMutation.mutate()}
+                  disabled={submitMutation.isPending}
+                >
+                  {t('teach.submitReview')}
+                </button>
+              </div>
+              {message && <p role="status">{message}</p>}
+            </div>
+          </div>
+        )}
+
+        {isNew && message && <p role="status">{message}</p>}
+      </div>
+    </div>
   );
 }

@@ -41,66 +41,79 @@ export default function Admin(): JSX.Element {
   });
 
   return (
-    <main>
-      <h1>{t('cabinet.adminTitle')}</h1>
+    <div className="wrap">
+      <div className="page">
+        <h1>{t('cabinet.adminTitle')}</h1>
 
-      <section>
-        <h2>{t('admin.invites')}</h2>
-        <form onSubmit={handleSubmit((v) => inviteMutation.mutate(v))}>
-          <label>
-            {t('admin.inviteEmail')}
-            <input type="email" {...register('email')} />
-            {formState.errors.email && (
-              <span className="error">{formState.errors.email.message}</span>
-            )}
-          </label>
-          <button type="submit" disabled={inviteMutation.isPending}>
-            {t('admin.inviteSend')}
-          </button>
-        </form>
-        {inviteMsg && <p role="status">{inviteMsg}</p>}
-      </section>
-
-      <section>
-        <h2>{t('admin.reviewQueue')}</h2>
-        {queue.isLoading && <p>{t('common.loading')}</p>}
-        {queue.isError && <p>{t('common.error')}</p>}
-        {queue.data?.length === 0 && <p>{t('admin.reviewEmpty')}</p>}
-        <ul>
-          {(queue.data ?? []).map((c) => (
-            <li key={c.id}>
-              <strong>{c.title}</strong>
+        <div className="two two-even">
+          <section className="panel">
+            <h2>{t('admin.invites')}</h2>
+            <form className="form-grid" onSubmit={handleSubmit((v) => inviteMutation.mutate(v))}>
+              <div className="field">
+                <label htmlFor="invite-email">{t('admin.inviteEmail')}</label>
+                <input id="invite-email" className="input" type="email" {...register('email')} />
+                {formState.errors.email && (
+                  <span className="error">{formState.errors.email.message}</span>
+                )}
+              </div>
               <div>
-                <input
-                  value={comment}
-                  onChange={(e) => setComment(e.target.value)}
-                  placeholder={t('admin.comment')}
-                  aria-label={t('admin.comment')}
-                />
-                <button
-                  onClick={() =>
-                    moderateMutation.mutate({ courseId: c.id, decision: 'approve' })
-                  }
-                  disabled={moderateMutation.isPending}
-                >
-                  {t('admin.approve')}
-                </button>
-                <button
-                  onClick={() => moderateMutation.mutate({ courseId: c.id, decision: 'reject' })}
-                  disabled={moderateMutation.isPending}
-                >
-                  {t('admin.reject')}
+                <button type="submit" className="btn btn-primary" disabled={inviteMutation.isPending}>
+                  {t('admin.inviteSend')}
                 </button>
               </div>
-            </li>
-          ))}
-        </ul>
-      </section>
+            </form>
+            {inviteMsg && <p role="status">{inviteMsg}</p>}
+          </section>
 
-      <section>
-        <h2>{t('admin.journal')}</h2>
-        <p className="muted">{t('admin.journalEmpty')}</p>
-      </section>
-    </main>
+          <section className="panel">
+            <h2>{t('admin.reviewQueue')}</h2>
+            {queue.isLoading && <p>{t('common.loading')}</p>}
+            {queue.isError && <p>{t('common.error')}</p>}
+            {queue.data?.length === 0 && <p>{t('admin.reviewEmpty')}</p>}
+            <ul className="teach-list">
+              {(queue.data ?? []).map((c) => (
+                <li key={c.id} className="l-item" style={{ flexWrap: 'wrap' }}>
+                  <strong>{c.title}</strong>
+                  <span className="spacer" />
+                  <span className="status st-wait">{c.status}</span>
+                  <div style={{ display: 'grid', gap: '8px', width: '100%' }}>
+                    <input
+                      className="input"
+                      value={comment}
+                      onChange={(e) => setComment(e.target.value)}
+                      placeholder={t('admin.comment')}
+                      aria-label={t('admin.comment')}
+                    />
+                    <div className="btn-row" style={{ marginTop: 0 }}>
+                      <button
+                        className="btn btn-primary"
+                        onClick={() =>
+                          moderateMutation.mutate({ courseId: c.id, decision: 'approve' })
+                        }
+                        disabled={moderateMutation.isPending}
+                      >
+                        {t('admin.approve')}
+                      </button>
+                      <button
+                        className="btn"
+                        onClick={() => moderateMutation.mutate({ courseId: c.id, decision: 'reject' })}
+                        disabled={moderateMutation.isPending}
+                      >
+                        {t('admin.reject')}
+                      </button>
+                    </div>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </section>
+        </div>
+
+        <section className="panel" style={{ marginTop: '22px' }}>
+          <h2>{t('admin.journal')}</h2>
+          <p className="muted">{t('admin.journalEmpty')}</p>
+        </section>
+      </div>
+    </div>
   );
 }
