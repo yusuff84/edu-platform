@@ -11,8 +11,8 @@ package handler
 //   - PATCH /teacher/courses/{id}/modules/{moduleID} — переименование модуля.
 //
 // Остальные пункты бэклога (DELETE, reorder, PATCH урока, счётчики в списке)
-// не реализованы: фронтенд T06 на них не рассчитан, а расширение интерфейса
-// StoreAPI без клиентов раздувает scope. См. отчёт T13.
+// закрыты T19 в соседнем файле teacher_crud.go (RegisterTeacherCRUDRoutes):
+// см. его заголовок для правил по статусу курса и точке подключения.
 
 import (
 	"net/http"

@@ -44,18 +44,42 @@ type StoreAPI interface {
 	TouchCourse(id string)
 	// UpdateCourse — частичное обновление карточки (PATCH, T13/бэклог T06).
 	UpdateCourse(id string, u CourseUpdate) bool
+	// DeleteCourse удаляет курс и всё, что на него ссылается (уроки, записи,
+	// прогресс, отзывы, платежи — каскад; T19). ErrNotFound — курса нет.
+	// Ограничение «только draft» накладывает handler: каскадное удаление
+	// платежей недопустимо для курсов с историей оплат.
+	DeleteCourse(id string) error
+	// CountContentByCourses — счётчики «модули/уроки» по курсам преподавателя
+	// одним запросом (T19: убирает N+1 в GET /teacher/courses).
+	CountContentByCourses(teacherID string) map[string]ContentCounts
 	// Modules
 	CreateModule(courseID, title string) *Module
 	GetModule(id string) (*Module, bool)
 	ListModulesByCourse(courseID string) []*Module
 	// UpdateModuleTitle — переименование модуля (PATCH, T13/бэклог T06).
 	UpdateModuleTitle(id, title string) bool
+	// DeleteModule удаляет модуль (уроки — каскадом в Postgres; T19).
+	// ErrNotFound — модуля нет. Непустые уроки проверяет handler (409).
+	DeleteModule(id string) error
+	// ReorderModules применяет полный список позиций модулей курса одной
+	// транзакцией (T19; идемпотентность порядка).
+	ReorderModules(courseID string, items []PositionItem) error
 	// Lessons
 	CreateLesson(l *Lesson) *Lesson
 	GetLesson(id string) (*Lesson, bool)
 	ListLessonsByModule(moduleID string) []*Lesson
 	ListLessonsByCourse(courseID string) []*Lesson
 	CountLessonsByCourse(courseID string) int
+	// UpdateLesson перезаписывает контент урока по переданному уроку (PATCH,
+	// T19): title/данные по kind; позицию, модуль и kind не меняет.
+	// ErrNotFound — урока нет.
+	UpdateLesson(l *Lesson) error
+	// DeleteLesson удаляет урок и его прогресс (каскад в Postgres; T19).
+	// ErrNotFound — урока нет.
+	DeleteLesson(id string) error
+	// ReorderLessons применяет полный список позиций уроков курса одной
+	// транзакцией (T19; позиция — порядковый номер урока внутри модуля).
+	ReorderLessons(courseID string, items []PositionItem) error
 	// Enrollments
 	GetEnrollment(studentID, courseID string) (*Enrollment, bool)
 	EnsureEnrollment(studentID, courseID string) (*Enrollment, bool)
@@ -112,6 +136,18 @@ type PaymentTotals struct {
 	AmountCents        int
 	PlatformFeeCents   int
 	TeacherAmountCents int
+}
+
+// PositionItem — пункт reorder-запроса (T19): сущность и её новая позиция.
+type PositionItem struct {
+	ID       string
+	Position int
+}
+
+// ContentCounts — счётчики программы курса в списке «мои курсы» (T19).
+type ContentCounts struct {
+	Modules int
+	Lessons int
 }
 
 // Проверка, что in-memory Store реализует интерфейс.

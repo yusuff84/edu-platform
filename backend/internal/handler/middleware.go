@@ -121,6 +121,9 @@ func NewRouter(app *App) http.Handler {
 			// модуля). Монтируется внутрь этого блока, чтобы пути были
 			// относительными (/courses/{id}), а requireAuth/requireRole — уже навешены.
 			app.RegisterTeacherEditRoutes(r)
+			// T19: CRUD конструктора (правка урока, удаление, порядок, счётчики
+			// в списке) — та же точка монтирования, что у RegisterTeacherEditRoutes.
+			app.RegisterTeacherCRUDRoutes(r)
 		})
 
 		r.Route("/admin", func(r chi.Router) {
