@@ -383,10 +383,22 @@ export function createReview(
 
 // ---------- Утилиты ----------
 
+/**
+ * Денежная сумма в рублях без подмены смысла: 0 — это «0 ₽», а не «Бесплатно».
+ * Для итогов журнала платежей, комиссий, возвратов (отрицательные суммы)
+ * и любого счёта, где ноль — ноль.
+ */
+export function formatMoney(cents: number): string {
+  return `${new Intl.NumberFormat('ru-RU').format(cents / 100)} ₽`;
+}
+
+/**
+ * Цена курса: 0 и меньше — «Бесплатно» (приемлемо только для цены).
+ * Для счетов и итогов есть formatMoney.
+ */
 export function formatPrice(priceCents: number): string {
   if (priceCents <= 0) return 'Бесплатно';
-  const rub = priceCents / 100;
-  return `${new Intl.NumberFormat('ru-RU').format(rub)} ₽`;
+  return formatMoney(priceCents);
 }
 
 /** RFC3339 → локальная дата-время ru-RU. Пустое или некорректное значение → «—». */
