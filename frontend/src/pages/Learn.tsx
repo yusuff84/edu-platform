@@ -8,7 +8,7 @@
 // Вердикт определяется полем passed результата CompleteResult.
 
 import { useMemo, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, NavLink, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ApiError, completeLesson, getCourse, myCourses } from '../api/client';
 import type { CompleteLessonInput, CompleteResult, Lesson } from '../api/client';
@@ -158,45 +158,61 @@ export default function Learn(): JSX.Element {
 
   if (myQuery.isLoading) {
     return (
-      <main className="learn-page">
-        <p>{t('learn.loading')}</p>
-      </main>
+      <div className="wrap">
+        <div className="page">
+          <div className="panel">
+            <p role="status">{t('learn.loading')}</p>
+          </div>
+        </div>
+      </div>
     );
   }
 
   if (myQuery.isError) {
     return (
-      <main className="learn-page">
-        <h1>{t('learn.title')}</h1>
-        <p className="error" role="alert">
-          {errorText(myQuery.error)}
-        </p>
-        <button type="button" onClick={() => void myQuery.refetch()}>
-          {t('common.retry')}
-        </button>
-      </main>
+      <div className="wrap">
+        <div className="page">
+          <div className="panel">
+            <h1>{t('learn.title')}</h1>
+            <p className="error" role="alert">
+              {errorText(myQuery.error)}
+            </p>
+            <button type="button" onClick={() => void myQuery.refetch()}>
+              {t('common.retry')}
+            </button>
+          </div>
+        </div>
+      </div>
     );
   }
 
   if (!meCourse) {
     // Курса нет в «моих курсах» — getCourse() с UUID не вызываем (всегда 404).
     return (
-      <main className="learn-page">
-        <h1>{t('learn.title')}</h1>
-        <p role="alert">{t('learn.noAccess')}</p>
-        <p>
-          <Link to="/">{t('my.goCatalog')}</Link>
-        </p>
-      </main>
+      <div className="wrap">
+        <div className="page">
+          <div className="panel">
+            <h1>{t('learn.title')}</h1>
+            <p role="alert">{t('learn.noAccess')}</p>
+            <p>
+              <Link to="/">{t('my.goCatalog')}</Link>
+            </p>
+          </div>
+        </div>
+      </div>
     );
   }
 
   if (courseQuery.isLoading) {
     return (
-      <main className="learn-page">
-        <h1>{meCourse.course.title}</h1>
-        <p>{t('learn.loading')}</p>
-      </main>
+      <div className="wrap">
+        <div className="page">
+          <div className="panel">
+            <h1>{meCourse.course.title}</h1>
+            <p role="status">{t('learn.loading')}</p>
+          </div>
+        </div>
+      </div>
     );
   }
 
@@ -204,33 +220,42 @@ export default function Learn(): JSX.Element {
     const status =
       courseQuery.error instanceof ApiError ? courseQuery.error.status : undefined;
     return (
-      <main className="learn-page">
-        <h1>{meCourse.course.title}</h1>
-        <p className="error" role="alert">
-          {status === 404 ? t('course.notFound') : errorText(courseQuery.error)}
-        </p>
-        {status === 404 ? (
-          <p>
-            <Link to="/">{t('my.goCatalog')}</Link>
-          </p>
-        ) : (
-          <button type="button" onClick={() => void courseQuery.refetch()}>
-            {t('common.retry')}
-          </button>
-        )}
-      </main>
+      <div className="wrap">
+        <div className="page">
+          <div className="panel">
+            <h1>{meCourse.course.title}</h1>
+            <p className="error" role="alert">
+              {status === 404 ? t('course.notFound') : errorText(courseQuery.error)}
+            </p>
+            {status === 404 ? (
+              <p>
+                <Link to="/">{t('my.goCatalog')}</Link>
+              </p>
+            ) : (
+              <button type="button" onClick={() => void courseQuery.refetch()}>
+                {t('common.retry')}
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
     );
   }
 
   if (flatLessons.length === 0) {
     return (
-      <main className="learn-page">
-        <h1>{courseQuery.data.title}</h1>
-        <p>{t('learn.empty')}</p>
-        <p>
-          <Link to="/me">{t('common.back')}</Link>
-        </p>
-      </main>
+      <div className="wrap">
+        <div className="page">
+          <div className="crumbs">
+            <Link to="/">{t('nav.catalog')}</Link> / <span>{courseQuery.data.title}</span>
+          </div>
+          <h1>{courseQuery.data.title}</h1>
+          <p>{t('learn.empty')}</p>
+          <p>
+            <Link to="/me">{t('common.back')}</Link>
+          </p>
+        </div>
+      </div>
     );
   }
 
@@ -238,140 +263,144 @@ export default function Learn(): JSX.Element {
 
   // После ранних return уроки гарантированно есть — activeLesson определён.
   const currentLesson: FlatLesson = activeLesson ?? flatLessons[0];
+  const title = courseQuery.data.title;
 
   // ---------- Рендер ----------
 
   return (
-    <main className="learn-page">
-      <p>
-        <Link to="/me">{t('common.back')}</Link>
-      </p>
-      <h1>{courseQuery.data.title}</h1>
-
-      <section className="learn-progress" aria-label={t('learn.progress')}>
-        <span>
-          {t('learn.progress')}: {percent}%
-        </span>
-        <div
-          className="progress"
-          role="progressbar"
-          aria-valuemin={0}
-          aria-valuemax={100}
-          aria-valuenow={percent}
-          aria-label={t('learn.progress')}
-        >
-          <div className="progress-bar" style={{ width: `${percent}%` }} />
+    <div className="wrap">
+      <div className="page">
+        <div className="crumbs">
+          <Link to="/">{t('nav.catalog')}</Link> / <span>{title}</span>
         </div>
-      </section>
+        <h1>{title}</h1>
+        <div style={{ margin: '14px 0 20px' }}>
+          <span className="muted">
+            {t('learn.progress')}: {percent}%
+          </span>
+          <div
+            className="progress"
+            role="progressbar"
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={percent}
+            aria-label={`${t('learn.progress')}: ${percent}%`}
+          >
+            <div className="progress-bar" style={{ width: `${percent}%` }} />
+          </div>
+        </div>
 
-      <div className="learn-grid">
-        <nav className="learn-sidebar" aria-label={t('course.program')}>
-          {modules.map((m) => (
-            <section key={m.id}>
-              <h2 className="learn-module-title">{m.title}</h2>
-              <ul className="list">
+        <div className="lesson-shell">
+          <nav className="side-nav" aria-label={t('course.program')}>
+            {modules.map((m) => (
+              <div key={m.id}>
+                <span className="side-title">{m.title}</span>
                 {m.lessons.map((l) => {
                   const done = completedIds.has(l.id);
                   const isActive = l.id === currentLesson.id;
                   const isNext = l.id === serverNextLessonId;
                   return (
-                    <li key={l.id}>
-                      <Link
-                        to={`/learn/${courseId}/${l.id}`}
-                        className={[
+                    <NavLink
+                      key={l.id}
+                      to={`/learn/${courseId}/${l.id}`}
+                      className={({ isActive: navActive }) =>
+                        [
                           'learn-link',
                           done ? 'learn-link-done' : '',
-                          isActive ? 'learn-link-active' : '',
+                          isActive || navActive ? 'active learn-link-active' : '',
                         ]
                           .filter(Boolean)
-                          .join(' ')}
-                        aria-current={isActive ? 'true' : undefined}
-                      >
-                        <span className="learn-link-check" aria-hidden="true">
-                          {done ? '✓ ' : ''}
-                        </span>
-                        {l.title}
-                        <span className="learn-link-kind"> · {t(`kind.${l.kind}`)}</span>
-                        {done && (
-                          <span className="sr-only"> — {t('learn.completed')}</span>
-                        )}
-                        {isNext && (
-                          <span className="learn-link-next"> — {t('learn.nextLesson')}</span>
-                        )}
-                      </Link>
-                    </li>
+                          .join(' ')
+                      }
+                      aria-current={isActive ? 'true' : undefined}
+                    >
+                      <span className="learn-link-check" aria-hidden="true">
+                        {done ? '✓ ' : ''}
+                      </span>
+                      {l.title}
+                      <span className="learn-link-kind"> · {t(`kind.${l.kind}`)}</span>
+                      {done && (
+                        <span className="sr-only"> — {t('learn.completed')}</span>
+                      )}
+                      {isNext && (
+                        <span className="learn-link-next"> — {t('learn.nextLesson')}</span>
+                      )}
+                    </NavLink>
                   );
                 })}
-              </ul>
-            </section>
-          ))}
-        </nav>
-
-        <div className="learn-content">
-          {showLessonNotFound ? (
-            <div role="alert" className="learn-notice">
-              <p className="error">{t('learn.lessonNotFound')}</p>
-              <p>
-                <Link to={`/learn/${courseId}/${currentLesson.id}`}>
-                  {t('learn.continue')}
-                </Link>
-              </p>
-            </div>
-          ) : (
-            <>
-              <LessonView
-                key={currentLesson.id}
-                lesson={currentLesson}
-                completing={mutation.isPending}
-                onComplete={(payload) => mutation.mutate(payload)}
-              />
-
-              {/* Вердикт для скринридеров и визуально. */}
-              <div className="learn-verdict" role="status" aria-live="polite">
-                {verdictError && <p className="error">{verdictError}</p>}
-                {verdict?.passed && (
-                  <p className="learn-verdict-pass">
-                    {t('learn.verdictPassed')}
-                    {typeof verdict.percent === 'number'
-                      ? ` — ${t('learn.progress')}: ${verdict.percent}%`
-                      : ''}
-                  </p>
-                )}
-                {verdict && !verdict.passed && (
-                  <p className="learn-verdict-fail">
-                    {t('learn.verdictFailed')}
-                    {verdict.message ? ` — ${verdict.message}` : ''}
-                    {typeof verdict.correct === 'number' && typeof verdict.total === 'number'
-                      ? ` (${verdict.correct}/${verdict.total})`
-                      : ''}
-                  </p>
-                )}
               </div>
+            ))}
+            {flatLessons.length === 0 && !courseQuery.isLoading && (
+              <p>{t('learn.noLessons')}</p>
+            )}
+          </nav>
+          <div className="lesson-pane">
+            {!activeLesson && <p>{t('learn.selectLesson')}</p>}
+            {showLessonNotFound ? (
+              <div role="alert" className="learn-notice">
+                <p className="error">{t('learn.lessonNotFound')}</p>
+                <p>
+                  <Link to={`/learn/${courseId}/${currentLesson.id}`}>
+                    {t('learn.continue')}
+                  </Link>
+                </p>
+              </div>
+            ) : (
+              <>
+                <LessonView
+                  key={currentLesson.id}
+                  lesson={currentLesson}
+                  completing={mutation.isPending}
+                  onComplete={(payload) => mutation.mutate(payload)}
+                />
 
-              {verdict?.passed && verdict.nextLesson && (
-                <p>
-                  <Link
-                    className="learn-next-link"
-                    to={`/learn/${courseId}/${verdict.nextLesson.lessonId}`}
-                  >
-                    {t('lesson.next')}: {verdict.nextLesson.title}
-                  </Link>
-                </p>
-              )}
-              {!verdict?.passed && flatNext && (
-                <p>
-                  <Link
-                    className="learn-next-link"
-                    to={`/learn/${courseId}/${flatNext.id}`}
-                  >
-                    {t('learn.continue')}: {flatNext.title}
-                  </Link>
-                </p>
-              )}
-            </>
-          )}
+                {/* Вердикт для скринридеров и визуально. */}
+                <div className="learn-verdict" role="status" aria-live="polite">
+                  {verdictError && <p className="error">{verdictError}</p>}
+                  {verdict?.passed && (
+                    <p className="learn-verdict-pass">
+                      {t('learn.verdictPassed')}
+                      {typeof verdict.percent === 'number'
+                        ? ` — ${t('learn.progress')}: ${verdict.percent}%`
+                        : ''}
+                    </p>
+                  )}
+                  {verdict && !verdict.passed && (
+                    <p className="learn-verdict-fail">
+                      {t('learn.verdictFailed')}
+                      {verdict.message ? ` — ${verdict.message}` : ''}
+                      {typeof verdict.correct === 'number' && typeof verdict.total === 'number'
+                        ? ` (${verdict.correct}/${verdict.total})`
+                        : ''}
+                    </p>
+                  )}
+                </div>
+
+                {verdict?.passed && verdict.nextLesson && (
+                  <p>
+                    <Link
+                      className="btn learn-next-link"
+                      to={`/learn/${courseId}/${verdict.nextLesson.lessonId}`}
+                    >
+                      {t('lesson.next')}: {verdict.nextLesson.title}
+                    </Link>
+                  </p>
+                )}
+                {!verdict?.passed && flatNext && (
+                  <p>
+                    <Link
+                      className="btn learn-next-link"
+                      to={`/learn/${courseId}/${flatNext.id}`}
+                    >
+                      {t('learn.continue')}: {flatNext.title}
+                    </Link>
+                  </p>
+                )}
+              </>
+            )}
+          </div>
         </div>
       </div>
-    </main>
+    </div>
   );
 }

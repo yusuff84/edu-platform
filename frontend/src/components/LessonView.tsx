@@ -5,6 +5,7 @@
 //   - эфир — liveUrl + startsAt;
 //   - код — codeTask.{language, template, tests}, редактор инициализируется шаблоном.
 // Вердикт «Зачтено / Не зачтено» показывает родитель (Learn.tsx) по полю passed.
+// Оформление — Skillbox-style (panel/pill/btn из styles.css).
 
 import { useId, useState } from 'react';
 import type { ReactNode } from 'react';
@@ -16,7 +17,7 @@ import '../styles/learn.css';
 interface Props {
   lesson: Lesson;
   /** Отправить урок на завершение: {} для video/live, quizAnswers/code — для quiz/code. */
-  onComplete: (payload: CompleteLessonInput) => void;
+  onComplete: (payload: CompleteLessonInput) => void | Promise<void>;
   /** Идёт отправка/проверка на сервере (кнопки заблокированы). */
   completing: boolean;
 }
@@ -247,6 +248,7 @@ export function QuizForm({
       ))}
       <button
         type="submit"
+        className="btn btn-primary"
         disabled={disabled || !allAnswered}
         aria-label={t('lesson.quizSubmit')}
       >
@@ -296,6 +298,7 @@ export function CodeEditor({
       <div className="code-toolbar">
         <button
           type="button"
+          className="btn"
           onClick={() => setCode(template)}
           disabled={disabled || code === template}
           aria-label={t('code.reset')}
@@ -304,6 +307,7 @@ export function CodeEditor({
         </button>
         <button
           type="submit"
+          className="btn btn-primary"
           disabled={disabled || !code.trim()}
           aria-label={t('lesson.codeRun')}
         >
@@ -321,9 +325,9 @@ export default function LessonView({ lesson, onComplete, completing }: Props): J
     const startsAt = lesson.startsAt;
     const inFuture = startsAt ? new Date(startsAt).getTime() > Date.now() : false;
     return (
-      <section className="lesson">
-        <h3>{lesson.title}</h3>
-        <p className="muted">{t('lesson.live')}</p>
+      <section className="panel">
+        <span className="pill live">{t('lesson.live')}</span>
+        <h3 style={{ marginTop: '10px' }}>{lesson.title}</h3>
         {lesson.bodyMd && <Markdown source={lesson.bodyMd} />}
         {startsAt ? (
           <p>
@@ -335,14 +339,15 @@ export default function LessonView({ lesson, onComplete, completing }: Props): J
         )}
         {lesson.liveUrl && (
           <p>
-            <a href={lesson.liveUrl} target="_blank" rel="noreferrer">
+            <a className="btn" href={lesson.liveUrl} target="_blank" rel="noreferrer">
               {t('lesson.liveLink')}
             </a>
           </p>
         )}
         <button
           type="button"
-          onClick={() => onComplete({})}
+          className="btn btn-primary"
+          onClick={() => void onComplete({})}
           disabled={completing}
           aria-label={`${t('learn.complete')}: ${lesson.title}`}
         >
@@ -355,7 +360,7 @@ export default function LessonView({ lesson, onComplete, completing }: Props): J
   if (lesson.kind === 'quiz') {
     const questions = lesson.quiz?.questions ?? [];
     return (
-      <section className="lesson">
+      <section className="panel">
         <h3>{lesson.title}</h3>
         <p className="muted">{t('lesson.quiz')}</p>
         {lesson.bodyMd && <Markdown source={lesson.bodyMd} />}
@@ -367,7 +372,7 @@ export default function LessonView({ lesson, onComplete, completing }: Props): J
           <QuizForm
             lesson={lesson}
             disabled={completing}
-            onSubmit={(quizAnswers) => onComplete({ quizAnswers })}
+            onSubmit={(quizAnswers) => void onComplete({ quizAnswers })}
           />
         )}
       </section>
@@ -376,7 +381,7 @@ export default function LessonView({ lesson, onComplete, completing }: Props): J
 
   if (lesson.kind === 'code') {
     return (
-      <section className="lesson">
+      <section className="panel">
         <h3>{lesson.title}</h3>
         <p className="muted">{t('lesson.code')}</p>
         {/* Условие задачи — bodyMd; шаблон — codeTask.template (обязательно показываем). */}
@@ -397,7 +402,7 @@ export default function LessonView({ lesson, onComplete, completing }: Props): J
         <CodeEditor
           lesson={lesson}
           disabled={completing}
-          onSubmit={(code, language) => onComplete({ code, language })}
+          onSubmit={(code, language) => void onComplete({ code, language })}
         />
       </section>
     );
@@ -405,15 +410,16 @@ export default function LessonView({ lesson, onComplete, completing }: Props): J
 
   // video_text по умолчанию
   return (
-    <section className="lesson">
+    <section className="panel">
       <h3>{lesson.title}</h3>
       {lesson.videoUrl && (
-        <video src={lesson.videoUrl} controls className="lesson-video" />
+        <video className="lesson-video" src={lesson.videoUrl} controls style={{ maxWidth: '100%' }} />
       )}
       {lesson.bodyMd && <Markdown source={lesson.bodyMd} />}
       <button
         type="button"
-        onClick={() => onComplete({})}
+        className="btn btn-primary"
+        onClick={() => void onComplete({})}
         disabled={completing}
         aria-label={`${t('learn.complete')}: ${lesson.title}`}
       >

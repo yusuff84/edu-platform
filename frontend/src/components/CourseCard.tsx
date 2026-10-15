@@ -4,6 +4,14 @@ import { formatPrice } from '../api/client';
 import { t } from '../i18n/t';
 import '../styles/catalog.css';
 
+const COVERS = ['cover-py', 'cover-html', 'cover-js', 'cover-sql', 'cover-fig', 'cover-linux'];
+
+export function coverFor(key: string): string {
+  let h = 0;
+  for (let i = 0; i < key.length; i += 1) h = (h * 31 + key.charCodeAt(i)) >>> 0;
+  return COVERS[h % COVERS.length];
+}
+
 /** Звёзды рейтинга: дробное значение округляется, 0 → «пока без оценок». */
 export function Stars({ value }: { value: number }): JSX.Element {
   const filled = Math.max(0, Math.min(5, Math.round(value)));
@@ -21,16 +29,31 @@ export function Stars({ value }: { value: number }): JSX.Element {
  * Карточка курса для каталога.
  * Рендерим только поля CourseItem: автора, обложку и статус бэкенд
  * в ответе каталога не отдаёт — пустышки не показываем.
+ * Оформление — Skillbox-style плитка (cover/tag/tile-title из styles.css),
+ * обложка детерминирована от slug/id через coverFor.
  */
 export default function CourseCard({ course }: { course: CourseItem }): JSX.Element {
   const desc =
     course.description.length > 140
       ? `${course.description.slice(0, 140)}…`
       : course.description;
+  const meta = [
+    course.avgRating > 0
+      ? `★ ${course.avgRating.toFixed(1).replace('.', ',')}`
+      : null,
+    formatPrice(course.priceCents),
+  ]
+    .filter(Boolean)
+    .join(' · ');
   return (
-    <article className="card">
-      <Link to={`/courses/${course.slug}`} aria-label={course.title}>
-        <h3>{course.title}</h3>
+    <article>
+      <Link className="tile" to={`/courses/${course.slug}`} aria-label={course.title}>
+        <div className={`cover ${coverFor(course.slug || course.id)}`} />
+        <span className="tag">Курс</span>
+        <span className="tile-title">
+          {course.title}
+          {meta && <small>{meta}</small>}
+        </span>
       </Link>
       <p className="muted">{desc}</p>
       <div className="card-row">

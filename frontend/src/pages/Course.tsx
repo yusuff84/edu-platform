@@ -4,7 +4,6 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { CourseStatus } from '../api/client';
 import { ApiError, enroll, formatPrice, getCourse, me, myCourses } from '../api/client';
 import Reviews from '../components/Reviews';
-import { Stars } from '../components/CourseCard';
 import { t } from '../i18n/t';
 import '../styles/catalog.css';
 
@@ -22,12 +21,23 @@ function statusLabel(status: CourseStatus): string {
   }
 }
 
+const COVERS = ['cover-py', 'cover-html', 'cover-js', 'cover-sql', 'cover-fig', 'cover-linux'];
+
+/** Фон обложки по слагу. Локальная копия (не зависим от слияния CourseCard). */
+function coverFor(key: string): string {
+  let h = 0;
+  for (let i = 0; i < key.length; i += 1) h = (h * 31 + key.charCodeAt(i)) >>> 0;
+  return COVERS[h % COVERS.length];
+}
+
+const ALL_CLOSED = '__closed';
+
 export default function Course(): JSX.Element {
   // slug — человекоприятный слаг из URL, не UUID; контракт: GET /courses/{slug}.
   const { slug = '' } = useParams();
   const qc = useQueryClient();
   const [message, setMessage] = useState('');
-
+  const [openModuleId, setOpenModuleId] = useState<string | null>(null);
   // После T01 getCourse распаковывает конверт { course, modules } в CourseDetail.
   const courseQuery = useQuery({
     queryKey: ['course', slug],
@@ -67,37 +77,52 @@ export default function Course(): JSX.Element {
     },
   });
 
-  if (courseQuery.isLoading) {
+  if (courseQuery.isLoading)
     return (
-      <main>
-        <p role="status">{t('course.loading')}</p>
-      </main>
+      <div className="wrap">
+        <div className="page">
+          <p role="status">{t('course.loading')}</p>
+        </div>
+      </div>
     );
-  }
   if (courseQuery.isError || !courseQuery.data) {
     const status =
       courseQuery.error instanceof ApiError ? courseQuery.error.status : undefined;
     if (status === 404) {
       // Черновик/снятый курс бэкенд отдаёт как 404 для посторонних.
       return (
-        <main>
-          <h1>{t('course.notFound')}</h1>
-          <p>{t('course.notFoundHint')}</p>
-          <p>
-            <Link to="/">{t('my.goCatalog')}</Link>
-          </p>
-        </main>
+        <div className="wrap">
+          <div className="page">
+            <h1>{t('course.notFound')}</h1>
+            <p>{t('course.notFoundHint')}</p>
+            <p>
+              <Link className="btn" to="/">
+                {t('my.goCatalog')}
+              </Link>
+            </p>
+          </div>
+        </div>
       );
     }
     return (
-      <main>
-        <h1>{t('course.notFound')}</h1>
-        <p role="alert">{t('common.error')}</p>
-        <button type="button" onClick={() => void courseQuery.refetch()}>
-          {t('error.retry')}
-        </button>{' '}
-        <Link to="/">{t('my.goCatalog')}</Link>
-      </main>
+      <div className="wrap">
+        <div className="page">
+          <h1>{t('course.notFound')}</h1>
+          <p role="alert">{t('common.error')}</p>
+          <p>
+            <button
+              type="button"
+              className="btn"
+              onClick={() => void courseQuery.refetch()}
+            >
+              {t('common.retry')}
+            </button>{' '}
+            <Link className="btn" to="/">
+              {t('my.goCatalog')}
+            </Link>
+          </p>
+        </div>
+      </div>
     );
   }
 
@@ -105,102 +130,179 @@ export default function Course(): JSX.Element {
   const user = meQuery.data;
   // Кнопка покупки — только когда список записей загружен (не мигает для записанных).
   const owned = (myQuery.data ?? []).some((m) => m.course.id === course.id);
+  const modules = course.modules ?? [];
+  // Контракт не отдаёт lessonsCount/modulesCount — считаем из модулей.
+  const lessonsCount = modules.reduce((n, m) => n + m.lessons.length, 0);
+  const modulesCount = modules.length;
   const isAuthor = user?.id === course.teacherId;
   const isAdmin = user?.role === 'admin';
   // Баннер статуса виден только автору/админу: остальным бэкенд такие курсы отдаёт 404.
-  const showBanner =
-    course.status !== 'published' && (isAuthor || isAdmin);
+  const showBanner = course.status !== 'published' && (isAuthor || isAdmin);
   // Курс вернулся в draft с комментарием = отклонён модератором.
   const rejected = course.status === 'draft' && Boolean(course.moderationComment);
+  const isOpen = (id: string, index: number): boolean =>
+    openModuleId === null ? index === 0 : openModuleId === id;
+  const toggle = (id: string, index: number): void =>
+    setOpenModuleId(isOpen(id, index) ? ALL_CLOSED : id);
 
   return (
-    <main>
-      <h1>{course.title}</h1>
-      <p>{course.description}</p>
-      <p>
-        <Stars value={course.avgRating ?? 0} />{' '}
-        {course.ratingsCount > 0 && (
-          <span className="muted">
-            ({course.ratingsCount} {t('reviews.title').toLowerCase()})
-          </span>
+    <div className="wrap">
+      <div className="page">
+        <div className="crumbs">
+          <Link to="/">{t('catalog.title')}</Link> / {course.title}
+        </div>
+
+        {showBanner && (
+          <section className="course-banner" aria-label={t('teach.status')}>
+            <strong>
+              {t('teach.status')}: {statusLabel(course.status)}
+            </strong>
+            {rejected && (
+              <p>
+                <strong>{t('teach.rejected')}</strong>
+                {course.moderationComment && (
+                  <>
+                    {' — '}
+                    {t('teach.moderationComment')}: {course.moderationComment}
+                  </>
+                )}
+              </p>
+            )}
+          </section>
         )}
-      </p>
-      <p>
-        {t('course.price')}: <strong>{formatPrice(course.priceCents)}</strong>
-      </p>
 
-      {showBanner && (
-        <section className="course-banner" aria-label={t('teach.status')}>
-          <strong>
-            {t('teach.status')}: {statusLabel(course.status)}
-          </strong>
-          {rejected && (
-            <p>
-              <strong>{t('teach.rejected')}</strong>
-              {course.moderationComment && (
-                <>
-                  {' — '}
-                  {t('teach.moderationComment')}: {course.moderationComment}
-                </>
-              )}
-            </p>
-          )}
-        </section>
-      )}
+        <div className="two">
+          <div style={{ display: 'grid', gap: 22, alignContent: 'start' }}>
+            <section className="panel">
+              <div className="pill-row">
+                <span className="pill">Курс</span>
+              </div>
+              <h1 style={{ marginTop: 12 }}>{course.title}</h1>
+              <p className="muted">{course.description}</p>
+              <div className="meta">
+                <span className="rating">★ {(course.avgRating ?? 0).toFixed(1)}</span>
+                <span>({course.ratingsCount ?? 0})</span>
+                <span>
+                  {lessonsCount} {t('course.lessonsCount')}
+                </span>
+                <span>
+                  {modulesCount} {t('course.modulesCount')}
+                </span>
+              </div>
+            </section>
 
-      {!user && !meQuery.isLoading && (
-        <p>
-          <Link to="/login">{t('course.loginToBuy')}</Link>
-        </p>
-      )}
-      {user && !owned && !myQuery.isLoading && (
-        <button
-          type="button"
-          onClick={() => buyMutation.mutate(course.id)}
-          disabled={buyMutation.isPending}
-        >
-          {buyMutation.isPending
-            ? t('course.buying')
-            : course.priceCents === 0
-              ? t('course.enrollFree')
-              : t('course.buy')}
-        </button>
-      )}
-      {owned && (
-        <p>
-          <Link to={`/learn/${course.id}`}>{t('course.openLearn')}</Link>
-        </p>
-      )}
-      {message && (
-        <p role="status" aria-live="polite">
-          {message}
-        </p>
-      )}
+            <section className="panel">
+              <h2>{t('course.program')}</h2>
+              {modules.length === 0 && <p className="muted">{t('learn.noLessons')}</p>}
+              <div style={{ marginTop: 12 }}>
+                {modules.map((m, i) => {
+                  const open = isOpen(m.id, i);
+                  return (
+                    <div key={m.id} className="mod">
+                      <button
+                        type="button"
+                        className="mod-head"
+                        aria-expanded={open}
+                        onClick={() => toggle(m.id, i)}
+                      >
+                        <span>{m.title}</span>
+                        <svg
+                          width="16"
+                          height="16"
+                          viewBox="0 0 16 16"
+                          fill="none"
+                          aria-hidden="true"
+                          style={{
+                            flex: 'none',
+                            transform: open ? 'rotate(180deg)' : undefined,
+                          }}
+                        >
+                          <path
+                            d="M4 6l4 4 4-4"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          />
+                        </svg>
+                      </button>
+                      {open && (
+                        <div className="mod-body">
+                          {m.lessons.map((l) =>
+                            owned ? (
+                              <Link
+                                key={l.id}
+                                className="lesson-link"
+                                to={`/learn/${course.id}/${l.id}`}
+                              >
+                                <span>{l.title}</span>
+                                <span className="pill">{t(`kind.${l.kind}`)}</span>
+                              </Link>
+                            ) : (
+                              <span key={l.id} className="lesson-link">
+                                <span>{l.title}</span>
+                                <span className="pill">{t(`kind.${l.kind}`)}</span>
+                              </span>
+                            ),
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </section>
 
-      <h2>{t('course.program')}</h2>
-      {course.modules.length === 0 && <p className="muted">{t('learn.noLessons')}</p>}
-      {course.modules.length > 0 && (
-        <p className="muted">
-          {t('course.modulesCount')}: {course.modules.length}
-        </p>
-      )}
-      {course.modules.map((m) => (
-        <section key={m.id} className="course-module">
-          <h3>{m.title}</h3>
-          <p className="muted">
-            {t('course.lessonsCount')}: {m.lessons.length}
-          </p>
-          <ul>
-            {m.lessons.map((l) => (
-              <li key={l.id}>
-                {l.title} — {t(`kind.${l.kind}`)}
-              </li>
-            ))}
-          </ul>
-        </section>
-      ))}
+            <section className="panel">
+              <h2>Чему вы научитесь</h2>
+              <div className="outcomes">
+                <div>✓ Писать программы</div>
+                <div>✓ Читать ошибки</div>
+                <div>✓ Собрать мини-проект</div>
+                <div>✓ Задавать вопросы куратору</div>
+              </div>
+            </section>
 
-      <Reviews courseId={course.id} />
-    </main>
+            <Reviews courseId={course.id} />
+          </div>
+
+          <aside className="panel buybox">
+            <div
+              className={`cover ${coverFor(course.slug)}`}
+              style={{ height: 150, borderRadius: 12 }}
+            />
+            <div className="price">{formatPrice(course.priceCents)}</div>
+            {!user && !meQuery.isLoading && (
+              <p className="muted">{t('course.loginToBuy')}</p>
+            )}
+            {user && !owned && !myQuery.isLoading && (
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={() => buyMutation.mutate(course.id)}
+                disabled={buyMutation.isPending}
+              >
+                {buyMutation.isPending
+                  ? t('course.buying')
+                  : course.priceCents === 0
+                    ? t('course.enrollFree')
+                    : t('course.buy')}
+              </button>
+            )}
+            {owned && (
+              <Link className="btn btn-primary" to={`/learn/${course.id}`}>
+                {t('course.openLearn')}
+              </Link>
+            )}
+            {message && (
+              <p role="status" aria-live="polite">
+                {message}
+              </p>
+            )}
+            <p className="notice">Возврат в течение 7 дней без лишних вопросов.</p>
+          </aside>
+        </div>
+      </div>
+    </div>
   );
 }

@@ -94,14 +94,14 @@ export default function Reviews({ courseId }: { courseId: string }): JSX.Element
     Boolean(user) && !myQuery.isLoading && !meQuery.isLoading && enrolled && !myReview;
 
   return (
-    <section aria-label={t('reviews.title')} className="reviews">
+    <section aria-label={t('reviews.title')} className="panel reviews">
       <h2>{t('reviews.title')}</h2>
 
       {reviewsQuery.isLoading && <p role="status">{t('reviews.loading')}</p>}
       {reviewsQuery.isError && (
         <>
           <p role="alert">{t('reviews.error')}</p>
-          <button type="button" onClick={() => void reviewsQuery.refetch()}>
+          <button type="button" className="btn" onClick={() => void reviewsQuery.refetch()}>
             {t('common.retry')}
           </button>
         </>
@@ -112,7 +112,7 @@ export default function Reviews({ courseId }: { courseId: string }): JSX.Element
 
       <ul className="list">
         {reviews.map((r) => (
-          <li key={r.id} className="card review-item">
+          <li key={r.id} className="card review-item review">
             <div className="card-row">
               <span
                 role="img"
@@ -144,7 +144,7 @@ export default function Reviews({ courseId }: { courseId: string }): JSX.Element
 
       {formVisible && (
         <form
-          className="review-form"
+          className="review-form form-grid"
           onSubmit={handleSubmit((v) => mutation.mutate(v))}
         >
           <fieldset className="rating-group">
@@ -160,16 +160,18 @@ export default function Reviews({ courseId }: { courseId: string }): JSX.Element
                 {n} ★
               </label>
             ))}
-            {errors.rating && <span className="error">{errors.rating.message}</span>}
+            {errors.rating && <span className="error err">{errors.rating.message}</span>}
           </fieldset>
-          <label>
-            {t('reviews.yourText')}
-            <textarea {...register('body')} rows={4} cols={50} />
-          </label>
-          {errors.body && <span className="error">{errors.body.message}</span>}
-          <button type="submit" disabled={mutation.isPending}>
-            {t('reviews.submit')}
-          </button>
+          <div className="field">
+            <label htmlFor="review-text">{t('reviews.yourText')}</label>
+            <textarea id="review-text" className="input" {...register('body')} rows={4} cols={50} />
+            {errors.body && <span className="error err">{errors.body.message}</span>}
+          </div>
+          <div>
+            <button type="submit" className="btn btn-primary" disabled={mutation.isPending}>
+              {t('reviews.submit')}
+            </button>
+          </div>
         </form>
       )}
 

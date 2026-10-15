@@ -472,33 +472,34 @@ export default function Constructor(): JSX.Element {
   // ---------- Рендер ----------
 
   return (
-    <main>
+    <main className="wrap">
+      <div className="page">
       <h1>{isNew ? t('teach.newTitle') : course?.title ?? t('teach.myCourse')}</h1>
 
       {/* ===== /teach/new: создание курса + список моих курсов ===== */}
       {isNew && (
         <>
-          <form onSubmit={handleSubmit((v) => createMutation.mutate(v), onInvalidCourse)} noValidate>
+          <form className="form-grid" onSubmit={handleSubmit((v) => createMutation.mutate(v), onInvalidCourse)} noValidate>
             <label htmlFor="course-title">{t('teach.courseTitle')}</label>
-            <input id="course-title" {...register('title')} />
+            <input id="course-title" className="input" {...register('title')} />
             {formState.errors.title && <p className="error">{formState.errors.title.message}</p>}
 
             <label htmlFor="course-desc">{t('teach.courseDesc')}</label>
-            <textarea id="course-desc" rows={4} {...register('description')} />
+            <textarea id="course-desc" className="input" rows={4} {...register('description')} />
             {formState.errors.description && (
               <p className="error">{formState.errors.description.message}</p>
             )}
 
             <label htmlFor="course-price">{t('teach.coursePrice')}</label>
-            <input id="course-price" type="number" min={0} {...register('priceRub')} />
+            <input id="course-price" className="input" type="number" min={0} {...register('priceRub')} />
             {formState.errors.priceRub && <p className="error">{formState.errors.priceRub.message}</p>}
 
-            <button type="submit" disabled={createMutation.isPending}>
+            <button type="submit" className="btn btn-primary" disabled={createMutation.isPending}>
               {createMutation.isPending ? t('teach.saving') : t('teach.save')}
             </button>
           </form>
 
-          <section className="teach-section">
+          <section className="teach-section panel">
             <h2>{t('nav.myCourses')}</h2>
             {teachingQuery.isLoading && <p>{t('common.loading')}</p>}
             {teachingQuery.isError && (
@@ -622,10 +623,11 @@ export default function Constructor(): JSX.Element {
 
               {/* Отправка на модерацию — только для черновика. */}
               {editable ? (
-                <div className="teach-section">
+                <div className="teach-section panel">
                   <div className="teach-card-actions">
                     <button
                       type="button"
+                      className="btn btn-primary"
                       onClick={onSubmitForReview}
                       disabled={submitMutation.isPending}
                     >
@@ -641,12 +643,13 @@ export default function Constructor(): JSX.Element {
               {/* Создание модулей и уроков — только в черновике. */}
               {editable && (
                 <>
-                  <section className="teach-section">
+                  <section className="teach-section panel">
                     <h2>{t('teach.addModule')}</h2>
                     <form onSubmit={onModuleSubmit} noValidate>
                       <label htmlFor="module-title">{t('teach.moduleTitle')}</label>
                       <input
                         id="module-title"
+                        className="input"
                         value={moduleTitle}
                         onChange={(e) => {
                           setModuleTitle(e.target.value);
@@ -656,6 +659,7 @@ export default function Constructor(): JSX.Element {
                       {moduleError && <p className="error">{moduleError}</p>}
                       <button
                         type="submit"
+                        className="btn"
                         disabled={!moduleTitle.trim() || moduleMutation.isPending}
                       >
                         {moduleMutation.isPending ? t('teach.saving') : t('teach.addModule')}
@@ -663,13 +667,14 @@ export default function Constructor(): JSX.Element {
                     </form>
                   </section>
 
-                  <section className="teach-section">
+                  <section className="teach-section panel">
                     <h2>{t('teach.addLesson')}</h2>
                     {modules.length === 0 && <p className="muted">{t('teach.hintEmptyCourse')}</p>}
-                    <form onSubmit={onLessonSubmit} noValidate>
+                    <form onSubmit={onLessonSubmit} noValidate className="form-grid">
                       <label htmlFor="lesson-module">Модуль</label>
                       <select
                         id="lesson-module"
+                        className="select"
                         value={lesson.moduleId}
                         onChange={(e) => setLessonField('moduleId', e.target.value)}
                       >
@@ -687,6 +692,7 @@ export default function Constructor(): JSX.Element {
                       <label htmlFor="lesson-title">{t('teach.lessonTitle')}</label>
                       <input
                         id="lesson-title"
+                        className="input"
                         value={lesson.title}
                         onChange={(e) => setLessonField('title', e.target.value)}
                       />
@@ -697,6 +703,7 @@ export default function Constructor(): JSX.Element {
                       <label htmlFor="lesson-kind">{t('teach.lessonKind')}</label>
                       <select
                         id="lesson-kind"
+                        className="select"
                         value={lesson.kind}
                         onChange={(e) => setLessonField('kind', e.target.value as LessonKind)}
                       >
@@ -712,6 +719,7 @@ export default function Constructor(): JSX.Element {
                           <label htmlFor="lesson-body-md">{t('teach.bodyMd')}</label>
                           <textarea
                             id="lesson-body-md"
+                            className="input"
                             rows={5}
                             value={lesson.bodyMd}
                             onChange={(e) => setLessonField('bodyMd', e.target.value)}
@@ -719,6 +727,7 @@ export default function Constructor(): JSX.Element {
                           <label htmlFor="lesson-video-url">{t('teach.videoUrl')}</label>
                           <input
                             id="lesson-video-url"
+                            className="input"
                             value={lesson.videoUrl}
                             onChange={(e) => setLessonField('videoUrl', e.target.value)}
                           />
@@ -733,6 +742,7 @@ export default function Constructor(): JSX.Element {
                           <label htmlFor="lesson-live-url">{t('teach.liveUrl')}</label>
                           <input
                             id="lesson-live-url"
+                            className="input"
                             value={lesson.liveUrl}
                             onChange={(e) => setLessonField('liveUrl', e.target.value)}
                           />
@@ -742,6 +752,7 @@ export default function Constructor(): JSX.Element {
                           <label htmlFor="lesson-starts-at">{t('teach.startsAt')}</label>
                           <input
                             id="lesson-starts-at"
+                            className="input"
                             type="datetime-local"
                             value={lesson.startsAt}
                             onChange={(e) => setLessonField('startsAt', e.target.value)}
@@ -908,7 +919,7 @@ export default function Constructor(): JSX.Element {
                         </div>
                       )}
 
-                      <button type="submit" disabled={lessonMutation.isPending}>
+                      <button type="submit" className="btn btn-primary" disabled={lessonMutation.isPending}>
                         {lessonMutation.isPending ? t('teach.saving') : t('teach.addLesson')}
                       </button>
                     </form>
@@ -917,7 +928,7 @@ export default function Constructor(): JSX.Element {
               )}
 
               {/* Программа курса (только чтение). */}
-              <section className="teach-section">
+              <section className="teach-section panel">
                 <h2>{t('course.program')}</h2>
                 {modules.length === 0 ? (
                   <p className="muted">{t('learn.empty')}</p>
@@ -954,6 +965,7 @@ export default function Constructor(): JSX.Element {
           {notice.text}
         </p>
       )}
+      </div>
     </main>
   );
 }

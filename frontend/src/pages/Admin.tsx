@@ -287,7 +287,9 @@ export default function Admin(): JSX.Element {
   const showPager = !!journalData && (journalTotal > 0 || page > 1);
 
   return (
-    <main className="admin">
+    <div className="wrap">
+      <div className="page">
+        <main className="admin">
       <h1>{t('cabinet.adminTitle')}</h1>
 
       <nav className="admin-nav" aria-label={t('cabinet.adminTitle')}>
@@ -298,14 +300,14 @@ export default function Admin(): JSX.Element {
       </nav>
 
       {/* ---------- 1. Очередь модерации ---------- */}
-      <section id="queue" className="admin-section">
+      <section id="queue" className="admin-section panel">
         <h2>{t('admin.reviewQueue')}</h2>
 
         {queue.isLoading && <p>{t('admin.loading')}</p>}
         {queue.isError && (
           <div className="admin-error" role="alert">
             <p className="error">{errorText(queue.error)}</p>
-            <button type="button" onClick={() => void queue.refetch()}>
+            <button type="button" className="btn" onClick={() => void queue.refetch()}>
               {t('common.retry')}
             </button>
           </div>
@@ -318,9 +320,9 @@ export default function Admin(): JSX.Element {
         )}
 
         {queue.data && queue.data.length > 0 && (
-          <ul className="admin-queue list">
+          <ul className="admin-queue list teach-list">
             {queue.data.map((c) => (
-              <li key={c.id} className="card admin-queue-card">
+              <li key={c.id} className="card admin-queue-card l-item">
                 <div className="admin-queue-card__head">
                   <strong>{c.title}</strong>
                   <span className="muted">{formatDate(c.createdAt)}</span>
@@ -337,10 +339,11 @@ export default function Admin(): JSX.Element {
                     <dd>{money(c.priceCents)}</dd>
                   </div>
                 </dl>
-                <div className="admin-queue-actions">
+                <div className="admin-queue-actions btn-row">
                   <label className="admin-comment">
                     <span className="sr-only">{t('admin.comment')}</span>
                     <input
+                      className="input"
                       value={comments[c.id] ?? ''}
                       onChange={(e) => setComments((prev) => ({ ...prev, [c.id]: e.target.value }))}
                       placeholder={t('admin.comment')}
@@ -349,6 +352,7 @@ export default function Admin(): JSX.Element {
                   </label>
                   <button
                     type="button"
+                    className="btn btn-primary"
                     onClick={() => onModerate(c.id, 'approve')}
                     disabled={moderateMutation.isPending}
                   >
@@ -356,7 +360,7 @@ export default function Admin(): JSX.Element {
                   </button>
                   <button
                     type="button"
-                    className="admin-btn--danger"
+                    className="btn admin-btn--danger"
                     onClick={() => onModerate(c.id, 'reject')}
                     disabled={moderateMutation.isPending}
                   >
@@ -375,7 +379,7 @@ export default function Admin(): JSX.Element {
       </section>
 
       {/* ---------- 2. Журнал платежей ---------- */}
-      <section id="journal" className="admin-section">
+      <section id="journal" className="admin-section panel">
         <h2>{t('admin.journal')}</h2>
 
         <div className="admin-filters">
@@ -384,6 +388,7 @@ export default function Admin(): JSX.Element {
             {t('admin.filterStatus')}
             <select
               id="admin-filter-status"
+              className="input"
               value={status ?? ''}
               onChange={(e) => setParams({ status: e.target.value || null, page: null })}
             >
@@ -399,6 +404,7 @@ export default function Admin(): JSX.Element {
             {t('admin.filterCourse')}
             <select
               id="admin-filter-course"
+              className="input"
               value={courseId ?? ''}
               onChange={(e) => setParams({ courseId: e.target.value || null, page: null })}
             >
@@ -412,6 +418,7 @@ export default function Admin(): JSX.Element {
           </label>
           <button
             type="button"
+            className="btn"
             onClick={() => setSearchParams({})}
             disabled={searchParams.toString() === ''}
           >
@@ -423,7 +430,7 @@ export default function Admin(): JSX.Element {
         {journal.isError && (
           <div className="admin-error" role="alert">
             <p className="error">{errorText(journal.error)}</p>
-            <button type="button" onClick={() => void journal.refetch()}>
+            <button type="button" className="btn" onClick={() => void journal.refetch()}>
               {t('common.retry')}
             </button>
           </div>
@@ -507,6 +514,7 @@ export default function Admin(): JSX.Element {
           <div className="admin-pager">
             <button
               type="button"
+              className="btn"
               disabled={page <= 1 || journal.isFetching}
               onClick={() => setParams({ page: String(page - 1) })}
             >
@@ -517,6 +525,7 @@ export default function Admin(): JSX.Element {
             </span>
             <button
               type="button"
+              className="btn"
               disabled={isLastPage || journal.isFetching}
               onClick={() => setParams({ page: String(page + 1) })}
             >
@@ -527,23 +536,24 @@ export default function Admin(): JSX.Element {
       </section>
 
       {/* ---------- 3. Настройки комиссии ---------- */}
-      <section id="settings" className="admin-section">
+      <section id="settings" className="admin-section panel">
         <h2>{t('admin.commissionPct')}</h2>
 
         {settings.isLoading && <p>{t('admin.loading')}</p>}
         {settings.isError && (
           <div className="admin-error" role="alert">
             <p className="error">{errorText(settings.error)}</p>
-            <button type="button" onClick={() => void settings.refetch()}>
+            <button type="button" className="btn" onClick={() => void settings.refetch()}>
               {t('common.retry')}
             </button>
           </div>
         )}
 
-        <form onSubmit={onSaveCommission}>
+        <form className="form-grid" onSubmit={onSaveCommission}>
           <label htmlFor="admin-commission">{t('admin.commissionPct')}</label>
           <input
             id="admin-commission"
+            className="input"
             type="number"
             min={0}
             max={90}
@@ -558,25 +568,25 @@ export default function Admin(): JSX.Element {
               {commissionMsg.text}
             </p>
           )}
-          <button type="submit" disabled={commissionMutation.isPending || settings.isLoading}>
+          <button type="submit" className="btn btn-primary" disabled={commissionMutation.isPending || settings.isLoading}>
             {commissionMutation.isPending ? t('admin.loading') : t('admin.save')}
           </button>
         </form>
       </section>
 
       {/* ---------- 4. Приглашения ---------- */}
-      <section id="invites" className="admin-section">
+      <section id="invites" className="admin-section panel">
         <h2>{t('admin.invites')}</h2>
 
-        <form onSubmit={handleSubmit((v) => inviteMutation.mutate(v))}>
+        <form className="form-grid" onSubmit={handleSubmit((v) => inviteMutation.mutate(v))}>
           <label htmlFor="admin-invite-email">{t('admin.inviteEmail')}</label>
-          <input id="admin-invite-email" type="email" {...register('email')} />
+          <input id="admin-invite-email" className="input" type="email" {...register('email')} />
           {formState.errors.email && (
             <p role="alert" className="error">
               {formState.errors.email.message}
             </p>
           )}
-          <button type="submit" disabled={inviteMutation.isPending}>
+          <button type="submit" className="btn btn-primary" disabled={inviteMutation.isPending}>
             {t('admin.inviteSend')}
           </button>
         </form>
@@ -600,7 +610,7 @@ export default function Admin(): JSX.Element {
             </p>
             <code className="admin-token__value">{invite.token}</code>
             <p className="muted">{formatDate(invite.expiresAt)}</p>
-            <button type="button" onClick={() => void onCopyToken()}>
+            <button type="button" className="btn" onClick={() => void onCopyToken()}>
               {tokenCopied ? t('admin.tokenCopied') : t('admin.copyToken')}
             </button>
             {tokenCopyError && (
@@ -611,6 +621,8 @@ export default function Admin(): JSX.Element {
           </div>
         )}
       </section>
-    </main>
+        </main>
+      </div>
+    </div>
   );
 }
