@@ -141,7 +141,7 @@ npm run build
 | 1 | `User.displayName` обещан контрактом, `handler/auth.go` не отдаёт | ✅ закрыто T10 — добавлен в `Register`/`Login`/`Me` |
 | 2 | `POST /auth/logout` возвращает `200 {"status":"ok"}`, а не `204` | ✅ решено оставить `200` — существующий тест `tests/contract/auth_test.go:44` требует `StatusOK`. **Контракт нужно поправить на 200** (T14) |
 | 3 | `listReviews` теряет `avgRating`/`ratingsCount` | ✅ учтено — T04 берёт рейтинг из `getCourse()` |
-| 4 | `POST .../lessons` принимает `startsAt`, но **не сохраняет** его в урок | ❌ открыт — подтверждено T03 и T06. Бэкенд-баг, файл `handler/teacher.go` у T13 |
+| 4 | `POST .../lessons` принимает `startsAt`, но **не сохраняет** его в урок | ✅ закрыто — handler копирует поле (RFC3339 + datetime-local + дата), контракт-тест перевёрнут |
 | 5 | `GET /admin/payments` не отдаёт email/имя студента — только `studentId` | ❌ открыт — T08 показывает укороченный UUID. Требует расширения контракта |
 | 6 | `formatPrice(0)` возвращает «Бесплатно», что неверно для итогов журнала | ⚠️ T08 обошёл локальным форматтером, `client.ts` не тронут |
 

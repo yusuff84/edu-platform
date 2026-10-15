@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -149,6 +150,18 @@ type createLessonRequest struct {
 	CodeTask *repo.CodeTask  `json:"codeTask"`
 }
 
+// parseLessonStartsAt разбирает дату начала урока: RFC3339, datetime-local
+// без зоны (считаем местным временем) или просто дата (полночь местная).
+func parseLessonStartsAt(raw string) (time.Time, error) {
+	if t, err := time.Parse(time.RFC3339, raw); err == nil {
+		return t, nil
+	}
+	if t, err := time.ParseInLocation("2006-01-02T15:04", raw, time.Local); err == nil {
+		return t, nil
+	}
+	return time.ParseInLocation("2006-01-02", raw, time.Local)
+}
+
 // TeacherCreateLesson — POST /teacher/courses/{id}/lessons с валидацией по kind.
 func (a *App) TeacherCreateLesson(w http.ResponseWriter, r *http.Request) {
 	_, c, ok := a.ownCourse(w, r)
@@ -177,6 +190,17 @@ func (a *App) TeacherCreateLesson(w http.ResponseWriter, r *http.Request) {
 		LiveURL:  strings.TrimSpace(req.LiveURL),
 		Quiz:     req.Quiz,
 		CodeTask: req.CodeTask,
+	}
+	if req.StartsAt != nil {
+		raw := strings.TrimSpace(*req.StartsAt)
+		if raw != "" {
+			parsed, err := parseLessonStartsAt(raw)
+			if err != nil {
+				writeErr(w, http.StatusBadRequest, "Некорректная дата начала (нужен RFC3339, например 2026-10-09T19:00:00+03:00)")
+				return
+			}
+			l.StartsAt = &parsed
+		}
 	}
 	switch req.Kind {
 	case repo.LessonVideoText:

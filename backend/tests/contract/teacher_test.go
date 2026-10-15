@@ -303,12 +303,10 @@ func TestQuizCorrectAnswersDoNotLeak(t *testing.T) {
 	}
 }
 
-// ПОДТВЕРЖДЁННОЕ РАСХОЖДЕНИЕ №4 (Task/00-api-contract.md): POST
-// /teacher/courses/{id}/lessons принимает startsAt, но НЕ сохраняет его
-// (handler/teacher.go не копирует поле в repo.Lesson). Тест фиксирует
-// ФАКТИЧЕСКОЕ поведение: если баг починят — тест упадёт и его нужно
-// будет обновить на «startsAt сохраняется».
-func TestStartsAtNotPersistedDiscrepancy4(t *testing.T) {
+// Расхождение №4 ЗАКРЫТО: POST /teacher/courses/{id}/lessons теперь
+// сохраняет startsAt (handler/teacher.go копирует поле в repo.Lesson).
+// Тест проверяет сохранение и видимость даты в публичном виде урока.
+func TestStartsAtPersistedDiscrepancy4Fixed(t *testing.T) {
 	app, router := newTestApp()
 	teacherCookies, courseID, _ := seedPublishedCourse(t, app, router, 0)
 	mods := app.Store.ListModulesByCourse(courseID)
@@ -322,10 +320,20 @@ func TestStartsAtNotPersistedDiscrepancy4(t *testing.T) {
 	}
 	var lesson map[string]any
 	decodeBody(t, rec, &lesson)
-	if lesson["startsAt"] != nil {
-		t.Fatalf("ожидали, что startsAt не сохранится (расхождение №4), got %v", lesson["startsAt"])
+	got, _ := lesson["startsAt"].(string)
+	if !strings.HasPrefix(got, "2030-01-01T12:00:00") {
+		t.Fatalf("startsAt должен сохраниться, got %v (%s)", lesson["startsAt"], rec.Body.String())
 	}
 	if lesson["liveUrl"] == "" {
 		t.Fatalf("liveUrl должен сохраниться: %s", rec.Body.String())
+	}
+
+	// Некорректная дата — 400.
+	rec = doRequest(t, router, http.MethodPost, "/api/v1/teacher/courses/"+courseID+"/lessons", map[string]any{
+		"moduleId": mods[0].ID, "title": "Эфир 2", "kind": "live",
+		"liveUrl": "https://live.example/stream", "startsAt": "когда-нибудь",
+	}, teacherCookies)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("некорректный startsAt: status=%d body=%s", rec.Code, rec.Body.String())
 	}
 }
