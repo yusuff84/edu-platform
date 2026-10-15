@@ -1,19 +1,44 @@
 import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import type { CourseStatus } from '../api/client';
 import { ApiError, enroll, formatPrice, getCourse, me, myCourses } from '../api/client';
 import Reviews from '../components/Reviews';
-import { coverFor } from '../components/CourseCard';
 import { t } from '../i18n/t';
+import '../styles/catalog.css';
+
+/** Человеческая подпись статуса курса (для баннера автора/админа). */
+function statusLabel(status: CourseStatus): string {
+  switch (status) {
+    case 'draft':
+      return t('teach.statusDraft');
+    case 'review':
+      return t('teach.statusReview');
+    case 'published':
+      return t('teach.statusPublished');
+    case 'archived':
+      return t('teach.statusArchived');
+  }
+}
+
+const COVERS = ['cover-py', 'cover-html', 'cover-js', 'cover-sql', 'cover-fig', 'cover-linux'];
+
+/** Фон обложки по слагу. Локальная копия (не зависим от слияния CourseCard). */
+function coverFor(key: string): string {
+  let h = 0;
+  for (let i = 0; i < key.length; i += 1) h = (h * 31 + key.charCodeAt(i)) >>> 0;
+  return COVERS[h % COVERS.length];
+}
 
 const ALL_CLOSED = '__closed';
 
 export default function Course(): JSX.Element {
+  // slug — человекоприятный слаг из URL, не UUID; контракт: GET /courses/{slug}.
   const { slug = '' } = useParams();
   const qc = useQueryClient();
   const [message, setMessage] = useState('');
-  const [alreadyOwned, setAlreadyOwned] = useState(false);
   const [openModuleId, setOpenModuleId] = useState<string | null>(null);
+  // После T01 getCourse распаковывает конверт { course, modules } в CourseDetail.
   const courseQuery = useQuery({
     queryKey: ['course', slug],
     queryFn: () => getCourse(slug),
@@ -21,6 +46,7 @@ export default function Course(): JSX.Element {
     retry: false,
   });
   const meQuery = useQuery({ queryKey: ['me'], queryFn: me, retry: false });
+  // Активная запись: /me/courses после T01 — массив MyCourse (курс лежит в m.course).
   const myQuery = useQuery({
     queryKey: ['my-courses'],
     queryFn: myCourses,
@@ -32,16 +58,22 @@ export default function Course(): JSX.Element {
     mutationFn: (courseId: string) => enroll(courseId, 'mock'),
     onSuccess: (res) => {
       setMessage('');
-      setAlreadyOwned(false);
       void qc.invalidateQueries({ queryKey: ['my-courses'] });
-      if (res.redirectUrl) window.location.href = res.redirectUrl;
+      if (res.redirectUrl) {
+        window.location.href = res.redirectUrl;
+        return;
+      }
+      // Бесплатный курс: запись активна сразу — покажем переход к обучению.
+      if (res.enrollmentActive) setMessage(t('course.openLearn'));
     },
     onError: (e: unknown) => {
       if (e instanceof ApiError && e.status === 409) {
-        setAlreadyOwned(true);
+        // 409 «уже есть активная запись» — не ошибка, а сообщение.
         setMessage(t('course.alreadyBought'));
         void qc.invalidateQueries({ queryKey: ['my-courses'] });
-      } else setMessage(e instanceof Error ? e.message : t('common.error'));
+      } else {
+        setMessage(e instanceof Error ? e.message : t('common.error'));
+      }
     },
   });
 
@@ -49,14 +81,15 @@ export default function Course(): JSX.Element {
     return (
       <div className="wrap">
         <div className="page">
-          <p>{t('course.loading')}</p>
+          <p role="status">{t('course.loading')}</p>
         </div>
       </div>
     );
   if (courseQuery.isError || !courseQuery.data) {
     const status =
       courseQuery.error instanceof ApiError ? courseQuery.error.status : undefined;
-    if (status === 404 || !courseQuery.isError) {
+    if (status === 404) {
+      // Черновик/снятый курс бэкенд отдаёт как 404 для посторонних.
       return (
         <div className="wrap">
           <div className="page">
@@ -92,21 +125,21 @@ export default function Course(): JSX.Element {
       </div>
     );
   }
+
   const course = courseQuery.data;
-  const owned =
-    alreadyOwned || (myQuery.data ?? []).some((m) => m.courseId === course.id);
+  const user = meQuery.data;
+  // Кнопка покупки — только когда список записей загружен (не мигает для записанных).
+  const owned = (myQuery.data ?? []).some((m) => m.course.id === course.id);
   const modules = course.modules ?? [];
-  const lessonsCount =
-    course.lessonsCount ?? modules.reduce((n, m) => n + m.lessons.length, 0);
-  const modulesCount = course.modulesCount ?? modules.length;
-  const teacherInitials = (course.teacherName ?? '')
-    .trim()
-    .split(/\s+/)
-    .filter(Boolean)
-    .map((w) => w.charAt(0))
-    .slice(0, 2)
-    .join('')
-    .toUpperCase();
+  // Контракт не отдаёт lessonsCount/modulesCount — считаем из модулей.
+  const lessonsCount = modules.reduce((n, m) => n + m.lessons.length, 0);
+  const modulesCount = modules.length;
+  const isAuthor = user?.id === course.teacherId;
+  const isAdmin = user?.role === 'admin';
+  // Баннер статуса виден только автору/админу: остальным бэкенд такие курсы отдаёт 404.
+  const showBanner = course.status !== 'published' && (isAuthor || isAdmin);
+  // Курс вернулся в draft с комментарием = отклонён модератором.
+  const rejected = course.status === 'draft' && Boolean(course.moderationComment);
   const isOpen = (id: string, index: number): boolean =>
     openModuleId === null ? index === 0 : openModuleId === id;
   const toggle = (id: string, index: number): void =>
@@ -118,6 +151,26 @@ export default function Course(): JSX.Element {
         <div className="crumbs">
           <Link to="/">{t('catalog.title')}</Link> / {course.title}
         </div>
+
+        {showBanner && (
+          <section className="course-banner" aria-label={t('teach.status')}>
+            <strong>
+              {t('teach.status')}: {statusLabel(course.status)}
+            </strong>
+            {rejected && (
+              <p>
+                <strong>{t('teach.rejected')}</strong>
+                {course.moderationComment && (
+                  <>
+                    {' — '}
+                    {t('teach.moderationComment')}: {course.moderationComment}
+                  </>
+                )}
+              </p>
+            )}
+          </section>
+        )}
+
         <div className="two">
           <div style={{ display: 'grid', gap: 22, alignContent: 'start' }}>
             <section className="panel">
@@ -128,18 +181,19 @@ export default function Course(): JSX.Element {
               <p className="muted">{course.description}</p>
               <div className="meta">
                 <span className="rating">★ {(course.avgRating ?? 0).toFixed(1)}</span>
-                <span>({course.reviewsCount ?? 0})</span>
+                <span>({course.ratingsCount ?? 0})</span>
                 <span>
-                  {lessonsCount} {t('course.lessons')}
+                  {lessonsCount} {t('course.lessonsCount')}
                 </span>
                 <span>
-                  {modulesCount} {t('course.modules')}
+                  {modulesCount} {t('course.modulesCount')}
                 </span>
               </div>
             </section>
 
             <section className="panel">
               <h2>{t('course.program')}</h2>
+              {modules.length === 0 && <p className="muted">{t('learn.noLessons')}</p>}
               <div style={{ marginTop: 12 }}>
                 {modules.map((m, i) => {
                   const open = isOpen(m.id, i);
@@ -218,15 +272,21 @@ export default function Course(): JSX.Element {
               style={{ height: 150, borderRadius: 12 }}
             />
             <div className="price">{formatPrice(course.priceCents)}</div>
-            {!meQuery.data && <p className="muted">{t('course.loginToBuy')}</p>}
-            {meQuery.data && !owned && (
+            {!user && !meQuery.isLoading && (
+              <p className="muted">{t('course.loginToBuy')}</p>
+            )}
+            {user && !owned && !myQuery.isLoading && (
               <button
                 type="button"
                 className="btn btn-primary"
                 onClick={() => buyMutation.mutate(course.id)}
                 disabled={buyMutation.isPending}
               >
-                {buyMutation.isPending ? t('course.buying') : t('course.buy')}
+                {buyMutation.isPending
+                  ? t('course.buying')
+                  : course.priceCents === 0
+                    ? t('course.enrollFree')
+                    : t('course.buy')}
               </button>
             )}
             {owned && (
@@ -234,21 +294,12 @@ export default function Course(): JSX.Element {
                 {t('course.openLearn')}
               </Link>
             )}
-            {message && <p role="status">{message}</p>}
-            <p className="notice">Возврат в течение 7 дней без лишних вопросов.</p>
-            {course.teacherName && (
-              <div className="teacher">
-                <div className="avatar" aria-hidden="true">
-                  {teacherInitials}
-                </div>
-                <div>
-                  <div className="muted">{t('course.teacher')}</div>
-                  <div>
-                    <strong>{course.teacherName}</strong>
-                  </div>
-                </div>
-              </div>
+            {message && (
+              <p role="status" aria-live="polite">
+                {message}
+              </p>
             )}
+            <p className="notice">Возврат в течение 7 дней без лишних вопросов.</p>
           </aside>
         </div>
       </div>

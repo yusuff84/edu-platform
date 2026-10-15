@@ -1,6 +1,6 @@
-import { useMemo, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
+import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { listCourses, me } from '../api/client';
 import CourseCard from '../components/CourseCard';
 import {
@@ -12,6 +12,14 @@ import {
   SupportBlock,
 } from '../components/marketing';
 import { t } from '../i18n/t';
+import '../styles/catalog.css';
+
+/** Размер страницы каталога (контракт: limit по умолч. 20, максимум 100). */
+const LIMIT = 12;
+/** Сколько скелетонов показывать во время загрузки. */
+const SKELETONS = 6;
+/** Задержка поиска, мс. */
+const DEBOUNCE_MS = 300;
 
 type Seg = 'often' | 'rating' | 'price';
 
@@ -31,37 +39,104 @@ const SEGS: Array<{ key: Seg; label: string }> = [
 ];
 
 export default function Catalog(): JSX.Element {
-  const [q, setQ] = useState('');
-  const [submitted, setSubmitted] = useState('');
+  const [searchParams, setSearchParams] = useSearchParams();
+  // Поиск живёт в URL (?q=) — ссылку можно передать, «назад/вперёд» работает.
+  const urlQ = searchParams.get('q') ?? '';
+
+  // Локальное значение поля ввода; в URL попадает после дебаунса.
+  const [q, setQ] = useState(urlQ);
+  const [page, setPage] = useState(1);
   const [seg, setSeg] = useState<Seg>('often');
   const [activePill, setActivePill] = useState('Популярное');
   const cardsRef = useRef<HTMLDivElement>(null);
+
+  // Изменение URL извне (кнопка «назад», внешняя ссылка) → текст в поле.
+  useEffect(() => {
+    setQ(urlQ);
+  }, [urlQ]);
+
+  // Дебаунс 300 мс: пишем запрос в ?q= и сбрасываем страницу на первую.
+  useEffect(() => {
+    const next = q.trim();
+    if (next === urlQ) return;
+    const id = window.setTimeout(() => {
+      setSearchParams(
+        (prev) => {
+          const p = new URLSearchParams(prev);
+          if (next) p.set('q', next);
+          else p.delete('q');
+          return p;
+        },
+        { replace: true },
+      );
+      setPage(1);
+    }, DEBOUNCE_MS);
+    return () => window.clearTimeout(id);
+  }, [q, urlQ, setSearchParams]);
+
   const query = useQuery({
-    queryKey: ['courses', submitted],
-    queryFn: () => listCourses({ q: submitted || undefined, page: 1, limit: 20 }),
+    // Данные предыдущей страницы держим на экране, пока грузится новая.
+    queryKey: ['courses', urlQ, page, LIMIT],
+    queryFn: () => listCourses({ q: urlQ || undefined, page, limit: LIMIT }),
+    placeholderData: keepPreviousData,
+    retry: false,
   });
   const meQuery = useQuery({ queryKey: ['me'], queryFn: me, retry: false });
   const role = meQuery.data?.role;
 
+  // Клиентская сортировка вкладок поверх серверной выдачи страницы.
   const items = useMemo(() => {
     const list = [...(query.data?.items ?? [])];
-    if (seg === 'often') list.sort((a, b) => (b.reviewsCount ?? 0) - (a.reviewsCount ?? 0));
+    if (seg === 'often') list.sort((a, b) => (b.ratingsCount ?? 0) - (a.ratingsCount ?? 0));
     if (seg === 'rating') list.sort((a, b) => b.avgRating - a.avgRating);
     if (seg === 'price') list.sort((a, b) => a.priceCents - b.priceCents);
     return list;
   }, [query.data, seg]);
 
-  const total = query.data?.total ?? 0;
+  const data = query.data;
+  const total = data?.total ?? 0;
+  const totalPages = Math.max(1, Math.ceil(total / LIMIT));
+
+  // Страница могла выйти за пределы выдачи (поиск уменьшил total) — вернуться на последнюю.
+  useEffect(() => {
+    if (data && page > totalPages) setPage(totalPages);
+  }, [data, page, totalPages]);
+
   const avgRating =
     items.length > 0 ? items.reduce((n, c) => n + c.avgRating, 0) / items.length : 0;
-  const totalReviews = items.reduce((n, c) => n + (c.reviewsCount ?? 0), 0);
+  const totalReviews = items.reduce((n, c) => n + (c.ratingsCount ?? 0), 0);
 
-  const isSearching = submitted.trim().length > 0;
-  const isEmpty = Boolean(query.data) && items.length === 0;
+  const isSearching = urlQ.trim().length > 0;
+  const isEmpty = Boolean(data) && items.length === 0;
+  // «Показано N из M»: сколько курсов пользователь уже увидел листанием.
+  const shown = data ? Math.min(total, (page - 1) * LIMIT + items.length) : 0;
 
-  function applySearch(term: string): void {
-    setQ(term);
-    setSubmitted(term.trim());
+  /** Применить текущий текст поля сразу (по кнопке «Найти» или пилюле), без дебаунса. */
+  function applySearch(value: string): void {
+    const next = value.trim();
+    setSearchParams(
+      (prev) => {
+        const p = new URLSearchParams(prev);
+        if (next) p.set('q', next);
+        else p.delete('q');
+        return p;
+      },
+      { replace: true },
+    );
+    setPage(1);
+  }
+
+  function resetSearch(): void {
+    setQ('');
+    setActivePill('Популярное');
+    applySearch('');
+  }
+
+  function onPill(pill: { label: string; q: string }): void {
+    setActivePill(pill.label);
+    setSeg('often');
+    setQ(pill.q);
+    applySearch(pill.q);
   }
 
   function scrollToCards(): void {
@@ -106,11 +181,7 @@ export default function Catalog(): JSX.Element {
                 key={p.label}
                 type="button"
                 className={`cat${activePill === p.label ? ' active' : ''}`}
-                onClick={() => {
-                  setActivePill(p.label);
-                  setSeg('often');
-                  applySearch(p.q);
-                }}
+                onClick={() => onPill(p)}
               >
                 {p.label}
               </button>
@@ -155,7 +226,7 @@ export default function Catalog(): JSX.Element {
             className="search-row"
             onSubmit={(e) => {
               e.preventDefault();
-              setSubmitted(q.trim());
+              applySearch(q);
             }}
           >
             <div className="search-wrap">
@@ -192,8 +263,25 @@ export default function Catalog(): JSX.Element {
           </span>
         </div>
 
-        {query.isLoading && <p>{t('catalog.loading')}</p>}
-        {query.isError && <p>{t('catalog.error')}</p>}
+        {query.isLoading && (
+          <>
+            <p role="status">{t('catalog.loading')}</p>
+            <div className="catalog-skeletons" aria-hidden="true">
+              {Array.from({ length: SKELETONS }, (_, i) => (
+                <div key={i} className="catalog-skeleton" />
+              ))}
+            </div>
+          </>
+        )}
+
+        {query.isError && (
+          <>
+            <p role="alert">{t('catalog.error')}</p>
+            <button type="button" className="btn" onClick={() => void query.refetch()}>
+              {t('error.retry')}
+            </button>
+          </>
+        )}
 
         {isEmpty && (
           <div className="empty">
@@ -204,14 +292,7 @@ export default function Catalog(): JSX.Element {
                 : t('catalog.emptyCatalogHint')}
             </p>
             {isSearching ? (
-              <button
-                type="button"
-                className="btn"
-                onClick={() => {
-                  setActivePill('Популярное');
-                  applySearch('');
-                }}
-              >
+              <button type="button" className="btn" onClick={resetSearch}>
                 Сбросить фильтры
               </button>
             ) : (
@@ -240,6 +321,30 @@ export default function Catalog(): JSX.Element {
             <CourseCard key={c.id} course={c} />
           ))}
         </div>
+
+        {data && total > LIMIT && (
+          <nav className="catalog-pager" aria-label={t('catalog.title')}>
+            <button
+              type="button"
+              className="btn btn-sm"
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              disabled={page <= 1}
+            >
+              {t('common.prev')}
+            </button>
+            <span className="muted" aria-live="polite">
+              {t('admin.showing')} {shown} {t('admin.of')} {total}
+            </span>
+            <button
+              type="button"
+              className="btn btn-sm"
+              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              disabled={page >= totalPages}
+            >
+              {t('common.next')}
+            </button>
+          </nav>
+        )}
 
         <SupportBlock />
         <PerksBlock />

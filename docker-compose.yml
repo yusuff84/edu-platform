@@ -28,6 +28,41 @@ services:
       RUNNER_URL: http://runner:8081
       ADMIN_EMAIL: ${ADMIN_EMAIL:-}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+      # CORS/CSRF (config.Load)
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:3000,http://127.0.0.1:3000}
+      APP_ENV: ${APP_ENV:-}
+      COOKIE_SAMESITE: ${COOKIE_SAMESITE:-}
+      CSRF_ALLOW_MISSING_ORIGIN: ${CSRF_ALLOW_MISSING_ORIGIN:-}
+      # Rate-limit (T10); пустое значение — дефолты config.Load
+      RATE_LIMIT_AUTH_PER_MIN: ${RATE_LIMIT_AUTH_PER_MIN:-}
+      RATE_LIMIT_GLOBAL_PER_MIN: ${RATE_LIMIT_GLOBAL_PER_MIN:-}
+      RATE_LIMIT_WEBHOOK_PER_MIN: ${RATE_LIMIT_WEBHOOK_PER_MIN:-}
+      # Платежи (T09); пустые значения не мешают mock-провайдеру
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
+      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
+      YOOKASSA_SHOP_ID: ${YOOKASSA_SHOP_ID:-}
+      YOOKASSA_SECRET_KEY: ${YOOKASSA_SECRET_KEY:-}
+      YOOKASSA_TRUSTED_IPS: ${YOOKASSA_TRUSTED_IPS:-}
+      MOCK_WEBHOOK_SECRET: ${MOCK_WEBHOOK_SECRET:-}
+      PAYMENTS_RETURN_URL: ${PAYMENTS_RETURN_URL:-}
+      # Яндекс OAuth (T10/T13); без ключей /auth/yandex/start отвечает 503
+      YANDEX_CLIENT_ID: ${YANDEX_CLIENT_ID:-}
+      YANDEX_CLIENT_SECRET: ${YANDEX_CLIENT_SECRET:-}
+      YANDEX_REDIRECT_URI: ${YANDEX_REDIRECT_URI:-}
+    # RUNNER_URL: http://runner:8081 уже есть в сервисе.
+    # api НЕ зависит от runner (depends_on отсутствует): при недоступном
+    # runner сервис деградирует мягко («сервис проверки недоступен»),
+    # а не падает при старте (оговорка T11).
+    networks:
+      - default
+      - runner_net
+    # healthcheck (образ alpine → busybox wget):
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
     depends_on:
       db:
         condition: service_healthy
@@ -36,15 +71,46 @@ services:
     build: ./frontend
     restart: unless-stopped
     ports:
-      - "3000:80"
+      # Порт вынесен в переменную: 3000 на машине может быть занят другим
+      # проектом (проверено: olymp-frontend-1). По умолчанию — 3000.
+      - "${WEB_PORT:-3000}:80"
     depends_on:
       - api
 
   runner:
     build: ./runner
     restart: unless-stopped
-    ports:
-      - "8081:8081"
+    networks:
+      - runner_net            # только внутренняя сеть — у runner нет выхода в интернет
+    # Порт НЕ публикуется: на internal-сети Docker всё равно его не публикует
+    # (проверено: NetworkSettings.Ports = {"8081/tcp":[]}). api ходит по http://runner:8081.
+    read_only: true                      # корневая ФС только на чтение
+    tmpfs:
+      - /tmp:size=32m,mode=1777          # сюда пишется код ученика (WORKDIR=/tmp)
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    # pids_limit и deploy.resources.limits.pids одновременно Compose запрещает
+    # («can't set distinct values»), поэтому лимит процессов — внутри deploy.
+    deploy:
+      resources:
+        limits:
+          cpus: "0.50"
+          memory: 256M
+          pids: 64                   # защита от форк-бомбы
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request;urllib.request.urlopen('http://127.0.0.1:8081/health',timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
 
 volumes:
   pgdata:
+
+# runner_net — внутренняя сеть: контейнеры api и runner общаются внутри,
+# выхода в интернет из неё нет (internal: true, проверено T11).
+networks:
+  runner_net:
+    internal: true

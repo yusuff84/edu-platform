@@ -1,0 +1,241 @@
+/* Стили конструктора курса (T06).
+   Импортируются только из Constructor.tsx; общий styles.css не изменяется.
+   Базовые классы (.card, .muted, .error, .sr-only) берутся из styles.css. */
+
+/* ---------- Уведомления и подсказки ---------- */
+
+.teach-note {
+  color: #666;
+  font-size: 0.875rem;
+}
+
+.teach-success {
+  color: #2e7d32;
+}
+
+/* ---------- Баннер комментария модератора ---------- */
+
+.teach-banner {
+  border: 1px solid #f0c36d;
+  background: #fff8e6;
+  border-radius: 8px;
+  padding: 0.75rem 1rem;
+  margin: 1rem 0;
+}
+
+.teach-banner h2 {
+  margin: 0 0 0.25rem;
+  font-size: 1rem;
+}
+
+.teach-banner p {
+  margin: 0.25rem 0 0;
+}
+
+/* ---------- Статус курса ---------- */
+
+.teach-badge {
+  display: inline-block;
+  padding: 0.1rem 0.55rem;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  border: 1px solid transparent;
+}
+
+.teach-badge-draft {
+  background: #eeeeee;
+  color: #444;
+  border-color: #d6d6d6;
+}
+
+.teach-badge-review {
+  background: #fff3cd;
+  color: #7a5b00;
+  border-color: #f0c36d;
+}
+
+.teach-badge-published {
+  background: #e3f4e4;
+  color: #2e7d32;
+  border-color: #b8dfba;
+}
+
+.teach-badge-archived {
+  background: #eceff1;
+  color: #607d8b;
+  border-color: #cfd8dc;
+}
+
+/* ---------- Секции редактора ---------- */
+
+.teach-section {
+  background: #fff;
+  border: 1px solid #e5e5e5;
+  border-radius: 8px;
+  padding: 1rem;
+  margin: 1rem 0;
+}
+
+/* ---------- Список моих курсов ---------- */
+
+.teach-card-grid {
+  list-style: none;
+  padding: 0;
+  margin: 1rem 0 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 1rem;
+}
+
+.teach-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.teach-card h3 {
+  margin: 0;
+}
+
+.teach-rejected {
+  color: #b00020;
+  margin: 0.25rem 0;
+}
+
+.teach-card-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-top: 0.5rem;
+}
+
+.teach-card-actions button {
+  margin-top: 0;
+}
+
+.teach-link-btn {
+  display: inline-block;
+  padding: 0.5rem 1rem;
+  border: 1px solid #1a1a1a;
+  border-radius: 6px;
+  text-decoration: none;
+  color: #1a1a1a;
+  background: #fff;
+}
+
+/* ---------- Программа курса (только чтение) ---------- */
+
+.teach-modules {
+  padding-left: 1.25rem;
+  display: grid;
+  gap: 0.75rem;
+}
+
+.teach-module h3 {
+  margin: 0 0 0.25rem;
+}
+
+.teach-lesson-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 0.25rem;
+}
+
+.teach-lesson-kind {
+  display: inline-block;
+  font-size: 0.75rem;
+  background: #eef2ff;
+  color: #37474f;
+  border-radius: 4px;
+  padding: 0 0.4rem;
+  margin-right: 0.4rem;
+}
+
+/* ---------- Вопросы квиза ---------- */
+
+.teach-counter {
+  font-weight: 600;
+  margin: 0.5rem 0;
+}
+
+.teach-q-box,
+.teach-test-box {
+  border: 1px solid #e5e5e5;
+  border-radius: 8px;
+  padding: 0.75rem;
+  margin: 0.75rem 0;
+  background: #fafafa;
+}
+
+.teach-q-box h3 {
+  margin: 0 0 0.5rem;
+  font-size: 0.95rem;
+}
+
+.teach-options {
+  border: none;
+  padding: 0;
+  margin: 0.5rem 0;
+}
+
+.teach-options legend {
+  font-weight: 600;
+  font-size: 0.875rem;
+  padding: 0;
+}
+
+.teach-option-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.5rem;
+  margin: 0.35rem 0;
+}
+
+.teach-option-row label {
+  margin: 0;
+  flex: 1;
+}
+
+.teach-option-row button {
+  margin-top: 0;
+}
+
+.teach-correct-radio {
+  display: flex;
+  align-items: center;
+  margin: 0;
+}
+
+.teach-correct-radio input {
+  display: inline-block;
+  margin: 0;
+}
+
+/* ---------- Чекбоксы ---------- */
+
+.teach-check {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.teach-check input {
+  display: inline-block;
+  margin: 0;
+}
+
+/* ---------- Ошибки внутри форм ---------- */
+
+.teach-section .error {
+  margin: 0.25rem 0;
+}
+
+/* ---------- Фокус на группе полей (валидация) ---------- */
+
+.teach-focusable:focus {
+  outline: 2px solid #3f51b5;
+  outline-offset: 2px;
+}

@@ -12,5 +12,10 @@ runner/runner
 # logs
 *.log
 
+# env — в репозитории лежит только dev-копия .env (не секреты, см. README);
+# реальные значения задавайте через --env-file. Новые/локальные env — не коммитить.
+.env
+!.env.example
+
 # saved third-party reference page (not our code)
 Skillbox*
