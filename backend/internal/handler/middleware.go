@@ -20,7 +20,9 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 
+	"edu-platform/backend/internal/auth"
 	"edu-platform/backend/internal/config"
+	"edu-platform/backend/internal/payments"
 	"edu-platform/backend/internal/repo"
 )
 
@@ -29,6 +31,11 @@ import (
 type App struct {
 	Store  repo.StoreAPI
 	Config *config.Config
+
+	// YandexAuth — OAuth-провайдер для входа через Яндекс ID (T13).
+	// Создаётся один раз в NewRouter из Config; тесты подменяют поле до
+	// сборки роутера.
+	YandexAuth auth.AuthProvider
 
 	// Лениво создаваемые rate-limiter'ы по имени группы (T10).
 	limitersMu   sync.Mutex
@@ -45,8 +52,18 @@ const sessionCookie = "session_id"
 // sessionTTL — время жизни сессии (7 дней).
 const sessionTTL = 7 * 24 * time.Hour
 
-// NewRouter собирает chi-роутер: /healthz, /api/v1, логгер, recover и CORS.
+// NewRouter собирает chi-роутер: /healthz, /pay/mock, /api/v1, логгер, recover и CORS.
 func NewRouter(app *App) http.Handler {
+	// T13: OAuth-клиент Яндекса создаётся один раз при сборке роутера
+	// (в тестах поле App.YandexAuth заполняется заранее — не перезаписываем).
+	if app.YandexAuth == nil {
+		app.YandexAuth = &auth.YandexClient{
+			ClientID:     app.Config.YandexClientID,
+			ClientSecret: app.Config.YandexClientSecret,
+			RedirectURI:  app.Config.YandexRedirectURI,
+		}
+	}
+
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID)
 	r.Use(app.realIP)
@@ -55,15 +72,18 @@ func NewRouter(app *App) http.Handler {
 	r.Use(app.cors)
 
 	r.Get("/healthz", healthz)
-	// ⚠️ T13 (волна 3): mock-страница оплаты (T09). Регистрируется НА ВЕРХНЕМ
-	// УРОВНЕ роутера, а не под /api/v1 — потому что redirectUrl, который
-	// возвращает провайдер, равен "/pay/mock/{id}" и браузер пойдёт именно туда.
+	// T09: mock-страница оплаты. Регистрируется НА ВЕРХНЕМ УРОВНЕ роутера,
+	// а не под /api/v1 — redirectUrl, который возвращает провайдер, равен
+	// "/pay/mock/{id}" (payments.MockConfirmPath) и браузер пойдёт именно туда.
 	// Страница сама шлёт POST /api/v1/payments/webhook/mock, поэтому доступ
 	// к курсу активируется тем же кодом, что и для реальных провайдеров.
-	// Добавить ТОЛЬКО когда будет подтверждена сигнатура payments.MockConfirmHandler():
-	//   r.Get("/pay/mock/{id}", payments.MockConfirmHandler())  // плюс импорт payments
-	// Без этого маршрута покупка в mock-режиме (PAYMENTS_PROVIDER=mock) не работает
-	// вообще — redirectUrl ведёт в никуда. Это блокирует сквозной сценарий T12.
+	// Без этого маршрута mock-покупка не работает вообще.
+	// chi r.Get требует http.HandlerFunc — оборачиваем Handler через ServeHTTP.
+	r.Get("/pay/mock/{id}", payments.MockConfirmHandler().ServeHTTP)
+	// T13: обслуживание уже загруженных файлов (обложки курсов и т.п.,
+	// см. internal/storage). Загрузочного эндпоинта в MVP нет — раздаются
+	// только файлы, которые уже лежат в каталоге uploads/.
+	r.Handle("/uploads/*", http.StripPrefix("/uploads/", http.FileServer(http.Dir("uploads"))))
 	r.Route("/api/v1", func(r chi.Router) {
 		// T10: глобальный мягкий лимит от флуда + CSRF-проверка меняющих методов.
 		r.Use(app.rateLimit("global", app.Config.RateLimitGlobalPerMin))
@@ -77,6 +97,14 @@ func NewRouter(app *App) http.Handler {
 		r.Post("/auth/logout", app.Logout)
 		r.Get("/auth/me", app.Me)
 
+		// T13: вход через Яндекс ID (хендлеры — auth_yandex.go, клиент —
+		// auth/yandex.go от T10). Это GET-редиректы, поэтому csrfProtect их
+		// не трогает, и отдельный лимитер auth НЕ навешивается (10/мин на IP
+		// уже стоит на POST /auth/login и /auth/register); действует
+		// общий глобальный лимит /api/v1.
+		r.Get("/auth/yandex/start", app.YandexAuthStart)
+		r.Get("/auth/yandex/callback", app.YandexAuthCallback)
+
 		r.Get("/courses", app.ListCourses)
 		r.Get("/courses/{slug}", app.GetCourse)
 		r.Get("/courses/{id}/reviews", app.ListReviews)
@@ -89,6 +117,10 @@ func NewRouter(app *App) http.Handler {
 			r.Post("/courses/{id}/modules", app.TeacherCreateModule)
 			r.Post("/courses/{id}/lessons", app.TeacherCreateLesson)
 			r.Post("/courses/{id}/submit", app.TeacherSubmitCourse)
+			// T13: бэклог T06 — редактирование (GET/PATCH по id, переименование
+			// модуля). Монтируется внутрь этого блока, чтобы пути были
+			// относительными (/courses/{id}), а requireAuth/requireRole — уже навешены.
+			app.RegisterTeacherEditRoutes(r)
 		})
 
 		r.Route("/admin", func(r chi.Router) {
@@ -96,15 +128,22 @@ func NewRouter(app *App) http.Handler {
 			r.Post("/invites", app.AdminCreateInvite)
 			r.Get("/courses/review", app.AdminReviewQueue)
 			r.Post("/courses/{id}/moderate", app.AdminModerateCourse)
-			// ⚠️ T13: НЕ подключать RegisterAdminPaymentsRoutes сюда!
-			// Этот метод регистрирует АБСОЛЮТНЫЕ пути /admin/payments и
-			// /admin/settings (см. handler/admin_payments.go:20-27). Монтирование
-			// внутри блока r.Route("/admin", ...) даст /admin/admin/payments.
-			// Строка app.RegisterAdminPaymentsRoutes(r) добавляется НА УРОВНЕ
-			// /api/v1 — см. Task/T13-integration-wiring.md.
+			// T07 (журнал платежей и настройки) сюда НЕ подключать: метод
+			// RegisterAdminPaymentsRoutes регистрирует АБСОЛЮТНЫЕ пути
+			// /admin/payments и /admin/settings (см. handler/admin_payments.go),
+			// монтирование внутрь дало бы /admin/admin/payments.
+			// Вызов — на уровне /api/v1 ниже.
 		})
 
 		r.With(app.requireAuth).Post("/enrollments", app.CreateEnrollment)
+
+		// T07 (волна 3): журнал платежей и комиссия US6. Метод регистрирует
+		// АБСОЛЮТНЫЕ пути /admin/payments и /admin/settings, поэтому вызывается
+		// на уровне /api/v1, а НЕ внутри r.Route("/admin", ...) — иначе
+		// получилось бы /admin/admin/payments. requireAuth + requireRole(admin)
+		// вешаются внутри метода через .With, двойная обёртка не нужна.
+		app.RegisterAdminPaymentsRoutes(r)
+
 		// Webhook-и провайдеров оплачивают CSRF-проверку подписью (T09),
 		// поэтому исключены из csrfProtect — платёжки шлют их без Origin.
 		r.With(app.rateLimit("webhook", app.Config.RateLimitWebhookPerMin)).Post("/payments/webhook/{provider}", app.PaymentWebhook)
