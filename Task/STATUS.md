@@ -20,8 +20,10 @@
 | `T08-admin-us6-frontend` | Админ-панель US6 | 2 | ✅ смержен | `2132da3` |
 | `T15-auth-flow-redirect` | Редирект после входа | 2 | ✅ смержен | `3d5d5ec` |
 | `T14-docs-cleanup` | README, env, `docs/API.md` | 3 | ✅ смержен | `efe7fc8` |
-| `T13-integration-wiring` | Проводка маршрутов, compose | 3 | 🔄 в работе | — |
-| `T12-contract-tests` | Контрактные тесты + `qa-abc.ps1` | 3 | ⏸ ждёт T13 | — |
+| `T13-integration-wiring` | Проводка маршрутов, compose | 3 | ✅ смержен | `e449fb5` |
+| `T12-contract-tests` | Контрактные тесты + `qa-abc.ps1` | 3 | ✅ смержен | `2bdbb16` |
+
+## Итог: все 15 задач смержены в `integration/p0-p1-p2`
 
 ## Ключи сессий активных агентов
 
