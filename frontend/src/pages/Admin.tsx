@@ -472,7 +472,13 @@ export default function Admin(): JSX.Element {
                   <tr key={item.id}>
                     <td data-label={t('admin.colDate')}>{formatDate(item.createdAt)}</td>
                     <td data-label={t('admin.colStudent')}>
-                      <code title={item.studentId}>{shortId(item.studentId)}</code>
+                      {/* Имя → email → короткий id: студента надо узнать по человекочитаемому
+                          признаку, а UUID в журнале US6 не помогает админу работать. */}
+                      <span title={item.studentId}>
+                        {item.studentName ||
+                          item.studentEmail ||
+                          shortId(item.studentId)}
+                      </span>
                     </td>
                     <td data-label={t('admin.colCourse')} className="admin-td-course">
                       {item.courseTitle}

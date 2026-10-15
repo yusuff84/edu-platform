@@ -374,7 +374,8 @@ function buildLessonInput(d: LessonDraft): CreateLessonInput {
     case 'live': {
       const input: CreateLessonInput = { ...base, liveUrl: d.liveUrl.trim() };
       const iso = toIso(d.startsAt);
-      // startsAt шлём по контракту (п.10); backend его пока не сохраняет — см. отчёт.
+      // startsAt шлём по контракту (п.10). Сохранение починено в T16
+      // (backend/internal/handler/teacher.go) — значение доезжает до урока и валидируется.
       if (iso) input.startsAt = iso;
       return input;
     }

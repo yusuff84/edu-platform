@@ -232,6 +232,10 @@ export interface Invite {
 export interface PaymentJournalItem {
   id: string;
   studentId: string;
+  /** Email студента. Пустая строка, если в таблице users уже нет такой записи. */
+  studentEmail: string;
+  /** Отображаемое имя студента; пусто, если не заполнено — тогда UI показывает email. */
+  studentName: string;
   courseId: string;
   courseTitle: string;
   amountCents: number;
