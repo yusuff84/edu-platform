@@ -8,6 +8,7 @@ import { Login, Register } from '../pages/Auth';
 import MyCourses from '../pages/MyCourses';
 import Learn from '../pages/Learn';
 import Constructor from '../pages/Constructor';
+import MockPay from '../pages/MockPay';
 import Admin from '../pages/Admin';
 import { AdminCab, StudentCab, TeacherCab } from '../pages/Cabinets';
 
@@ -145,6 +146,7 @@ export const router = createBrowserRouter([
       { path: '/admin-panel', element: <Admin /> },
       { path: '/learn/:courseId', element: <Learn /> },
       { path: '/learn/:courseId/:lessonId', element: <Learn /> },
+      { path: '/pay/mock/:providerPaymentId', element: <MockPay /> },
     ],
   },
 ]);

@@ -390,6 +390,15 @@ export function createReview(
   });
 }
 
+// ---------- Mock-оплата (только для демо-провайдера) ----------
+
+export function confirmMockPayment(providerPaymentId: string): Promise<{ status: string }> {
+  return apiFetch<{ status: string }>('/payments/webhook/mock', {
+    method: 'POST',
+    body: JSON.stringify({ providerPaymentId, status: 'succeeded' }),
+  });
+}
+
 // ---------- Утилиты ----------
 
 export function formatPrice(priceCents: number): string {
