@@ -116,8 +116,12 @@ function Invoke-Api {
     }
     if ($Session -ne $null) { $params.WebSession = $Session }
     if ($Body -ne $null) {
-        $params.Body = ($Body | ConvertTo-Json -Depth 8)
-        $params.ContentType = "application/json"
+        # PS 5.1 шлёт строковый Body в кодировке ISO-8859-1: кириллица в
+        # JSON превращается в «?» (баг всплыл на B7a — первой проверке,
+        # сравнивающей кириллическое содержимое ответа). Отдаём явные
+        # UTF-8 байты + charset в ContentType — сервер читает корректно.
+        $params.Body = [System.Text.Encoding]::UTF8.GetBytes(($Body | ConvertTo-Json -Depth 8))
+        $params.ContentType = "application/json; charset=utf-8"
     }
 
     $status = 0; $text = ""
@@ -215,8 +219,9 @@ $r = Invoke-Api -Method POST -Path "/api/v1/auth/login" -Session $studentSession
     -Body @{ email = $studentEmail; password = "password123" }
 Invoke-Check "A5. Вход студента -> 200" ($r.Status -eq 200) $r.Body
 
-# A6. Повторная регистрация того же email — отказ (фактически 400;
-# контракт п.1 обещает 409 — зафиксировано в отчёте T12 как расхождение).
+# A6. Повторная регистрация того же email — отказ (фактически 400:
+# расхождение №8 контракта — документ поправлен T20, тест auth_test.go и
+# эта проверка закрепляют 400).
 $r = Invoke-Api -Method POST -Path "/api/v1/auth/register" `
     -Body @{ email = $studentEmail; password = "password123" }
 Invoke-Check "A6. Дубль регистрации отклонён (400)" ($r.Status -eq 400) $r.Body
@@ -246,6 +251,15 @@ if ($SkipAdmin) {
     Invoke-Check "B1. Вход админа ($AdminEmail) -> 200, role=admin" `
         ($r.Status -eq 200 -and $r.Json -ne $null -and $r.Json.role -eq "admin") $r.Body
     $adminOk = ($r.Status -eq 200)
+
+    if ($adminOk) {
+        # B1b. Регресс T16, п.7: сид-учётка реально работает и сессия
+        # подтверждает роль admin (этот сценарий уже ломался из-за поддельных
+        # bcrypt-хешей из 002_seed.sql — закреплено и в cmd/api/main_test.go).
+        $r = Invoke-Api -Method GET -Path "/api/v1/auth/me" -Session $adminSession
+        Invoke-Check "B1b. /auth/me админа -> 200, role=admin" `
+            ($r.Status -eq 200 -and $r.Json -ne $null -and $r.Json.role -eq "admin") $r.Body
+    }
 
     if ($adminOk) {
         # B2. Приглашение учителя — 201, токен виден один раз.
@@ -301,6 +315,64 @@ if ($SkipAdmin) {
             Invoke-Check "B7. Quiz-урок -> 201" ($r.Status -eq 201 -and $quizLessonID -ne "") $r.Body
         }
 
+        # B7a. PATCH урока (T19): переименование quiz-урока в draft — 200.
+        if ($quizLessonID) {
+            $r = Invoke-Api -Method PATCH -Path "/api/v1/teacher/courses/$courseID/lessons/$quizLessonID" `
+                -Session $teacherSession -Body @{ title = "Квиз (обновлён)" }
+            Invoke-Check "B7a. PATCH урока -> 200, заголовок обновлён" `
+                ($r.Status -eq 200 -and $r.Json.title -eq "Квиз (обновлён)") $r.Body
+        } else {
+            Skip-Check "B7a. PATCH урока -> 200, заголовок обновлён" "нет quiz-урока из B7"
+        }
+
+        # B7b. Список курсов учителя содержит счётчики T19 (modulesCount/lessonsCount).
+        $r = Invoke-Api -Method GET -Path "/api/v1/teacher/courses" -Session $teacherSession
+        $countsOk = $false
+        if ($r.Status -eq 200 -and $r.Json -ne $null -and $r.Json.items -ne $null) {
+            foreach ($it in $r.Json.items) {
+                if ([string]$it.id -eq $courseID -and $it.modulesCount -ge 1 -and $it.lessonsCount -ge 1) {
+                    $countsOk = $true
+                }
+            }
+        }
+        Invoke-Check "B7b. /teacher/courses: счётчики modulesCount/lessonsCount" $countsOk $r.Body
+
+        # B7c. Второй модуль + reorder (T19) — 201, затем 204 со сменой позиций.
+        $module2ID = ""
+        if ($moduleID) {
+            $r = Invoke-Api -Method POST -Path "/api/v1/teacher/courses/$courseID/modules" -Session $teacherSession `
+                -Body @{ title = "Практика" }
+            if ($r.Status -eq 201) { $module2ID = [string]$r.Json.id }
+            $created2 = ($r.Status -eq 201 -and $module2ID -ne "")
+
+            # Полный список позиций 1..2: меняем модули местами.
+            $r = Invoke-Api -Method POST -Path "/api/v1/teacher/courses/$courseID/modules/reorder" -Session $teacherSession `
+                -Body @{ items = @(@{ id = $moduleID; position = 2 }, @{ id = $module2ID; position = 1 }) }
+            Invoke-Check "B7c. Второй модуль + modules/reorder -> 204" `
+                ($created2 -and $r.Status -eq 204) $r.Body
+        } else {
+            Skip-Check "B7c. Второй модуль + modules/reorder -> 204" "нет модуля из B6"
+        }
+
+        # B7d. Правило 400/409 (T20): занятый slug чужого курса при PATCH — 400,
+        # а не 409 (см. TestSlugConflictIs400Consistent и Task/00-api-contract.md).
+        $course2ID = ""
+        $r = Invoke-Api -Method POST -Path "/api/v1/teacher/courses" -Session $teacherSession `
+            -Body @{ title = "QA-курс-2 $stamp"; description = "Второй курс для проверки slug"; priceCents = 1000 }
+        if ($r.Status -eq 201 -and $r.Json -ne $null) { $course2ID = [string]$r.Json.id }
+        $course2Slug = ""
+        if ($r.Json -ne $null) { $course2Slug = [string]$r.Json.slug }
+        $r = Invoke-Api -Method PATCH -Path "/api/v1/teacher/courses/$courseID" -Session $teacherSession `
+            -Body @{ slug = $course2Slug }
+        Invoke-Check "B7d. PATCH с чужим slug -> 400 (занятый slug = валидация)" `
+            ($course2ID -ne "" -and $r.Status -eq 400) $r.Body
+
+        # B7e. DELETE черновика (T19) — 204; второй курс больше не нужен.
+        if ($course2ID) {
+            $r = Invoke-Api -Method DELETE -Path "/api/v1/teacher/courses/$course2ID" -Session $teacherSession
+            Invoke-Check "B7e. DELETE черновика курса -> 204" ($r.Status -eq 204) $r.Body
+        }
+
         # B8. Submit с содержимым — 200, status=review.
         $r = Invoke-Api -Method POST -Path "/api/v1/teacher/courses/$courseID/submit" -Session $teacherSession -Body @{}
         Invoke-Check "B8. Submit -> 200, status=review" ($r.Status -eq 200 -and $r.Json.status -eq "review") $r.Body
@@ -340,7 +412,7 @@ if ($SkipAdmin) {
         $r = Invoke-Api -Method GET -Path "/api/v1/admin/payments" -Session $studentSession
         Invoke-Check "B14. Студент на /admin/payments -> 403" ($r.Status -eq 403) $r.Body
     } else {
-        foreach ($n in @("B4", "B5", "B6", "B7", "B8", "B9", "B10", "B11", "B12", "B13", "B14")) {
+        foreach ($n in @("B4", "B5", "B6", "B7", "B7a", "B7b", "B7c", "B7d", "B7e", "B8", "B9", "B10", "B11", "B12", "B13", "B14")) {
             Skip-Check "$n" "нет учителя/админа (падение B1/B2/B3)"
         }
     }
@@ -352,7 +424,7 @@ if ($SkipAdmin) {
 Write-Host "`n--- Блок C: покупка, обучение, админка ---" -ForegroundColor Cyan
 
 if (-not $courseID -or -not $quizLessonID) {
-    Skip-Check "C1..C17" "блок B не прошёл: курс или quiz-урок не созданы"
+    Skip-Check "C1..C17 (вкл. C13a-C13d)" "блок B не прошёл: курс или quiz-урок не созданы"
 } else {
     # C1. Страница курса анонимно; правильные ответы квиза не утекают.
     $r = Invoke-Api -Method GET -Path "/api/v1/courses/$courseSlug"
@@ -442,9 +514,48 @@ if (-not $courseID -or -not $quizLessonID) {
         # C13. Фильтр журнала по courseId.
         $r = Invoke-Api -Method GET -Path "/api/v1/admin/payments?courseId=$courseID" -Session $adminSession
         Invoke-Check "C13. Журнал с фильтром courseId -> 200" ($r.Status -eq 200 -and $r.Json.total -ge 1) $r.Body
+
+        # C13a. Отзыв доступа (T16): studentId берём из /auth/me, затем
+        # POST .../revoke -> 200, status=revoked.
+        $r = Invoke-Api -Method GET -Path "/api/v1/auth/me" -Session $studentSession
+        $studentId = ""
+        if ($r.Status -eq 200 -and $r.Json -ne $null) { $studentId = [string]$r.Json.id }
+        if ($studentId -ne "") {
+            $r = Invoke-Api -Method POST -Path "/api/v1/admin/enrollments/$studentId/courses/$courseID/revoke" `
+                -Session $adminSession
+            Invoke-Check "C13a. Revoke -> 200, status=revoked" `
+                ($r.Status -eq 200 -and $r.Json.status -eq "revoked") $r.Body
+
+            # C13b. Курс скрыт из /me/courses.
+            $r = Invoke-Api -Method GET -Path "/api/v1/me/courses" -Session $studentSession
+            Invoke-Check "C13b. После revoke /me/courses без курса" `
+                ($r.Status -eq 200 -and $r.Json.total -eq 0) $r.Body
+
+            # C13c. Unrevoke возвращает доступ.
+            $r = Invoke-Api -Method POST -Path "/api/v1/admin/enrollments/$studentId/courses/$courseID/unrevoke" `
+                -Session $adminSession
+            $unrevokeOk = ($r.Status -eq 200 -and $r.Json.status -eq "active")
+            $r = Invoke-Api -Method GET -Path "/api/v1/me/courses" -Session $studentSession
+            Invoke-Check "C13c. Unrevoke -> active, курс вернулся" `
+                ($unrevokeOk -and $r.Status -eq 200 -and $r.Json.total -ge 1) $r.Body
+
+            # C13d. Невалидный studentId — 400 (валидация UUID, не 409).
+            $r = Invoke-Api -Method POST -Path "/api/v1/admin/enrollments/ne-uuid/courses/$courseID/revoke" `
+                -Session $adminSession
+            Invoke-Check "C13d. Revoke с не-UUID studentId -> 400" ($r.Status -eq 400) $r.Body
+        } else {
+            Skip-Check "C13a. Revoke -> 200, status=revoked" "нет studentId из /auth/me"
+            Skip-Check "C13b. После revoke /me/courses без курса" "нет studentId из /auth/me"
+            Skip-Check "C13c. Unrevoke -> active, курс вернулся" "нет studentId из /auth/me"
+            Skip-Check "C13d. Revoke с не-UUID studentId -> 400" "нет studentId из /auth/me"
+        }
     } else {
         Skip-Check "C12. Журнал платежей US6" "-SkipAdmin"
         Skip-Check "C13. Фильтр журнала courseId" "-SkipAdmin"
+        Skip-Check "C13a. Revoke -> 200, status=revoked" "-SkipAdmin"
+        Skip-Check "C13b. После revoke /me/courses без курса" "-SkipAdmin"
+        Skip-Check "C13c. Unrevoke -> active, курс вернулся" "-SkipAdmin"
+        Skip-Check "C13d. Revoke с не-UUID studentId -> 400" "-SkipAdmin"
     }
 
     # C14. CORS: чужой Origin не получает Access-Control-Allow-Origin.
