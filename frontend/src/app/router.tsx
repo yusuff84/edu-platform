@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { Suspense, lazy, useCallback, useEffect } from 'react';
 import { Link, NavLink, Navigate, Outlet, createBrowserRouter, useLocation } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { logout } from '../api/client';
@@ -6,15 +6,25 @@ import { t } from '../i18n/t';
 import Catalog from '../pages/Catalog';
 import Course from '../pages/Course';
 import { Login, Register } from '../pages/Auth';
-import MyCourses from '../pages/MyCourses';
-import Learn from '../pages/Learn';
-import Constructor from '../pages/Constructor';
-import Admin from '../pages/Admin';
-import { TeacherCab } from '../pages/Cabinets';
-import NotFound from '../pages/NotFound';
 import { ErrorBoundary, RouteError } from '../components/ErrorBoundary';
 import { RequireAuth, RequireRole, meQueryOptions } from '../components/RouteGuards';
 import '../styles/shell.css';
+
+// T18: route-based code splitting. Каталог, страница курса и вход остаются
+// статическими — это первый экран анонимного посетителя, он не должен ждать
+// догрузки. Админка, конструктор, обучение, кабинеты и 404 видны только после
+// входа/роли или встречаются редко — их чанки подгружаются по факту рендера
+// (после прохождения гвардов), из главного чанка они исключены.
+const MyCourses = lazy(() => import('../pages/MyCourses'));
+const Learn = lazy(() => import('../pages/Learn'));
+const Constructor = lazy(() => import('../pages/Constructor'));
+const Admin = lazy(() => import('../pages/Admin'));
+// В Cabinets.tsx нет default-экспорта — берём именованный TeacherCab.
+const TeacherCab = lazy(async () => {
+  const m = await import('../pages/Cabinets');
+  return { default: m.TeacherCab };
+});
+const NotFound = lazy(() => import('../pages/NotFound'));
 
 /** Прокрутка к началу страницы при смене маршрута (иначе позиция скролла «уезжает»). */
 function ScrollToTop(): null {
@@ -25,6 +35,21 @@ function ScrollToTop(): null {
   return null;
 }
 
+/**
+ * Состояние загрузки ленивого маршрута (T18): скелетон как в гвардах
+ * (классы shell.css) + русский текст из словаря. Отдельного ключа под чанки
+ * в ru.json нет (словарём владеет T02) — используем общий common.loading.
+ */
+function RouteFallback(): JSX.Element {
+  return (
+    <div className="shell-skeleton" role="status" aria-live="polite">
+      <span className="shell-skeleton-line" />
+      <span className="shell-skeleton-line shell-skeleton-line--short" />
+      <span className="sr-only">{t('common.loading')}</span>
+    </div>
+  );
+}
+
 function Layout(): JSX.Element {
   const qc = useQueryClient();
   // Один query ['me'] на всё приложение: Layout и гварды (RouteGuards.tsx)
@@ -32,12 +57,14 @@ function Layout(): JSX.Element {
   const meQuery = useQuery(meQueryOptions);
   const user = meQuery.data;
 
-  async function onLogout(): Promise<void> {
+  // T18: обработчик стабилен между рендерами (qc из контекста не меняется) —
+  // кнопка не пересоздаёт onClick при каждом обновлении ['me'] и навигации.
+  const onLogout = useCallback(async (): Promise<void> => {
     await logout();
     // resetQueries сбрасывает кэш ['me'] и перезапрашивает: после выхода
     // пользователь гарантированно исчезает из шапки и гвардов (401 → логин).
     await qc.resetQueries({ queryKey: ['me'] });
-  }
+  }, [qc]);
 
   return (
     <div>
@@ -98,9 +125,13 @@ function Layout(): JSX.Element {
         </div>
       </header>
       <div id="content">
-        {/* Граница ошибок поддерева: крах страницы не убивает шапку. */}
+        {/* Граница ошибок поддерева: крах страницы не убивает шапку.
+            Внутри — Suspense для ленивых маршрутов (T18): ошибка динамического
+            импорта тоже попадает в ErrorBoundary, а не роняет приложение. */}
         <ErrorBoundary>
-          <Outlet />
+          <Suspense fallback={<RouteFallback />}>
+            <Outlet />
+          </Suspense>
         </ErrorBoundary>
       </div>
       <footer className="footer">
