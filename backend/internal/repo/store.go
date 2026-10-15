@@ -113,6 +113,19 @@ func (s *Store) SetUserRole(id string, role Role) bool {
 	return true
 }
 
+// SetUserPasswordHash перезаписывает хеш пароля (починка поддельного хеша
+// из миграции 002_seed.sql, T16).
+func (s *Store) SetUserPasswordHash(id, hash string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	u, ok := s.users[id]
+	if !ok {
+		return false
+	}
+	u.PasswordHash = hash
+	return true
+}
+
 // ---- Sessions ----
 
 // CreateSession создаёт сессию пользователя с TTL.
@@ -422,11 +435,19 @@ func (s *Store) GetEnrollment(studentID, courseID string) (*Enrollment, bool) {
 }
 
 // EnsureEnrollment создаёт запись (идемпотентно); created=false если уже была.
+// T16 (п.5): вызывается только на путях УСПЕШНОГО платежа (handler/enroll.go:
+// бесплатный checkout и webhook succeeded), поэтому существующая запись со
+// статусом refunded/revoked переводится в active — иначе оплата прошла, а
+// доступ не открылся.
 func (s *Store) EnsureEnrollment(studentID, courseID string) (*Enrollment, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if id, ok := s.enrollIdx[enrollKey(studentID, courseID)]; ok {
-		return s.enrollments[id], false
+		e := s.enrollments[id]
+		if e.Status != EnrollmentActive {
+			e.Status = EnrollmentActive
+		}
+		return e, false
 	}
 	e := &Enrollment{
 		ID:        uuid.NewString(),
@@ -641,8 +662,17 @@ func (s *Store) ListPaymentsJournal(f PaymentFilter) ([]PaymentJournalRow, int, 
 		if c, ok := s.courses[p.CourseID]; ok {
 			title = c.Title
 		}
+		// T16 (п.3): email и имя студента — из таблицы пользователей.
+		email, name := "", ""
+		if u, ok := s.users[p.StudentID]; ok {
+			email = u.Email
+			name = u.DisplayName
+		}
 		// Копируем значение: в JSON-слой уходит снимок, а не живой указатель.
-		rows = append(rows, PaymentJournalRow{Payment: *p, CourseTitle: title})
+		rows = append(rows, PaymentJournalRow{
+			Payment: *p, CourseTitle: title,
+			StudentEmail: email, StudentDisplayName: name,
+		})
 	}
 	return rows, total, totals, nil
 }
@@ -716,8 +746,10 @@ func (s *Store) GetCommissionPct() int {
 	return s.commissionPct
 }
 
-// SetCommissionPct задаёт комиссию платформы (0..90).
-func (s *Store) SetCommissionPct(n int) {
+// SetCommissionPct задаёт комиссию платформы (0..90). In-memory запись
+// всегда успешна, поэтому nil — но сигнатура совпадает с StoreAPI: вызывающий
+// обязан обработать ошибку (T16, п.4).
+func (s *Store) SetCommissionPct(n int) error {
 	if n < 0 {
 		n = 0
 	}
@@ -727,4 +759,5 @@ func (s *Store) SetCommissionPct(n int) {
 	s.mu.Lock()
 	s.commissionPct = n
 	s.mu.Unlock()
+	return nil
 }

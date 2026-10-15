@@ -114,6 +114,21 @@ func (a *App) CompleteLesson(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 
+	// failWithProgress отвечает 200 при НЕУСПЕШНОЙ попытке. T16 (п.2): кроме
+	// message возвращаем текущие percent и nextLesson — по той же логике, что
+	// и при успехе, чтобы фронт обновлял ленту прогресса без рефетча /me/courses.
+	failWithProgress := func(message string, extra map[string]any) {
+		percent, next := a.courseProgress(u.ID, c)
+		payload := map[string]any{
+			"passed": false, "completed": false,
+			"message": message, "percent": percent, "nextLesson": next,
+		}
+		for k, v := range extra {
+			payload[k] = v
+		}
+		writeJSON(w, http.StatusOK, payload)
+	}
+
 	switch l.Kind {
 	case repo.LessonVideoText, repo.LessonLive:
 		finish()
@@ -129,10 +144,8 @@ func (a *App) CompleteLesson(w http.ResponseWriter, r *http.Request) {
 		passed, correct, total := service.CheckQuiz(l.Quiz, req.QuizAnswers)
 		if !passed {
 			a.Store.BumpAttempt(u.ID, l.ID)
-			writeJSON(w, http.StatusOK, map[string]any{
-				"passed": false, "completed": false,
+			failWithProgress("Не все ответы верны, попробуйте ещё раз", map[string]any{
 				"correct": correct, "total": total,
-				"message": "Не все ответы верны, попробуйте ещё раз",
 			})
 			return
 		}
@@ -159,9 +172,7 @@ func (a *App) CompleteLesson(w http.ResponseWriter, r *http.Request) {
 		}
 		if !passed {
 			a.Store.BumpAttempt(u.ID, l.ID)
-			writeJSON(w, http.StatusOK, map[string]any{
-				"passed": false, "completed": false, "message": message,
-			})
+			failWithProgress(message, nil)
 			return
 		}
 		finish()

@@ -9,6 +9,7 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+	"time"
 
 	"edu-platform/backend/internal/repo"
 )
@@ -303,12 +304,12 @@ func TestQuizCorrectAnswersDoNotLeak(t *testing.T) {
 	}
 }
 
-// ПОДТВЕРЖДЁННОЕ РАСХОЖДЕНИЕ №4 (Task/00-api-contract.md): POST
-// /teacher/courses/{id}/lessons принимает startsAt, но НЕ сохраняет его
-// (handler/teacher.go не копирует поле в repo.Lesson). Тест фиксирует
-// ФАКТИЧЕСКОЕ поведение: если баг починят — тест упадёт и его нужно
-// будет обновить на «startsAt сохраняется».
-func TestStartsAtNotPersistedDiscrepancy4(t *testing.T) {
+// T16 (п.1): POST /teacher/courses/{id}/lessons СОХРАНЯЕТ startsAt —
+// планирование живых эфиров работает (расхождение №4 Task/00-api-contract.md
+// закрыто). Раньше здесь жил тест-фиксатор TestStartsAtNotPersistedDiscrepancy4,
+// ожидавший startsAt=null: он упал бы при починке бага — по нему обновлено
+// ожидание и формулировка.
+func TestStartsAtPersisted(t *testing.T) {
 	app, router := newTestApp()
 	teacherCookies, courseID, _ := seedPublishedCourse(t, app, router, 0)
 	mods := app.Store.ListModulesByCourse(courseID)
@@ -322,10 +323,18 @@ func TestStartsAtNotPersistedDiscrepancy4(t *testing.T) {
 	}
 	var lesson map[string]any
 	decodeBody(t, rec, &lesson)
-	if lesson["startsAt"] != nil {
-		t.Fatalf("ожидали, что startsAt не сохранится (расхождение №4), got %v", lesson["startsAt"])
+	if lesson["startsAt"] != "2030-01-01T12:00:00Z" {
+		t.Fatalf("startsAt должен сохраниться и вернуться в ответе: got %v, body=%s",
+			lesson["startsAt"], rec.Body.String())
 	}
 	if lesson["liveUrl"] == "" {
 		t.Fatalf("liveUrl должен сохраниться: %s", rec.Body.String())
+	}
+	// Проверяем, что поле дошло именно до хранилища (баг жил на шаге
+	// копирования req.StartsAt → repo.Lesson), а не было просто эхом ответа.
+	id, _ := lesson["id"].(string)
+	stored, ok := app.Store.GetLesson(id)
+	if !ok || stored.StartsAt == nil || stored.StartsAt.Format(time.RFC3339) != "2030-01-01T12:00:00Z" {
+		t.Fatalf("startsAt не сохранён в repo.Lesson: %+v", stored)
 	}
 }

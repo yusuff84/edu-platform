@@ -143,6 +143,7 @@ func NewRouter(app *App) http.Handler {
 		// получилось бы /admin/admin/payments. requireAuth + requireRole(admin)
 		// вешаются внутри метода через .With, двойная обёртка не нужна.
 		app.RegisterAdminPaymentsRoutes(r)
+		app.RegisterAdminEnrollmentRoutes(r) // T16: /admin/enrollments/{studentId}/courses/{courseId}/revoke|unrevoke
 
 		// Webhook-и провайдеров оплачивают CSRF-проверку подписью (T09),
 		// поэтому исключены из csrfProtect — платёжки шлют их без Origin.
