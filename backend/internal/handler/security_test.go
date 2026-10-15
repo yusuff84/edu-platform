@@ -146,6 +146,26 @@ func TestRateLimitHTTP429(t *testing.T) {
 	}
 }
 
+// TestRateLimitDisabledByNonPositiveConfig — RateLimitAuthPerMin <= 0
+// (dev-поведение, конфиг по умолчанию) полностью выключает лимитер:
+// много запросов подряд без 429. Регресс: случайная активация лимитера
+// в dev сломала бы сквозные прогоны и тесты.
+func TestRateLimitDisabledByNonPositiveConfig(t *testing.T) {
+	for _, limit := range []int{0, -1, -100} {
+		cfg := devConfig()
+		cfg.RateLimitAuthPerMin = limit
+		_, router := newTestRouter(cfg)
+
+		body := `{"email":"nobody@example.com","password":"password1"}`
+		for i := 0; i < 20; i++ {
+			rec := doJSON(t, router, http.MethodPost, "/api/v1/auth/login", body, nil)
+			if rec.Code == http.StatusTooManyRequests {
+				t.Fatalf("limit=%d: запрос %d не должен попадать под лимит", limit, i+1)
+			}
+		}
+	}
+}
+
 // TestSessionCookieSignature — cookie = <id>.<подпись>, подделка → 401.
 func TestSessionCookieSignature(t *testing.T) {
 	cfg := devConfig()
