@@ -7,11 +7,10 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// ConnectPool — точка входа для будущей pgx-интеграции.
-//
-// TODO (инфра/БД): заменить in-memory Store на SQL-репозитории поверх этого пула,
-// добавить миграции golang-migrate. Сигнатуры методов Store повторяют границы
-// будущих репозиториев, поэтому handler/service слои менять не придётся.
+// ConnectPool создаёт pgx-пул для SQL-репозитория (T13: устаревший TODO
+// про «заменить in-memory Store на SQL-репозитории и golang-migrate» удалён —
+// SQL-репозиторий уже реализован в postgres_store.go, а миграции применяет
+// собственный раннер internal/migrate при старте (см. cmd/api/main.go)).
 func ConnectPool(ctx context.Context, dsn string) (*pgxpool.Pool, error) {
 	cfg, err := pgxpool.ParseConfig(dsn)
 	if err != nil {

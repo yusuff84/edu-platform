@@ -1,3 +1,10 @@
+// Package storage — сохранение загружаемых файлов (обложки курсов и т.п.).
+//
+// Статус (T13): пакет подключён к роутеру — каталог uploads/ раздаётся
+// как статика по /uploads/* (см. NewRouter в handler/middleware.go).
+// Загрузочного эндпоинта в MVP нет: LocalStore.SaveLocal готов для
+// будущего upload-хендлера (Course.CoverPath уже есть в модели и в типе
+// фронтенда), но сейчас не вызывается ниоткуда.
 package storage
 
 import (

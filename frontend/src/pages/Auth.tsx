@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -14,17 +14,68 @@ const loginSchema = z.object({
 
 const registerSchema = z.object({
   email: z.string().min(1, 'Укажите email').email('Некорректный email'),
-  password: z.string().min(8, 'Пароль должен быть не короче 8 символов'),
+  password: z.string().min(8, 'Пароль не короче 8 символов'),
   inviteToken: z.string().optional(),
 });
 
 type LoginForm = z.infer<typeof loginSchema>;
 type RegisterForm = z.infer<typeof registerSchema>;
 
+/**
+ * Внутренний путь SPA: начинается ровно с одного «/», второй символ — не «/»
+ * и не «\» (иначе браузер может расценить значение как протокол-относительный
+ * или абсолютный URL: «//evil.example», «/\evil.example» — это open redirect).
+ */
+const INTERNAL_PATH_RE = /^\/(?!\/)(?!\\)/;
+
+/**
+ * Достаёт и валидирует state.from, который кладут гварды RequireAuth/RequireRole
+ * (см. RouteGuards.tsx) перед редиректом на /login.
+ *
+ * Формат from — контракт между гвардом и этой страницей; гвард сейчас кладёт
+ * строку-путь (location.pathname), но на случай смены формата на объект
+ * Location (pathname + search + hash) принимаем и его.
+ *
+ * Защита от open redirect:
+ * 1) путь обязан начинаться с одного «/» (отсекает «https://evil.example»,
+ *    «//evil.example», «/\evil.example»);
+ * 2) страховочный рубеж — URL разбирается внутри текущего origin
+ *    (новый URL с базой location.origin не должен сменить origin).
+ */
+function resolveRedirectFrom(state: unknown): string | null {
+  if (typeof state !== 'object' || state === null) return null;
+  const from = (state as { from?: unknown }).from;
+
+  let path: string | null = null;
+  if (typeof from === 'string') {
+    path = from;
+  } else if (typeof from === 'object' && from !== null) {
+    // Объект Location от react-router.
+    const loc = from as { pathname?: unknown; search?: unknown; hash?: unknown };
+    if (typeof loc.pathname !== 'string') return null;
+    path =
+      loc.pathname +
+      (typeof loc.search === 'string' ? loc.search : '') +
+      (typeof loc.hash === 'string' ? loc.hash : '');
+  }
+
+  if (!path || !INTERNAL_PATH_RE.test(path)) return null;
+  try {
+    const url = new URL(path, window.location.origin);
+    if (url.origin !== window.location.origin) return null;
+  } catch {
+    return null;
+  }
+  return path;
+}
+
 export function Login(): JSX.Element {
   const navigate = useNavigate();
+  const location = useLocation();
   const qc = useQueryClient();
   const [serverError, setServerError] = useState('');
+  // Куда вернуться после входа; невалидный/подделанный from → null → уйдём на '/'.
+  const fromPath = resolveRedirectFrom(location.state);
   const {
     register: rf,
     handleSubmit,
@@ -36,7 +87,8 @@ export function Login(): JSX.Element {
     onSuccess: () => {
       setServerError('');
       void qc.invalidateQueries({ queryKey: ['me'] });
-      navigate('/');
+      // replace: «назад» после входа не возвращает на форму логина.
+      navigate(fromPath ?? '/', { replace: true });
     },
     onError: (e: unknown) => {
       if (e instanceof ApiError && e.status === 401) setServerError(t('auth.errLoginFailed'));
@@ -85,7 +137,8 @@ export function Login(): JSX.Element {
               </p>
             )}
             <p>
-              <Link to="/register">{t('auth.noAccount')}</Link>
+              {/* Пробрасываем state, чтобы from не потерялся при переходе Login ↔ Register. */}
+              <Link to="/register" state={location.state}>{t('auth.noAccount')}</Link>
             </p>
           </div>
           <div className="panel panel-dark">
@@ -104,8 +157,11 @@ export function Login(): JSX.Element {
 
 export function Register(): JSX.Element {
   const navigate = useNavigate();
+  const location = useLocation();
   const qc = useQueryClient();
   const [serverError, setServerError] = useState('');
+  // Та же валидация from, что и на входе.
+  const fromPath = resolveRedirectFrom(location.state);
   const {
     register: rf,
     handleSubmit,
@@ -119,10 +175,14 @@ export function Register(): JSX.Element {
         password: v.password,
         inviteToken: v.inviteToken?.trim() ? v.inviteToken.trim() : undefined,
       }),
-    onSuccess: () => {
+    onSuccess: (_res, variables) => {
       setServerError('');
       void qc.invalidateQueries({ queryKey: ['me'] });
-      navigate('/');
+      // Приглашённый по invite-токену регистрируется с ролью teacher —
+      // логичный старт для него кабинет учителя /teach. Явный from
+      // (намерение пользователя) приоритетнее этой эвристики.
+      const invited = Boolean(variables.inviteToken?.trim());
+      navigate(fromPath ?? (invited ? '/teach' : '/'), { replace: true });
     },
     onError: (e: unknown) => {
       if (e instanceof ApiError && (e.status === 400 || e.status === 409))
@@ -178,7 +238,8 @@ export function Register(): JSX.Element {
               </p>
             )}
             <p>
-              <Link to="/login">{t('auth.haveAccount')}</Link>
+              {/* Пробрасываем state, чтобы from не потерялся при переходе Register ↔ Login. */}
+              <Link to="/login" state={location.state}>{t('auth.haveAccount')}</Link>
             </p>
           </div>
           <div className="panel panel-sun">

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log"
 	"strconv"
 	"strings"
@@ -654,6 +655,25 @@ func (s *PostgresStore) EnsureEnrollment(studentID, courseID string) (*Enrollmen
 	return e, false
 }
 
+// SetEnrollmentStatus меняет статус записи на курсе (возврат средств →
+// refunded, отзыв доступа → revoked). Ошибки БД НЕ глотаются: ErrNotFound —
+// записи ученика на курс нет, иначе — ошибка pgx.
+func (s *PostgresStore) SetEnrollmentStatus(studentID, courseID string, status EnrollmentStatus) error {
+	ctx, cancel := s.ctx()
+	defer cancel()
+	tag, err := s.pool.Exec(ctx,
+		`UPDATE enrollments SET status=$3
+		 WHERE student_id=$1::uuid AND course_id=$2::uuid`,
+		studentID, courseID, string(status))
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
 func (s *PostgresStore) ListEnrollmentsByStudent(studentID string) []*Enrollment {
 	ctx, cancel := s.ctx()
 	defer cancel()
@@ -786,6 +806,12 @@ const paymentCols = `id::text, student_id::text, course_id::text, amount_cents, 
 	teacher_amount_cents, currency::text, provider, COALESCE(provider_payment_id,''),
 	status, created_at, processed_at`
 
+// paymentColsP — то же, что paymentCols, но с алиасом таблицы p
+// (для JOIN-запросов журнала платежей).
+const paymentColsP = `p.id::text, p.student_id::text, p.course_id::text, p.amount_cents, p.platform_fee_cents,
+	p.teacher_amount_cents, p.currency::text, p.provider, COALESCE(p.provider_payment_id,''),
+	p.status, p.created_at, p.processed_at`
+
 func (s *PostgresStore) CreatePayment(p *Payment) (*Payment, error) {
 	ctx, cancel := s.ctx()
 	defer cancel()
@@ -854,6 +880,81 @@ func (s *PostgresStore) SetPaymentStatus(id string, status PaymentStatus) bool {
 		return false
 	}
 	return tag.RowsAffected() > 0
+}
+
+// ListPaymentsJournal возвращает журнал платежей для админки (US6).
+// В отличие от большинства методов файла ошибки БД НЕ глотаются, а
+// пробрасываются вызывающему (handler отвечает 500). Фильтры status/courseId
+// комбинируются через AND, сортировка created_at DESC; total — количество до
+// пагинации, totals — SUM по всем отфильтрованным записям без пагинации.
+func (s *PostgresStore) ListPaymentsJournal(f PaymentFilter) ([]PaymentJournalRow, int, PaymentTotals, error) {
+	limit := f.Limit
+	if limit <= 0 {
+		limit = 20
+	}
+	if limit > 100 {
+		limit = 100
+	}
+	page := f.Page
+	if page <= 0 {
+		page = 1
+	}
+
+	// Динамический WHERE: значения идут параметрами через $N (без конкатенации
+	// пользовательского ввода в SQL), LIMIT/OFFSET — клампнутые int.
+	where := ""
+	args := make([]any, 0, 2)
+	if f.Status != "" {
+		args = append(args, string(f.Status))
+		where += fmt.Sprintf(" AND p.status=$%d", len(args))
+	}
+	if f.CourseID != "" {
+		args = append(args, f.CourseID)
+		where += fmt.Sprintf(" AND p.course_id=$%d::uuid", len(args))
+	}
+
+	ctx, cancel := s.ctx()
+	defer cancel()
+
+	// Итоги и count — одним агрегатом по всем записям с учётом фильтров.
+	var totals PaymentTotals
+	var total int
+	if err := s.pool.QueryRow(ctx,
+		`SELECT COUNT(*), COALESCE(SUM(p.amount_cents),0),
+		 COALESCE(SUM(p.platform_fee_cents),0), COALESCE(SUM(p.teacher_amount_cents),0)
+		 FROM payments p WHERE 1=1`+where, args...).
+		Scan(&total, &totals.AmountCents, &totals.PlatformFeeCents, &totals.TeacherAmountCents); err != nil {
+		return nil, 0, PaymentTotals{}, err
+	}
+
+	// Страница строк: платежи + название курса через JOIN.
+	offset := (page - 1) * limit
+	rows, err := s.pool.Query(ctx,
+		fmt.Sprintf(`SELECT %s, c.title FROM payments p
+		 JOIN courses c ON c.id = p.course_id
+		 WHERE 1=1%s ORDER BY p.created_at DESC LIMIT %d OFFSET %d`,
+			paymentColsP, where, limit, offset), args...)
+	if err != nil {
+		return nil, 0, PaymentTotals{}, err
+	}
+	defer rows.Close()
+
+	items := make([]PaymentJournalRow, 0, limit)
+	for rows.Next() {
+		var title string
+		// Переиспользуем scanPayment: дописываем title последним аргументом.
+		p, err := scanPayment(func(dest ...any) error {
+			return rows.Scan(append(dest, &title)...)
+		})
+		if err != nil {
+			return nil, 0, PaymentTotals{}, err
+		}
+		items = append(items, PaymentJournalRow{Payment: *p, CourseTitle: title})
+	}
+	if err := rows.Err(); err != nil {
+		return nil, 0, PaymentTotals{}, err
+	}
+	return items, total, totals, nil
 }
 
 // ---- Reviews ----

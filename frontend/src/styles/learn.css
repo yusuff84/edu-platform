@@ -1,0 +1,212 @@
+/* T03 — стили экрана обучения (Learn.tsx) и просмотра урока (LessonView.tsx).
+   Общий styles.css не трогаем; классы общего слоя (.learn-grid, .progress,
+   .progress-bar, .list, .muted, .error, .radio, .sr-only) переиспользуются. */
+
+.learn-page {
+  max-width: 1100px;
+}
+
+/* ---------- Шапка и прогресс ---------- */
+
+.learn-progress {
+  margin: 0.75rem 0 1.25rem;
+}
+
+/* ---------- Боковой список уроков ---------- */
+
+.learn-sidebar {
+  align-self: start;
+}
+
+.learn-module-title {
+  font-size: 1rem;
+  margin: 1rem 0 0.25rem;
+}
+
+.learn-sidebar section:first-child .learn-module-title {
+  margin-top: 0;
+}
+
+.learn-link {
+  display: block;
+  padding: 0.35rem 0.5rem;
+  border-radius: 6px;
+  color: inherit;
+  text-decoration: none;
+}
+
+.learn-link:hover {
+  background: #eef1ee;
+}
+
+/* Видимый фокус (принцип VI конституции). */
+.learn-link:focus-visible,
+.learn-page button:focus-visible,
+.learn-page a:focus-visible,
+.lesson a:focus-visible,
+.lesson button:focus-visible,
+.lesson textarea:focus-visible,
+.lesson input:focus-visible {
+  outline: 2px solid #2e7d32;
+  outline-offset: 2px;
+}
+
+.learn-link-active {
+  background: #e7f0e8;
+  font-weight: 600;
+}
+
+.learn-link-done {
+  color: #2e7d32;
+}
+
+.learn-link-check {
+  display: inline-block;
+  width: 1em;
+}
+
+.learn-link-kind {
+  color: #666;
+  font-size: 0.85em;
+}
+
+.learn-link-next {
+  color: #666;
+  font-size: 0.85em;
+}
+
+/* ---------- Контент урока ---------- */
+
+.learn-content {
+  min-width: 0; /* чтобы <pre> и <video> не распирали grid-колонку */
+}
+
+.learn-notice {
+  background: #fff;
+  border: 1px solid #e5e5e5;
+  border-radius: 8px;
+  padding: 1rem;
+}
+
+.lesson h3 {
+  margin-top: 0;
+}
+
+.lesson-video {
+  max-width: 100%;
+}
+
+/* ---------- Вердикт (aria-live) ---------- */
+
+.learn-verdict {
+  min-height: 1.5rem;
+  margin: 0.75rem 0;
+}
+
+.learn-verdict p {
+  margin: 0.25rem 0;
+}
+
+.learn-verdict-pass {
+  color: #2e7d32;
+  font-weight: 600;
+}
+
+.learn-verdict-fail {
+  color: #b00020;
+  font-weight: 600;
+}
+
+/* ---------- Лёгкий markdown-рендер ---------- */
+
+.md p {
+  margin: 0.5rem 0;
+}
+
+.md h4,
+.md h5,
+.md h6 {
+  margin: 0.75rem 0 0.25rem;
+}
+
+.md-pre,
+.code-template pre {
+  background: #f4f4f5;
+  border: 1px solid #e5e5e5;
+  border-radius: 8px;
+  padding: 0.75rem;
+  overflow-x: auto;
+}
+
+.md-pre code,
+.code-template code {
+  font-family: ui-monospace, 'Cascadia Code', Consolas, monospace;
+  font-size: 0.9em;
+  white-space: pre;
+}
+
+.md-quote {
+  border-left: 3px solid #e5e5e5;
+  margin: 0.5rem 0;
+  padding-left: 0.75rem;
+  color: #444;
+}
+
+/* ---------- Квиз ---------- */
+
+.quiz fieldset {
+  border: 1px solid #e5e5e5;
+  border-radius: 8px;
+  margin: 0.75rem 0;
+  padding: 0.25rem 0.75rem 0.5rem;
+}
+
+.quiz legend {
+  font-weight: 600;
+}
+
+.quiz-explanation {
+  background: #fff8e1;
+  border-left: 3px solid #f9a825;
+  border-radius: 0 6px 6px 0;
+  margin: 0.5rem 0;
+  padding: 0.5rem 0.75rem;
+}
+
+/* ---------- Код ---------- */
+
+.code-template {
+  margin: 0.75rem 0;
+}
+
+.code-template h4 {
+  margin: 0.75rem 0 0.25rem;
+}
+
+.code-input {
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  font-family: ui-monospace, 'Cascadia Code', Consolas, monospace;
+  font-size: 0.9em;
+  line-height: 1.4;
+  tab-size: 4;
+}
+
+.code-toolbar {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.code-toolbar button {
+  margin-top: 0.5rem;
+}
+
+/* ---------- Адаптив ---------- */
+
+@media (max-width: 768px) {
+  .learn-grid {
+    grid-template-columns: 1fr;
+  }
+}

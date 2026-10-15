@@ -4,31 +4,50 @@ import { myCourses } from '../api/client';
 import { coverFor } from '../components/CourseCard';
 import { t } from '../i18n/t';
 
+/**
+ * «Мои курсы» студента (первая страница после входа).
+ * Форма данных — строго по контракту GET /me/courses:
+ * MyCourse = { course: CourseItem, percent, nextLesson: NextLesson | null }.
+ * Плоских courseId/slug/title/nextLessonId в ответе НЕТ.
+ */
 export default function MyCourses(): JSX.Element {
   const query = useQuery({ queryKey: ['my-courses'], queryFn: myCourses });
 
-  if (query.isLoading)
+  // Загрузка
+  if (query.isLoading) {
     return (
       <div className="wrap">
         <div className="page">
           <div className="panel">
-            <p>{t('my.loading')}</p>
+            <p role="status">{t('my.loading')}</p>
           </div>
         </div>
       </div>
     );
-  if (query.isError)
+  }
+
+  // Ошибка сети / сервера — можно повторить без перезагрузки страницы
+  if (query.isError) {
     return (
       <div className="wrap">
         <div className="page">
           <div className="panel">
-            <p>{t('common.error')}</p>
+            <p role="alert" className="error">
+              {t('error.network')}
+            </p>
+            <button type="button" onClick={() => void query.refetch()}>
+              {t('common.retry')}
+            </button>
           </div>
         </div>
       </div>
     );
+  }
+
   const items = query.data ?? [];
-  if (items.length === 0)
+
+  // Пустой список
+  if (items.length === 0) {
     return (
       <div className="wrap">
         <div className="page">
@@ -44,6 +63,7 @@ export default function MyCourses(): JSX.Element {
         </div>
       </div>
     );
+  }
 
   const total = items.length;
   const avg =
@@ -69,26 +89,32 @@ export default function MyCourses(): JSX.Element {
           </div>
         </div>
         <div className="enrolled-grid">
-          {items.map((m) => {
-            const href = m.nextLessonId
-              ? `/learn/${m.courseId}/${m.nextLessonId}`
-              : `/learn/${m.courseId}`;
+          {items.map((item) => {
+            const course = item.course;
+            // nextLesson — объект {lessonId, title, kind} | null (контракт, п.17)
+            const nextLessonId = item.nextLesson?.lessonId;
+            const href = nextLessonId
+              ? `/learn/${course.id}/${nextLessonId}`
+              : `/learn/${course.id}`;
             return (
-              <div key={m.courseId} className="panel">
-                <div className={`cover ${coverFor(m.slug)} enrolled-cover`} aria-hidden="true">
+              <div key={course.id} className="panel">
+                <div
+                  className={`cover ${coverFor(course.slug || course.id)} enrolled-cover`}
+                  aria-hidden="true"
+                >
                   <span className="tag">Курс</span>
                 </div>
                 <h3>
-                  <Link to={href}>{m.title}</Link>
+                  <Link to={href}>{course.title}</Link>
                 </h3>
-                <div className="progress" aria-label={`${t('my.progress')}: ${m.percent}%`}>
-                  <div className="progress-bar" style={{ width: `${m.percent}%` }} />
+                <div className="progress" aria-label={`${t('my.progress')}: ${item.percent}%`}>
+                  <div className="progress-bar" style={{ width: `${item.percent}%` }} />
                 </div>
                 <div className="progress-meta">
                   <span>
-                    {t('my.progress')}: {m.percent}%
+                    {t('my.progress')}: {item.percent}%
                   </span>
-                  <span>{m.nextLessonTitle ?? ''}</span>
+                  <span>{item.nextLesson?.title ?? ''}</span>
                 </div>
                 <div className="btn-row">
                   <Link className="btn btn-primary" to={href}>

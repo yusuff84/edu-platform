@@ -1,7 +1,8 @@
 import { Link } from 'react-router-dom';
-import type { Course } from '../api/client';
+import type { CourseItem } from '../api/client';
 import { formatPrice } from '../api/client';
 import { t } from '../i18n/t';
+import '../styles/catalog.css';
 
 const COVERS = ['cover-py', 'cover-html', 'cover-js', 'cover-sql', 'cover-fig', 'cover-linux'];
 
@@ -11,27 +12,36 @@ export function coverFor(key: string): string {
   return COVERS[h % COVERS.length];
 }
 
+/** Звёзды рейтинга: дробное значение округляется, 0 → «пока без оценок». */
 export function Stars({ value }: { value: number }): JSX.Element {
-  const filled = Math.round(value);
+  const filled = Math.max(0, Math.min(5, Math.round(value)));
   return (
     <span role="img" aria-label={`${t('a11y.ratingLabel')}: ${value.toFixed(1)}`}>
-      {'★'.repeat(Math.max(0, Math.min(5, filled)))}
-      {'☆'.repeat(5 - Math.max(0, Math.min(5, filled)))}
+      {'★'.repeat(filled)}
+      {'☆'.repeat(5 - filled)}
       {' '}
       <span>{value > 0 ? value.toFixed(1) : t('catalog.ratingNo')}</span>
     </span>
   );
 }
 
-export default function CourseCard({ course }: { course: Course }): JSX.Element {
-  const lessons =
-    course.lessonsCount ?? course.modules?.reduce((n, m) => n + m.lessons.length, 0) ?? 0;
+/**
+ * Карточка курса для каталога.
+ * Рендерим только поля CourseItem: автора, обложку и статус бэкенд
+ * в ответе каталога не отдаёт — пустышки не показываем.
+ * Оформление — Skillbox-style плитка (cover/tag/tile-title из styles.css),
+ * обложка детерминирована от slug/id через coverFor.
+ */
+export default function CourseCard({ course }: { course: CourseItem }): JSX.Element {
+  const desc =
+    course.description.length > 140
+      ? `${course.description.slice(0, 140)}…`
+      : course.description;
   const meta = [
-    lessons > 0 ? `${lessons} уроков` : null,
-    course.teacherName ?? null,
     course.avgRating > 0
       ? `★ ${course.avgRating.toFixed(1).replace('.', ',')}`
-      : formatPrice(course.priceCents),
+      : null,
+    formatPrice(course.priceCents),
   ]
     .filter(Boolean)
     .join(' · ');
@@ -45,6 +55,18 @@ export default function CourseCard({ course }: { course: Course }): JSX.Element 
           {meta && <small>{meta}</small>}
         </span>
       </Link>
+      <p className="muted">{desc}</p>
+      <div className="card-row">
+        <Stars value={course.avgRating ?? 0} />
+        {course.ratingsCount > 0 && (
+          <span className="muted">
+            {course.ratingsCount} {t('reviews.title').toLowerCase()}
+          </span>
+        )}
+      </div>
+      <div className="card-row">
+        <strong>{formatPrice(course.priceCents)}</strong>
+      </div>
     </article>
   );
 }

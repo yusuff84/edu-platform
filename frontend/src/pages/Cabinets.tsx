@@ -57,6 +57,12 @@ export function StudentCab(): JSX.Element {
   );
 }
 
+/**
+ * Кабинет учителя. Основной гвард роли стоит в router.tsx (RouteGuards.tsx,
+ * общий query ['me']); локальный RequireRole ниже оставлен как второй рубеж
+ * и для совместимости с разводкой, где кабинеты гвардируются сами. StudentCab
+ * и AdminCab сохранены — их использует такая разводка маршрутов.
+ */
 export function TeacherCab(): JSX.Element {
   return (
     <RequireRole roles={['teacher', 'admin']}>
@@ -94,8 +100,8 @@ function TeacherCourses(): JSX.Element {
     queryKey: ['teaching'],
     queryFn: myTeaching,
   });
-  if (isLoading) return <p>{t('common.loading')}</p>;
-  if (isError) return <p>{t('common.error')}</p>;
+  if (isLoading) return <p role="status">{t('common.loading')}</p>;
+  if (isError) return <p role="alert">{t('common.error')}</p>;
   if (!data || data.length === 0) return <p>{t('teach.empty')}</p>;
   return (
     <ul className="teach-list">
