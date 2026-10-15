@@ -20,6 +20,10 @@ type StoreAPI interface {
 	SetUserRole(id string, role Role) bool
 	// SetUserDisplayName задаёт отображаемое имя (OAuth-профиль, T13).
 	SetUserDisplayName(id, name string) bool
+	// SetUserPasswordHash перезаписывает хеш пароля. Нужен T16 для починки
+	// поддельных bcrypt-хешей из миграции 002_seed.sql (см. ensureAccount
+	// в cmd/api/main.go). false — пользователь не найден.
+	SetUserPasswordHash(id, hash string) bool
 	// Sessions
 	CreateSession(userID string, ttl time.Duration) *Session
 	GetSession(id string) (*Session, bool)
@@ -76,7 +80,10 @@ type StoreAPI interface {
 	RecalcCourseRating(courseID string)
 	// Settings
 	GetCommissionPct() int
-	SetCommissionPct(n int)
+	// SetCommissionPct сохраняет комиссию (0..90) и возвращает ошибку записи
+	// (T16, п.4): раньше Postgres глотал её, API отвечал 200, а в базу ничего
+	// не попадало. Кэш в памяти обновляется ТОЛЬКО после успешной записи.
+	SetCommissionPct(n int) error
 }
 
 // PaymentFilter — параметры журнала платежей для админки (US6).
@@ -89,10 +96,14 @@ type PaymentFilter struct {
 }
 
 // PaymentJournalRow — строка журнала платежей: платёж + название курса
-// (название подтягивается из courses, в in-memory — из map, в PG — через JOIN).
+// (название подтягивается из courses, в in-memory — из map, в PG — через JOIN)
+// и данные студента (email и отображаемое имя, T16 п.3: без email колонка
+// «Студент» в админке была непригодной — там светился обрезанный UUID).
 type PaymentJournalRow struct {
 	Payment
-	CourseTitle string
+	CourseTitle        string
+	StudentEmail       string
+	StudentDisplayName string
 }
 
 // PaymentTotals — итоговые суммы журнала по ВСЕМ записям с учётом фильтров,

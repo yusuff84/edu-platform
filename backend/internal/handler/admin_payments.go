@@ -77,6 +77,8 @@ func parseJournalPagination(r *http.Request) (page, limit int, ok bool) {
 type paymentJournalItem struct {
 	ID                 string             `json:"id"`
 	StudentID          string             `json:"studentId"`
+	StudentEmail       string             `json:"studentEmail"`
+	StudentName        string             `json:"studentName"`
 	CourseID           string             `json:"courseId"`
 	CourseTitle        string             `json:"courseTitle"`
 	AmountCents        int                `json:"amountCents"`
@@ -141,8 +143,12 @@ func (a *App) AdminPaymentsJournal(w http.ResponseWriter, r *http.Request) {
 	out := make([]paymentJournalItem, 0, len(items))
 	for _, it := range items {
 		out = append(out, paymentJournalItem{
-			ID: it.ID, StudentID: it.StudentID, CourseID: it.CourseID,
-			CourseTitle: it.CourseTitle,
+			ID: it.ID, StudentID: it.StudentID,
+			// T16 (п.3, расхождение №6): email и имя студента — иначе в админке
+			// в колонке «Студент» светился обрезанный UUID. studentName может
+			// быть пустым — тогда фронт показывает studentEmail.
+			StudentEmail: it.StudentEmail, StudentName: it.StudentDisplayName,
+			CourseID: it.CourseID, CourseTitle: it.CourseTitle,
 			AmountCents: it.AmountCents, PlatformFeeCents: it.PlatformFeeCents,
 			TeacherAmountCents: it.TeacherAmountCents,
 			Currency:           it.Currency, Provider: it.Provider,
@@ -179,7 +185,9 @@ type updateSettingsRequest struct {
 // AdminUpdateSettings — PUT /admin/settings: меняет комиссию платформы (US6),
 // только admin. Валидация 0..90; значение применяется немедленно —
 // SetCommissionPct обновляет кэш в памяти обоих сторов (см. store.go,
-// postgres_store.go), перезапуск не нужен.
+// postgres_store.go), перезапуск не нужен. T16 (п.4): ошибка записи в БД
+// пробрасывается и превращается в 500 — раньше Postgres её глотал, и API
+// отвечал 200, не сохранив ничего.
 func (a *App) AdminUpdateSettings(w http.ResponseWriter, r *http.Request) {
 	if !a.adminOnly(w, r) {
 		return
@@ -196,6 +204,9 @@ func (a *App) AdminUpdateSettings(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "Комиссия должна быть в диапазоне от 0 до 90")
 		return
 	}
-	a.Store.SetCommissionPct(*req.CommissionPct)
+	if err := a.Store.SetCommissionPct(*req.CommissionPct); err != nil {
+		writeErr(w, http.StatusInternalServerError, "Не удалось сохранить комиссию платформы")
+		return
+	}
 	writeJSON(w, http.StatusOK, settingsResponse{CommissionPct: *req.CommissionPct})
 }

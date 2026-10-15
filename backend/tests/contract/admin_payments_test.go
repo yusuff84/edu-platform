@@ -2,8 +2,9 @@ package contract_test
 
 // Контрактные тесты US6 (журнал платежей и комиссия) — эндпоинты от T07:
 // GET /admin/payments, GET/PUT /admin/settings. Подтверждают форму ответа
-// Task/00-api-contract.md и расхождение №6 (в журнале нет email/имени
-// студента — только studentId).
+// Task/00-api-contract.md: в журнале есть email/имя студента (расхождение №6
+// закрыто T16 — раньше здесь был тест-фиксатор, ожидавший ПОЛНОГО ОТСУТСТВИЯ
+// этих полей).
 
 import (
 	"net/http"
@@ -69,12 +70,18 @@ func TestAdminPaymentsJournal(t *testing.T) {
 	if studentID == "" {
 		t.Fatalf("нет studentId: %s", rec.Body.String())
 	}
-	// ПОДТВЕРЖДЕНОЕ РАСХОЖДЕНИЕ №6: email/имени студента в журнале нет —
-	// только обрезанный в UI UUID. Фиксируем фактическую форму.
-	for _, banned := range []string{"studentEmail", "studentName", "email", "displayName"} {
-		if _, has := row[banned]; has {
-			t.Fatalf("расхождение №6 закрыто — появилось поле %s; обновите Task/00-api-contract.md", banned)
-		}
+	// T16 (п.3): email и имя студента в журнале — расхождение №6 закрыто.
+	// Раньше здесь стоял тест-фиксатор, падавший при появлении studentEmail.
+	if row["studentEmail"] != "journal-student@example.com" {
+		t.Fatalf("studentEmail отсутствует или неверен: %s", rec.Body.String())
+	}
+	if name, hasName := row["studentName"]; !hasName {
+		t.Fatalf("в строке журнала нет studentName: %s", rec.Body.String())
+	} else if _, isString := name.(string); !isString {
+		t.Fatalf("studentName должен быть строкой (допустимо пустой), got %v", name)
+	}
+	if row["studentId"] == row["studentEmail"] {
+		t.Fatalf("studentEmail не должен дублировать UUID studentId: %s", rec.Body.String())
 	}
 	totals, _ := journal["totals"].(map[string]any)
 	if totals["amountCents"] != float64(10000) || totals["platformFeeCents"] != float64(1500) || totals["teacherAmountCents"] != float64(8500) {

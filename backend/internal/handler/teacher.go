@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -168,6 +169,18 @@ func (a *App) TeacherCreateLesson(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "Модуль не принадлежит этому курсу")
 		return
 	}
+	// T16 (п.1, расхождение №4): startsAt раньше принимался, но не копировался
+	// в repo.Lesson — планирование живых эфиров не работало. Разбираем строку
+	// здесь: мусор в поле — ошибка запроса, а не тихо потерянный эфир.
+	var startsAt *time.Time
+	if req.StartsAt != nil && strings.TrimSpace(*req.StartsAt) != "" {
+		t, err := time.Parse(time.RFC3339, strings.TrimSpace(*req.StartsAt))
+		if err != nil {
+			writeErr(w, http.StatusBadRequest, "Некорректный startsAt: ожидается дата в формате RFC3339 (например 2030-01-01T12:00:00Z)")
+			return
+		}
+		startsAt = &t
+	}
 	l := &repo.Lesson{
 		ModuleID: mod.ID,
 		Title:    strings.TrimSpace(req.Title),
@@ -175,6 +188,7 @@ func (a *App) TeacherCreateLesson(w http.ResponseWriter, r *http.Request) {
 		BodyMD:   req.BodyMD,
 		VideoURL: strings.TrimSpace(req.VideoURL),
 		LiveURL:  strings.TrimSpace(req.LiveURL),
+		StartsAt: startsAt,
 		Quiz:     req.Quiz,
 		CodeTask: req.CodeTask,
 	}

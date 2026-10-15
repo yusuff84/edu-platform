@@ -131,6 +131,19 @@ func (s *PostgresStore) SetUserRole(id string, role Role) bool {
 	return tag.RowsAffected() > 0
 }
 
+// SetUserPasswordHash перезаписывает хеш пароля (починка поддельного хеша
+// из миграции 002_seed.sql, T16). false — пользователь не найден или БД отказала.
+func (s *PostgresStore) SetUserPasswordHash(id, hash string) bool {
+	ctx, cancel := s.ctx()
+	defer cancel()
+	tag, err := s.pool.Exec(ctx, `UPDATE users SET password_hash=$2 WHERE id=$1::uuid`, id, hash)
+	if err != nil {
+		log.Printf("postgres SetUserPasswordHash: %v", err)
+		return false
+	}
+	return tag.RowsAffected() > 0
+}
+
 // ---- Sessions ----
 
 func (s *PostgresStore) CreateSession(userID string, ttl time.Duration) *Session {
@@ -634,6 +647,11 @@ func (s *PostgresStore) GetEnrollment(studentID, courseID string) (*Enrollment, 
 	return e, true
 }
 
+// EnsureEnrollment создаёт запись (идемпотентно); created=false, если уже была.
+// T16 (п.5): вызывается только на путях УСПЕШНОГО платежа (handler/enroll.go),
+// поэтому существующая запись со статусом refunded/revoked переводится в
+// active — иначе оплата прошла, а доступ не открылся. Семантика created
+// («запись только что создана») сохранена как у in-memory Store.
 func (s *PostgresStore) EnsureEnrollment(studentID, courseID string) (*Enrollment, bool) {
 	ctx, cancel := s.ctx()
 	defer cancel()
@@ -651,6 +669,13 @@ func (s *PostgresStore) EnsureEnrollment(studentID, courseID string) (*Enrollmen
 		now := time.Now().UTC()
 		return &Enrollment{ID: uuid.NewString(), StudentID: studentID, CourseID: courseID,
 			Status: EnrollmentActive, CreatedAt: now}, false
+	}
+	if e.Status != EnrollmentActive {
+		if err := s.SetEnrollmentStatus(studentID, courseID, EnrollmentActive); err != nil {
+			log.Printf("postgres EnsureEnrollment: не удалось открыть доступ: %v", err)
+			return e, false
+		}
+		e.Status = EnrollmentActive
 	}
 	return e, false
 }
@@ -927,11 +952,14 @@ func (s *PostgresStore) ListPaymentsJournal(f PaymentFilter) ([]PaymentJournalRo
 		return nil, 0, PaymentTotals{}, err
 	}
 
-	// Страница строк: платежи + название курса через JOIN.
+	// Страница строк: платежи + название курса + данные студента (T16, п.3).
+	// LEFT JOIN users: строка журнала не должна исчезнуть из-за пользователя,
+	// иначе total/ totals из агрегата разошлись бы со списком.
 	offset := (page - 1) * limit
 	rows, err := s.pool.Query(ctx,
-		fmt.Sprintf(`SELECT %s, c.title FROM payments p
+		fmt.Sprintf(`SELECT %s, c.title, COALESCE(u.email,''), COALESCE(u.display_name,'') FROM payments p
 		 JOIN courses c ON c.id = p.course_id
+		 LEFT JOIN users u ON u.id = p.student_id
 		 WHERE 1=1%s ORDER BY p.created_at DESC LIMIT %d OFFSET %d`,
 			paymentColsP, where, limit, offset), args...)
 	if err != nil {
@@ -941,15 +969,18 @@ func (s *PostgresStore) ListPaymentsJournal(f PaymentFilter) ([]PaymentJournalRo
 
 	items := make([]PaymentJournalRow, 0, limit)
 	for rows.Next() {
-		var title string
-		// Переиспользуем scanPayment: дописываем title последним аргументом.
+		var title, studentEmail, studentName string
+		// Переиспользуем scanPayment: дописываем title/email/name последними.
 		p, err := scanPayment(func(dest ...any) error {
-			return rows.Scan(append(dest, &title)...)
+			return rows.Scan(append(dest, &title, &studentEmail, &studentName)...)
 		})
 		if err != nil {
 			return nil, 0, PaymentTotals{}, err
 		}
-		items = append(items, PaymentJournalRow{Payment: *p, CourseTitle: title})
+		items = append(items, PaymentJournalRow{
+			Payment: *p, CourseTitle: title,
+			StudentEmail: studentEmail, StudentDisplayName: studentName,
+		})
 	}
 	if err := rows.Err(); err != nil {
 		return nil, 0, PaymentTotals{}, err
@@ -1065,15 +1096,22 @@ func parsePct(raw string) (int, error) {
 	return n, nil
 }
 
-func (s *PostgresStore) SetCommissionPct(n int) {
+// SetCommissionPct сохраняет комиссию в app_settings и ТОЛЬКО ПОСЛЕ УСПЕШНОЙ
+// записи обновляет кэш в памяти (T16, п.4): раньше запись глоталась через
+// `_, _ =`, API отвечал 200, а значение терялось после перезапуска.
+func (s *PostgresStore) SetCommissionPct(n int) error {
 	n = clampCommission(n)
+	ctx, cancel := s.ctx()
+	defer cancel()
+	if _, err := s.pool.Exec(ctx,
+		`INSERT INTO app_settings (key, value) VALUES ('commission_pct',$1)
+		 ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value, updated_at=now()`,
+		strconv.Itoa(n)); err != nil {
+		// Кэш не трогаем: иначе API показывал бы комиссию, которой нет в БД.
+		return fmt.Errorf("не удалось сохранить комиссию в app_settings: %w", err)
+	}
 	s.mu.Lock()
 	s.commissionPct = n
 	s.mu.Unlock()
-	ctx, cancel := s.ctx()
-	defer cancel()
-	_, _ = s.pool.Exec(ctx,
-		`INSERT INTO app_settings (key, value) VALUES ('commission_pct',$1)
-		 ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value, updated_at=now()`,
-		strconv.Itoa(n))
+	return nil
 }
