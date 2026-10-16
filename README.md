@@ -34,6 +34,28 @@ docker compose up -d --build
 
 Миграции применяются автоматически при старте API.
 
+### Если порт 3000 занят другим проектом
+
+Порт фронта настраивается через `WEB_PORT`, но **CSRF и CORS привязаны к
+origin'у** — просто перенаправить 3000 на другой порт недостаточно, браузер
+получит отказ на любых не-GET запросах (вход, регистрация). Меняйте обе
+переменные одной парой:
+
+```bash
+# PowerShell
+$env:WEB_PORT="3001"
+$env:ALLOWED_ORIGINS="http://localhost:3001,http://127.0.0.1:3001"
+docker compose up -d --build --force-recreate api web
+
+# bash
+WEB_PORT=3001 ALLOWED_ORIGINS="http://localhost:3001,http://127.0.0.1:3001" \
+  docker compose up -d --build --force-recreate api web
+```
+
+`ALLOWED_ORIGINS` по умолчанию — `http://localhost:3000,http://127.0.0.1:3000`
+(см. `docker-compose.yml`, `internal/config/config.go`). Сквозной скрипт
+принимает порт отдельно: `powershell -File qa-abc.ps1 -WebUrl http://localhost:3001`.
+
 ## Демо-учётки
 
 ### Админ — работает сразу
