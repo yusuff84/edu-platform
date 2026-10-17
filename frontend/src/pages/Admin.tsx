@@ -1,6 +1,6 @@
 import { type FormEvent, useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -293,6 +293,14 @@ export default function Admin(): JSX.Element {
         <a href="#journal">{t('admin.journal')}</a>
         <a href="#settings">{t('admin.commissionPct')}</a>
         <a href="#invites">{t('admin.invites')}</a>
+      </nav>
+
+      {/* Подразделы супер-админки вынесены на отдельные страницы: у каждой свой
+          файл-владелец, поэтому они разрабатываются независимо друг от друга. */}
+      <nav className="admin-nav admin-nav--pages" aria-label={t('cabinet.adminTitle')}>
+        <Link to="/admin/stats">{t('adminStats.title')}</Link>
+        <Link to="/admin/users">{t('adminUsers.title')}</Link>
+        <Link to="/admin/courses">{t('adminCourses.title')}</Link>
       </nav>
 
       {/* ---------- 1. Очередь модерации ---------- */}

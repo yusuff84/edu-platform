@@ -1060,6 +1060,9 @@ export default function Constructor(): JSX.Element {
 
               <p>
                 <Link to="/teach">{t('common.back')}</Link>
+                {' · '}
+                {/* T29: список учеников курса — отдельная страница. */}
+                <Link to={`/teach/${course.id}/students`}>{t('courseStudents.title')}</Link>
               </p>
 
               {/* T19: правка карточки (T13 PATCH) — доступна в любом статусе:

@@ -19,6 +19,13 @@ const MyCourses = lazy(() => import('../pages/MyCourses'));
 const Learn = lazy(() => import('../pages/Learn'));
 const Constructor = lazy(() => import('../pages/Constructor'));
 const Admin = lazy(() => import('../pages/Admin'));
+// T26/T27/T29/T30: подразделы, разведённые по задачам отдельными страницами,
+// чтобы агенты правили каждый свой файл и не конфликтовали.
+const AdminUsers = lazy(() => import('../pages/AdminUsers'));
+const AdminCourses = lazy(() => import('../pages/AdminCourses'));
+const AdminStats = lazy(() => import('../pages/AdminStats'));
+const CourseStudents = lazy(() => import('../pages/CourseStudents'));
+const Profile = lazy(() => import('../pages/Profile'));
 // В Cabinets.tsx нет default-экспорта — берём именованный TeacherCab.
 const TeacherCab = lazy(async () => {
   const m = await import('../pages/Cabinets');
@@ -88,6 +95,11 @@ function Layout(): JSX.Element {
             <NavLink to="/me" className={({ isActive }) => (isActive ? 'active' : '')}>
               {t('nav.myCourses')}
             </NavLink>
+            {user && (
+              <NavLink to="/profile" className={({ isActive }) => (isActive ? 'active' : '')}>
+                {t('nav.profile')}
+              </NavLink>
+            )}
             {(user?.role === 'teacher' || user?.role === 'admin') && (
               <NavLink to="/teach" className={({ isActive }) => (isActive ? 'active' : '')}>
                 {t('nav.teach')}
@@ -197,6 +209,15 @@ export const router = createBrowserRouter([
       { path: '/teach/new', element: <RequireRole roles={['teacher', 'admin']}><Constructor /></RequireRole> },
       { path: '/teach/:id', element: <RequireRole roles={['teacher', 'admin']}><Constructor /></RequireRole> },
       { path: '/admin', element: <RequireRole roles={['admin']}><Admin /></RequireRole> },
+      // Подразделы супер-админки — отдельные страницы со своим роутом
+      // (каждая со своим владельцем-задачей).
+      { path: '/admin/users', element: <RequireRole roles={['admin']}><AdminUsers /></RequireRole> },
+      { path: '/admin/courses', element: <RequireRole roles={['admin']}><AdminCourses /></RequireRole> },
+      { path: '/admin/stats', element: <RequireRole roles={['admin']}><AdminStats /></RequireRole> },
+      // Ученики конкретного курса — автору курса и админу.
+      { path: '/teach/:id/students', element: <RequireRole roles={['teacher', 'admin']}><CourseStudents /></RequireRole> },
+      // Личный кабинет ученика: профиль и история платежей.
+      { path: '/profile', element: <RequireAuth><Profile /></RequireAuth> },
       // Learn требует авторизации, но не требует роли.
       // errorElement на /learn/*: ошибка урока не убивает весь кабинет.
       {

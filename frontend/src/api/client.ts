@@ -75,7 +75,11 @@ export class ApiError extends Error {
 
 // ---------- Транспорт ----------
 
-async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
+// apiFetch экспортируется для модулей-компаньонов (api/adminUsers.ts,
+// api/adminConsole.ts, api/teacherExtra.ts, api/teacherStudents.ts,
+// api/meExtra.ts): задачи P3 пишутся параллельно и не должны ни дублировать
+// транспорт, ни конфликтовать в этом файле.
+export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
     credentials: 'include',
     headers: { 'Content-Type': 'application/json', ...(init?.headers ?? {}) },
@@ -100,8 +104,9 @@ async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   return data as T;
 }
 
-/** Собирает строку query из параметров, пропуская пустые значения. */
-function buildQuery(params?: Record<string, string | number | undefined>): string {
+/** Собирает строку query из параметров, пропуская пустые значения.
+ *  Экспортируется для модулей-компаньонов (см. комментарий у apiFetch). */
+export function buildQuery(params?: Record<string, string | number | undefined>): string {
   if (!params) return '';
   const qs = new URLSearchParams();
   for (const [key, value] of Object.entries(params)) {
