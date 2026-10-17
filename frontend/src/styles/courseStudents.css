@@ -1,0 +1,275 @@
+/* T29: стили страницы «Ученики курса» (кабинет учителя, /teach/:id/students).
+   Импортируется только из pages/CourseStudents.tsx; общий styles.css не изменяется.
+   Базовые классы (.wrap, .page, .panel, .empty, .btn, .input, .muted, .error,
+   полоса .progress/.progress-bar, оформление таблиц и ячеек) берутся из styles.css —
+   здесь только раскладка страницы и её специфичные элементы. */
+
+/* ---------- Шапка ---------- */
+
+.cs-back {
+  margin: 0 0 10px;
+}
+
+.cs-course {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin: 8px 0 0;
+  font-weight: 800;
+}
+
+.cs-course-title {
+  letter-spacing: -0.02em;
+}
+
+.cs-course-status {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 12.5px;
+  font-weight: 700;
+}
+
+.cs-course-status--draft {
+  background: #f1f3f5;
+  color: #555;
+}
+
+.cs-course-status--review {
+  background: var(--warn-bg);
+  color: #7a5b00;
+}
+
+.cs-course-status--published {
+  background: var(--ok-bg);
+  color: var(--ok);
+}
+
+.cs-course-status--archived {
+  background: #e9e7e1;
+  color: var(--muted);
+}
+
+/* ---------- Плитки статистики (язык .cab-stats из styles.css) ---------- */
+
+.cs-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(155px, 1fr));
+  gap: 12px;
+  margin: 18px 0 20px;
+}
+
+.cs-stat {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  padding: 14px 18px;
+}
+
+.cs-stat b {
+  display: block;
+  font-size: 22px;
+  letter-spacing: -0.02em;
+}
+
+.cs-stat span {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+/* ---------- Поиск ---------- */
+
+.cs-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.cs-search {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+  max-width: 340px;
+}
+
+.cs-search-label {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+/* ---------- Пустое состояние ---------- */
+
+.cs-empty {
+  margin-top: 0;
+}
+
+/* ---------- Таблица (раскладка по образцу .admin-table из admin.css) ---------- */
+
+.cs-table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  -webkit-overflow-scrolling: touch;
+}
+
+.cs-table {
+  width: 100%;
+  border-collapse: collapse;
+  /* Узкий экран — горизонтальная прокрутка (ниже — режим карточек). */
+  min-width: 760px;
+}
+
+.cs-table th,
+.cs-table td {
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--line-soft);
+  text-align: left;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+.cs-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.cs-table tbody tr:hover {
+  background: #fafbfc;
+}
+
+.cs-td-student {
+  white-space: normal;
+  min-width: 12rem;
+}
+
+.cs-student {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.cs-student .muted {
+  font-size: 12.5px;
+}
+
+/* ---------- Прогресс: полоса (.progress/.progress-bar) + «N из M» ---------- */
+
+.cs-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 9rem;
+  max-width: 16rem;
+}
+
+.cs-progress .progress {
+  height: 8px;
+}
+
+.cs-progress-meta {
+  color: var(--muted);
+  font-size: 12.5px;
+}
+
+/* ---------- Бейджи статуса записи ---------- */
+
+.cs-badge {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 12.5px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.cs-badge--active {
+  background: var(--ok-bg);
+  color: var(--ok);
+}
+
+.cs-badge--refunded {
+  background: #e7f0fd;
+  color: #1a4f9c;
+}
+
+.cs-badge--revoked {
+  background: var(--danger-bg);
+  color: var(--danger);
+}
+
+/* ---------- Пагинация ---------- */
+
+.cs-pager {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.cs-pager button:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+/* ---------- Узкий экран: строки таблицы превращаются в карточки ---------- */
+
+@media (max-width: 720px) {
+  .cs-table {
+    min-width: 0;
+  }
+
+  .cs-table thead {
+    display: none;
+  }
+
+  .cs-table,
+  .cs-table tbody,
+  .cs-table tr,
+  .cs-table td {
+    display: block;
+    width: 100%;
+  }
+
+  .cs-table tr {
+    padding: 4px 0;
+    border-bottom: 6px solid #f7f7f8;
+  }
+
+  .cs-table tr:last-child {
+    border-bottom: none;
+  }
+
+  .cs-table td {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 12px;
+    white-space: normal;
+    border-bottom: none;
+    padding: 6px 14px;
+  }
+
+  .cs-table td::before {
+    content: attr(data-label);
+    flex: 0 0 auto;
+    font-weight: 600;
+    color: var(--muted);
+  }
+
+  .cs-td-student {
+    min-width: 0;
+  }
+
+  .cs-progress {
+    align-items: flex-end;
+    min-width: 8rem;
+  }
+}
