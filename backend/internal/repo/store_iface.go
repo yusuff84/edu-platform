@@ -24,6 +24,21 @@ type StoreAPI interface {
 	// поддельных bcrypt-хешей из миграции 002_seed.sql (см. ensureAccount
 	// в cmd/api/main.go). false — пользователь не найден.
 	SetUserPasswordHash(id, hash string) bool
+	// ListUsers — фильтрованный список пользователей для админки (T24).
+	// Q — подстрока по email/displayName (регистронезависимо), Role/Status —
+	// точное совпадение, "" — любой. Новые первыми (CreatedAt desc).
+	ListUsers(f UserFilter) []*User
+	// SetUserStatus активен/заблокирован; false — пользователя нет (T24).
+	SetUserStatus(id string, status UserStatus) bool
+	// DeleteUser удаляет пользователя; ErrNotFound — нет такого (T24).
+	// Каскад по сессиям/отзывам/прогрессу; курсы и платежи НЕ удаляются —
+	// handler обязан отказать (409), если они есть (см. UserDependencies).
+	DeleteUser(id string) error
+	// UserDependencies — счётчики связей пользователя для защиты от удаления (T24).
+	UserDependencies(id string) UserDeps
+	// CountUsersByRole — сколько пользователей с ролью (защита последнего
+	// администратора, T24).
+	CountUsersByRole(role Role) int
 	// Sessions
 	CreateSession(userID string, ttl time.Duration) *Session
 	GetSession(id string) (*Session, bool)
@@ -148,6 +163,23 @@ type PositionItem struct {
 type ContentCounts struct {
 	Modules int
 	Lessons int
+}
+
+// UserFilter — фильтры списка пользователей в админке (T24).
+// Пустые значения означают «любой»; Q ищет подстроку по email и displayName
+// без учёта регистра.
+type UserFilter struct {
+	Q      string
+	Role   Role
+	Status UserStatus
+}
+
+// UserDeps — счётчики связей пользователя (T24): удаление запрещено, если
+// есть курсы (пользователь — преподаватель) или платежи (история оплат).
+type UserDeps struct {
+	Courses     int
+	Payments    int
+	Enrollments int
 }
 
 // Проверка, что in-memory Store реализует интерфейс.

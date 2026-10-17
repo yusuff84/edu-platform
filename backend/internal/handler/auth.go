@@ -107,6 +107,13 @@ func (a *App) Login(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusUnauthorized, "Неверный email или пароль")
 		return
 	}
+	// T24: заблокированный не получает сессию — иначе она сразу оказалась бы
+	// нерабочей (requireAuth отвечает 403). Пароль проверен ДО статуса, чтобы
+	// по 403 нельзя было определить существование чужого аккаунта.
+	if u.Status == repo.UserBlocked {
+		writeErr(w, http.StatusForbidden, "Учётная запись заблокирована")
+		return
+	}
 	a.startSession(w, r, u.ID)
 	writeJSON(w, http.StatusOK, userResponseOf(u))
 }
@@ -121,10 +128,16 @@ func (a *App) Logout(w http.ResponseWriter, r *http.Request) {
 }
 
 // Me — GET /auth/me, текущий пользователь.
+// T24: заблокированный получает 403 и здесь — маршрут не накрыт requireAuth
+// (optionalUser статус не проверяет), а сессия перестаёт пускать везде.
 func (a *App) Me(w http.ResponseWriter, r *http.Request) {
 	u := a.optionalUser(r)
 	if u == nil {
 		writeErr(w, http.StatusUnauthorized, "Требуется вход в аккаунт")
+		return
+	}
+	if u.Status == repo.UserBlocked {
+		writeErr(w, http.StatusForbidden, "Учётная запись заблокирована")
 		return
 	}
 	writeJSON(w, http.StatusOK, userResponseOf(u))
