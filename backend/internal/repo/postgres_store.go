@@ -75,11 +75,12 @@ func (s *PostgresStore) CreateUser(email, passwordHash string, role Role) (*User
 	email = normEmail(email)
 	ctx, cancel := s.ctx()
 	defer cancel()
-	u := &User{Email: email, PasswordHash: passwordHash, Role: role}
+	// T24: статус пишем явно, а не полагаемся на DEFAULT 'active' миграции 006.
+	u := &User{Email: email, PasswordHash: passwordHash, Role: role, Status: UserActive}
 	err := s.pool.QueryRow(ctx,
-		`INSERT INTO users (email, password_hash, role) VALUES ($1,$2,$3)
+		`INSERT INTO users (email, password_hash, role, status) VALUES ($1,$2,$3,$4)
 		 RETURNING id::text, created_at`,
-		email, passwordHash, string(role)).Scan(&u.ID, &u.CreatedAt)
+		email, passwordHash, string(role), string(UserActive)).Scan(&u.ID, &u.CreatedAt)
 	if err != nil {
 		if isUniqueViolation(err) {
 			return nil, ErrAlreadyExists
@@ -95,9 +96,9 @@ func (s *PostgresStore) GetUserByEmail(email string) (*User, bool) {
 	u := &User{}
 	var display string
 	err := s.pool.QueryRow(ctx,
-		`SELECT id::text, email, password_hash, role, COALESCE(display_name,''), created_at
+		`SELECT id::text, email, password_hash, role, COALESCE(display_name,''), created_at, status
 		 FROM users WHERE lower(email)=lower($1) LIMIT 1`, normEmail(email)).
-		Scan(&u.ID, &u.Email, &u.PasswordHash, &u.Role, &display, &u.CreatedAt)
+		Scan(&u.ID, &u.Email, &u.PasswordHash, &u.Role, &display, &u.CreatedAt, &u.Status)
 	if err != nil {
 		return nil, false
 	}
@@ -111,9 +112,9 @@ func (s *PostgresStore) GetUserByID(id string) (*User, bool) {
 	u := &User{}
 	var display string
 	err := s.pool.QueryRow(ctx,
-		`SELECT id::text, email, password_hash, role, COALESCE(display_name,''), created_at
+		`SELECT id::text, email, password_hash, role, COALESCE(display_name,''), created_at, status
 		 FROM users WHERE id=$1::uuid`, id).
-		Scan(&u.ID, &u.Email, &u.PasswordHash, &u.Role, &display, &u.CreatedAt)
+		Scan(&u.ID, &u.Email, &u.PasswordHash, &u.Role, &display, &u.CreatedAt, &u.Status)
 	if err != nil {
 		return nil, false
 	}
