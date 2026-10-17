@@ -85,6 +85,10 @@ type StoreAPI interface {
 	EnsureEnrollment(studentID, courseID string) (*Enrollment, bool)
 	SetEnrollmentStatus(studentID, courseID string, status EnrollmentStatus) error
 	ListEnrollmentsByStudent(studentID string) []*Enrollment
+	// ListEnrollmentsByCourse — все записи на курс, новые первыми (T22).
+	// Записи во всех статусах: учитель видит и отчисления (refunded, revoked),
+	// статус отдаётся наружу полем.
+	ListEnrollmentsByCourse(courseID string) []*Enrollment
 	// Progress
 	CompleteLesson(studentID, lessonID string) (*LessonProgress, bool)
 	BumpAttempt(studentID, lessonID string) int
@@ -92,12 +96,17 @@ type StoreAPI interface {
 	// CountCompletedLessons реализован, но не вызывается ни одним хендлером:
 	// API для будущего (прогресс-бар «M из N уроков»). См. отчёт T13.
 	CountCompletedLessons(studentID, courseID string) int
+	// StudentProgress — карта studentID → прогресс по курсу одним запросом (T22).
+	// Ключи — только ученики, у которых есть записи на курс.
+	StudentProgress(courseID string) map[string]StudentProgress
 	// Payments
 	CreatePayment(p *Payment) (*Payment, error)
 	GetPaymentByProviderID(id string) (*Payment, bool)
 	FindPendingPayment(studentID, courseID string) (*Payment, bool)
 	SetPaymentStatus(id string, status PaymentStatus) bool
 	ListPaymentsJournal(f PaymentFilter) (items []PaymentJournalRow, total int, totals PaymentTotals, err error)
+	// ListPaymentsByCourse — платежи по курсу; фильтрацию по статусу делает handler (T22).
+	ListPaymentsByCourse(courseID string) []*Payment
 	// Reviews
 	CreateReview(studentID, courseID string, rating int, body string) (*Review, error)
 	ListReviewsByCourse(courseID string) []*Review
@@ -148,6 +157,12 @@ type PositionItem struct {
 type ContentCounts struct {
 	Modules int
 	Lessons int
+}
+
+// StudentProgress — агрегат по одному ученику курса (T22).
+type StudentProgress struct {
+	Completed    int       // пройдено уроков
+	LastActivity time.Time // максимум CompletedAt; нулевое — не начинал
 }
 
 // Проверка, что in-memory Store реализует интерфейс.

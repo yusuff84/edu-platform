@@ -124,6 +124,7 @@ func NewRouter(app *App) http.Handler {
 			// T19: CRUD конструктора (правка урока, удаление, порядок, счётчики
 			// в списке) — та же точка монтирования, что у RegisterTeacherEditRoutes.
 			app.RegisterTeacherCRUDRoutes(r)
+			app.RegisterTeacherStudentsRoutes(r)
 		})
 
 		r.Route("/admin", func(r chi.Router) {
