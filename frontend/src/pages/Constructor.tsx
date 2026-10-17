@@ -11,6 +11,11 @@
 // API-вызовы CRUD (PATCH/DELETE/reorder) объявлены локально: api/client.ts —
 // чужая зона (T16), расширить его в T19 нельзя. crudFetch повторяет apiFetch.
 //
+// T28 достроил рабочее место учителя: предпросмотр черновика урока рядом с
+// формой (components/LessonPreview.tsx), сводка структуры, перенос урока между
+// модулями, перестановка вопросов/вариантов/тестов и жизненный цикл курса
+// (копия, архив, отзыв с модерации). Операции T21 живут в api/teacherExtra.ts.
+//
 // Все тела запросов собираются только из полей, относящихся к kind урока:
 // backend включает DisallowUnknownFields() — лишнее поле = 400.
 
@@ -34,8 +39,18 @@ import {
   submitCourse,
 } from '../api/client';
 import type { Course, CourseStatus, CreateLessonInput, Lesson, LessonKind, Module } from '../api/client';
+import {
+  archiveCourse,
+  duplicateCourse,
+  moveLesson as moveLessonToModule,
+  unarchiveCourse,
+  withdrawCourse,
+} from '../api/teacherExtra';
+import LessonPreview from '../components/LessonPreview';
+import type { LessonPreviewData } from '../components/LessonPreview';
 import { t } from '../i18n/t';
 import '../styles/constructor.css';
+import '../styles/constructorExtra.css';
 
 // ---------- Константы ----------
 
@@ -299,6 +314,51 @@ function lessonToDraft(l: Lesson, moduleId: string): LessonDraft {
   return d;
 }
 
+/**
+ * T28: черновик формы → данные предпросмотра. Отдаём только поля текущего
+ * kind — чужие блоки (quiz при video_text и т.п.) в панель не попадают.
+ */
+function lessonToPreview(d: LessonDraft): LessonPreviewData {
+  const data: LessonPreviewData = {
+    title: d.title,
+    kind: d.kind,
+    bodyMd: d.bodyMd,
+    videoUrl: d.videoUrl,
+    liveUrl: d.liveUrl,
+    startsAt: d.startsAt,
+  };
+  if (d.kind === 'quiz') {
+    data.quiz = {
+      questions: d.questions.map((q) => {
+        const question: NonNullable<LessonPreviewData['quiz']>['questions'][number] = {
+          text: q.text,
+          options: [...q.options],
+          correct: q.correct,
+        };
+        if (q.explanation) question.explanation = q.explanation;
+        return question;
+      }),
+    };
+  }
+  if (d.kind === 'code') {
+    const codeTask: NonNullable<LessonPreviewData['codeTask']> = {
+      language: d.language,
+      tests: d.tests.map((x) => {
+        const test: { name: string; input: string; expected: string; hidden?: boolean } = {
+          name: x.name,
+          input: x.input,
+          expected: x.expected,
+        };
+        if (x.hidden) test.hidden = true;
+        return test;
+      }),
+    };
+    if (d.template) codeTask.template = d.template;
+    data.codeTask = codeTask;
+  }
+  return data;
+}
+
 // ---------- Валидация формы урока ----------
 
 interface FieldError {
@@ -521,6 +581,8 @@ export default function Constructor(): JSX.Element {
   const course = detailQuery.data;
   const modules = course?.modules ?? [];
   const editable = course?.status === 'draft';
+  // T28: сводка «модулей/уроков» считается по уже загруженному CourseDetail.
+  const lessonsTotal = modules.reduce((n, m) => n + m.lessons.length, 0);
 
   // ---------- T19: локальное состояние CRUD ----------
 
@@ -535,6 +597,9 @@ export default function Constructor(): JSX.Element {
   // Правка урока (T19 PATCH .../lessons/{lessonID}): только в черновике.
   // Форма создания и редактирования — одна; editId !== null = режим правки.
   const [editingLessonId, setEditingLessonId] = useState<string | null>(null);
+
+  // T28: раскрыта ли панель предпросмотра черновика урока (рядом с формой).
+  const [previewOpen, setPreviewOpen] = useState(false);
 
   // ---------- Форма создания курса ----------
   const createMutation = useMutation({
@@ -736,6 +801,102 @@ export default function Constructor(): JSX.Element {
     reorderLessonsMutation.mutate(items);
   }
 
+  // ---------- T28: жизненный цикл курса (контракт T21) ----------
+  // Кнопки показываются строго по матрице статусов из ТЗ, подтверждения —
+  // ключи teach.confirm*, сообщения об успехе — teach.*ed.
+
+  const duplicateMutation = useMutation({
+    mutationFn: async () => {
+      const res = await duplicateCourse(course?.id ?? '');
+      // Копия должна попасть в ['teaching'] ДО перехода: конструктор ищет курс
+      // по id в этом списке, иначе после navigate мелькнёт «курс не найден».
+      await qc.refetchQueries({ queryKey: ['teaching'] });
+      return res;
+    },
+    onSuccess: (res) => {
+      // Переходим на копию с чистым редактором урока и закрытым предпросмотром.
+      // moduleId копии другой — сбрасываем его (пустая строка), а не оставляем
+      // id модуля исходного курса.
+      setEditingLessonId(null);
+      setLesson(emptyLesson(''));
+      setLessonErrors({});
+      setPreviewOpen(false);
+      setNotice({ text: t('teach.duplicated'), kind: 'ok' });
+      void qc.invalidateQueries({ queryKey: ['teach-course'] });
+      navigate(`/teach/${res.course.id}`);
+    },
+    onError: (e: unknown) => setNotice({ text: errText(e), kind: 'error' }),
+  });
+
+  function onDuplicateCourse(): void {
+    if (window.confirm(t('teach.confirmDuplicate'))) duplicateMutation.mutate();
+  }
+
+  const archiveMutation = useMutation({
+    mutationFn: () => archiveCourse(course?.id ?? ''),
+    onSuccess: () => {
+      setNotice({ text: t('teach.archived'), kind: 'ok' });
+      void qc.invalidateQueries({ queryKey: ['teach-course'] });
+      void qc.invalidateQueries({ queryKey: ['teaching'] });
+    },
+    onError: (e: unknown) => setNotice({ text: errText(e), kind: 'error' }),
+  });
+
+  function onArchiveCourse(): void {
+    if (window.confirm(t('teach.confirmArchive'))) archiveMutation.mutate();
+  }
+
+  const unarchiveMutation = useMutation({
+    mutationFn: () => unarchiveCourse(course?.id ?? ''),
+    onSuccess: () => {
+      setNotice({ text: t('teach.unarchived'), kind: 'ok' });
+      void qc.invalidateQueries({ queryKey: ['teach-course'] });
+      void qc.invalidateQueries({ queryKey: ['teaching'] });
+    },
+    onError: (e: unknown) => setNotice({ text: errText(e), kind: 'error' }),
+  });
+
+  // Возврат из архива обратим и безобиден — отдельного ключа подтверждения
+  // в словаре нет, лишний window.confirm не ставим.
+  function onUnarchiveCourse(): void {
+    unarchiveMutation.mutate();
+  }
+
+  const withdrawMutation = useMutation({
+    mutationFn: () => withdrawCourse(course?.id ?? ''),
+    onSuccess: () => {
+      setNotice({ text: t('teach.withdrawn'), kind: 'ok' });
+      void qc.invalidateQueries({ queryKey: ['teach-course'] });
+      void qc.invalidateQueries({ queryKey: ['teaching'] });
+    },
+    onError: (e: unknown) => setNotice({ text: errText(e), kind: 'error' }),
+  });
+
+  function onWithdrawCourse(): void {
+    if (window.confirm(t('teach.confirmWithdraw'))) withdrawMutation.mutate();
+  }
+
+  // ---------- T28: перенос урока в другой модуль (T21 move) ----------
+
+  const moveLessonMutation = useMutation({
+    mutationFn: (v: { lessonId: string; moduleId: string }) =>
+      moveLessonToModule(course?.id ?? '', v.lessonId, v.moduleId),
+    onSuccess: (_data, v) => {
+      // Форма правки продолжает указывать на урок — обновляем его модуль.
+      setLesson((prev) => ({ ...prev, moduleId: v.moduleId }));
+      setNotice({ text: t('teach.moveLessonDone'), kind: 'ok' });
+      void qc.invalidateQueries({ queryKey: ['teach-course'] });
+      void qc.invalidateQueries({ queryKey: ['teaching'] });
+    },
+    onError: (e: unknown) => setNotice({ text: errText(e), kind: 'error' }),
+  });
+
+  /** Выбор в селекте «Перенести в модуль…»; пустое значение — no-op. */
+  function onMoveLessonToModule(moduleId: string): void {
+    if (!editingLessonId || !moduleId) return;
+    moveLessonMutation.mutate({ lessonId: editingLessonId, moduleId });
+  }
+
   // ---------- Урок ----------
   const [lesson, setLesson] = useState<LessonDraft>(() => emptyLesson(''));
   const [lessonErrors, setLessonErrors] = useState<Record<string, string>>({});
@@ -810,6 +971,21 @@ export default function Constructor(): JSX.Element {
     setLesson((prev) => ({ ...prev, questions: prev.questions.filter((_, i) => i !== qi) }));
   }
 
+  /**
+   * T28: перестановка вопросов квиза. Меняем местами целиком объекты
+   * QuestionState — `correct` хранится внутри вопроса и едет вместе с ним,
+   * отдельный пересчёт индекса не нужен.
+   */
+  function moveQuestion(qi: number, dir: -1 | 1): void {
+    setLesson((prev) => {
+      const j = qi + dir;
+      if (j < 0 || j >= prev.questions.length) return prev;
+      const questions = [...prev.questions];
+      [questions[qi], questions[j]] = [questions[j], questions[qi]];
+      return { ...prev, questions };
+    });
+  }
+
   function setOption(qi: number, oi: number, value: string): void {
     setLesson((prev) => ({
       ...prev,
@@ -838,6 +1014,31 @@ export default function Constructor(): JSX.Element {
     }));
   }
 
+  /**
+   * T28: перестановка вариантов ответа с сохранением ключа. `correct` — это
+   * индекс варианта, поэтому после обмена соседних позиций его нужно
+   * пересчитать: если правильный вариант уехал на новую позицию — correct
+   * получает её; если обмен его не касался — индекс не меняется.
+   */
+  function moveOption(qi: number, oi: number, dir: -1 | 1): void {
+    setLesson((prev) => ({
+      ...prev,
+      questions: prev.questions.map((q, i) => {
+        if (i !== qi) return q;
+        const j = oi + dir;
+        if (j < 0 || j >= q.options.length) return q;
+        const options = [...q.options];
+        [options[oi], options[j]] = [options[j], options[oi]];
+        // Инвариант: correct указывает на тот же по смыслу вариант, что и до
+        // перестановки (меняется только его позиция).
+        let correct = q.correct;
+        if (correct === oi) correct = j;
+        else if (correct === j) correct = oi;
+        return { ...q, options, correct };
+      }),
+    }));
+  }
+
   function updateTest(ti: number, patch: Partial<TestState>): void {
     setLesson((prev) => ({
       ...prev,
@@ -854,6 +1055,21 @@ export default function Constructor(): JSX.Element {
 
   function removeTest(ti: number): void {
     setLesson((prev) => ({ ...prev, tests: prev.tests.filter((_, i) => i !== ti) }));
+  }
+
+  /**
+   * T28: перестановка тестов код-задачи. У теста нет ссылочного индекса —
+   * порядок тестов и есть порядок проверки, поэтому достаточно обмена
+   * соседних элементов массива.
+   */
+  function moveTest(ti: number, dir: -1 | 1): void {
+    setLesson((prev) => {
+      const j = ti + dir;
+      if (j < 0 || j >= prev.tests.length) return prev;
+      const tests = [...prev.tests];
+      [tests[ti], tests[j]] = [tests[j], tests[ti]];
+      return { ...prev, tests };
+    });
   }
 
   // ---------- Отправка курса на модерацию ----------
@@ -1048,6 +1264,66 @@ export default function Constructor(): JSX.Element {
                 {t('teach.status')}: {STATUS_LABELS[course.status]} · {formatPrice(course.priceCents)}
               </p>
 
+              {/* T28: сводка структуры — по уже загруженному CourseDetail. */}
+              <p className="ce-structure">
+                <strong>{t('teach.structure')}:</strong> {t('course.modulesCount')}:{' '}
+                {modules.length} · {t('teach.lessonsCount')}: {lessonsTotal}
+              </p>
+
+              {/* T28: жизненный цикл — набор кнопок строго по статусу (матрица ТЗ):
+                  draft → копия/архив, review → отзыв, published → копия/архив/
+                  публичная страница, archived → возврат из архива/копия. */}
+              <div className="ce-lifecycle">
+                {course.status === 'archived' && (
+                  <button
+                    type="button"
+                    onClick={onUnarchiveCourse}
+                    disabled={unarchiveMutation.isPending}
+                  >
+                    {unarchiveMutation.isPending ? t('teach.saving') : t('teach.unarchive')}
+                  </button>
+                )}
+                {course.status === 'review' && (
+                  <button
+                    type="button"
+                    onClick={onWithdrawCourse}
+                    disabled={withdrawMutation.isPending}
+                  >
+                    {withdrawMutation.isPending ? t('teach.saving') : t('teach.withdraw')}
+                  </button>
+                )}
+                {(course.status === 'draft' ||
+                  course.status === 'published' ||
+                  course.status === 'archived') && (
+                  <button
+                    type="button"
+                    onClick={onDuplicateCourse}
+                    disabled={duplicateMutation.isPending}
+                  >
+                    {duplicateMutation.isPending ? t('teach.saving') : t('teach.duplicate')}
+                  </button>
+                )}
+                {(course.status === 'draft' || course.status === 'published') && (
+                  <button
+                    type="button"
+                    onClick={onArchiveCourse}
+                    disabled={archiveMutation.isPending}
+                  >
+                    {archiveMutation.isPending ? t('teach.saving') : t('teach.archive')}
+                  </button>
+                )}
+                {course.status === 'published' && (
+                  <a
+                    className="ce-public-link"
+                    href={`/courses/${course.slug}`}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    {t('teach.publicPage')}
+                  </a>
+                )}
+              </div>
+
               {/* Комментарий модератора: цикл «отклонили → исправил». */}
               {course.status === 'draft' && course.moderationComment && (
                 <section className="teach-banner" role="note">
@@ -1173,8 +1449,23 @@ export default function Constructor(): JSX.Element {
                     </form>
                   </section>
 
-                  <section className="teach-section panel">
-                    <h2>{editingLessonId ? t('teach.editLesson') : t('teach.addLesson')}</h2>
+                  <section
+                    className={`teach-section panel ce-editor${previewOpen ? ' ce-editor-split' : ''}`}
+                  >
+                    <div className="ce-editor-head">
+                      <h2>{editingLessonId ? t('teach.editLesson') : t('teach.addLesson')}</h2>
+                      {/* T28: предпросмотр — раскрывающаяся панель рядом с формой
+                          (не модалка: учитель правит и сразу смотрит). */}
+                      <button
+                        type="button"
+                        className="ce-toggle-preview"
+                        onClick={() => setPreviewOpen((v) => !v)}
+                        aria-expanded={previewOpen}
+                        aria-controls="lesson-preview"
+                      >
+                        {t('teach.preview')}
+                      </button>
+                    </div>
                     {modules.length === 0 && <p className="muted">{t('teach.hintEmptyCourse')}</p>}
                     <form id="lesson-form" onSubmit={onLessonSubmit} noValidate className="form-grid">
                       <label htmlFor="lesson-module">Модуль</label>
@@ -1182,7 +1473,8 @@ export default function Constructor(): JSX.Element {
                         id="lesson-module"
                         className="select"
                         value={lesson.moduleId}
-                        // T19: перенос урока в другой модуль API не поддерживает.
+                        // T19: у сохранённого урока модуль меняет селект
+                        // «Перенести в модуль…» ниже (T28), а не это поле.
                         disabled={Boolean(editingLessonId)}
                         onChange={(e) => setLessonField('moduleId', e.target.value)}
                       >
@@ -1195,6 +1487,30 @@ export default function Constructor(): JSX.Element {
                       </select>
                       {lessonErrors['lesson-module'] && (
                         <p className="error">{lessonErrors['lesson-module']}</p>
+                      )}
+
+                      {/* T28: перенос урока в другой модуль — только в черновике
+                          (в остальных статусах backend отвечает 409). */}
+                      {editingLessonId && editable && modules.length > 1 && (
+                        <div className="ce-move-row">
+                          <label htmlFor="lesson-move">{t('teach.moveLesson')}</label>
+                          <select
+                            id="lesson-move"
+                            className="select"
+                            value=""
+                            disabled={moveLessonMutation.isPending}
+                            onChange={(e) => onMoveLessonToModule(e.target.value)}
+                          >
+                            <option value="">—</option>
+                            {modules
+                              .filter((m) => m.id !== lesson.moduleId)
+                              .map((m) => (
+                                <option key={m.id} value={m.id}>
+                                  {m.title}
+                                </option>
+                              ))}
+                          </select>
+                        </div>
                       )}
 
                       <label htmlFor="lesson-title">{t('teach.lessonTitle')}</label>
@@ -1278,9 +1594,28 @@ export default function Constructor(): JSX.Element {
                           )}
                           {lesson.questions.map((q, qi) => (
                             <div key={qi} className="teach-q-box">
-                              <label htmlFor={`q-${qi}-text`}>
-                                {t('teach.questionText')} {qi + 1}
-                              </label>
+                              <div className="ce-q-head">
+                                <label htmlFor={`q-${qi}-text`}>
+                                  {t('teach.questionText')} {qi + 1}
+                                </label>
+                                {/* T28: перестановка вопросов; correct едет с вопросом. */}
+                                <span className="ce-reorder">
+                                  <button
+                                    type="button"
+                                    onClick={() => moveQuestion(qi, -1)}
+                                    disabled={qi === 0}
+                                  >
+                                    {t('teach.moveUp')}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => moveQuestion(qi, 1)}
+                                    disabled={qi === lesson.questions.length - 1}
+                                  >
+                                    {t('teach.moveDown')}
+                                  </button>
+                                </span>
+                              </div>
                               <input
                                 id={`q-${qi}-text`}
                                 value={q.text}
@@ -1297,7 +1632,7 @@ export default function Constructor(): JSX.Element {
                               >
                                 <legend>{t('teach.correctOption')}</legend>
                                 {q.options.map((opt, oi) => (
-                                  <div key={oi} className="teach-option-row">
+                                  <div key={oi} className="teach-option-row ce-option-row">
                                     <label className="teach-correct-radio">
                                       <input
                                         type="radio"
@@ -1315,6 +1650,22 @@ export default function Constructor(): JSX.Element {
                                       value={opt}
                                       onChange={(e) => setOption(qi, oi, e.target.value)}
                                     />
+                                    {/* T28: перестановка вариантов с пересчётом
+                                        индекса correct — ключ следует за вариантом. */}
+                                    <button
+                                      type="button"
+                                      onClick={() => moveOption(qi, oi, -1)}
+                                      disabled={oi === 0}
+                                    >
+                                      {t('teach.moveUp')}
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => moveOption(qi, oi, 1)}
+                                      disabled={oi === q.options.length - 1}
+                                    >
+                                      {t('teach.moveDown')}
+                                    </button>
                                     <button type="button" onClick={() => removeOption(qi, oi)}>
                                       {t('common.delete')}
                                     </button>
@@ -1412,11 +1763,29 @@ export default function Constructor(): JSX.Element {
                                   {t('teach.testHidden')}
                                 </label>
 
-                                {lesson.tests.length > 1 && (
-                                  <button type="button" onClick={() => removeTest(ti)}>
-                                    {t('common.delete')}
+                                <span className="ce-reorder">
+                                  {/* T28: порядок тестов = порядок проверки; ссылок
+                                      на индексы в codeTask нет — обмен безопасен. */}
+                                  <button
+                                    type="button"
+                                    onClick={() => moveTest(ti, -1)}
+                                    disabled={ti === 0}
+                                  >
+                                    {t('teach.moveUp')}
                                   </button>
-                                )}
+                                  <button
+                                    type="button"
+                                    onClick={() => moveTest(ti, 1)}
+                                    disabled={ti === lesson.tests.length - 1}
+                                  >
+                                    {t('teach.moveDown')}
+                                  </button>
+                                  {lesson.tests.length > 1 && (
+                                    <button type="button" onClick={() => removeTest(ti)}>
+                                      {t('common.delete')}
+                                    </button>
+                                  )}
+                                </span>
                               </div>
                             ))}
                             {lessonErrors['code-tests'] && (
@@ -1448,6 +1817,19 @@ export default function Constructor(): JSX.Element {
                         )}
                       </div>
                     </form>
+                    {/* T28: панель предпросмотра «как увидит ученик» — собирается
+                        из текущего черновика формы, ещё не сохранённого. */}
+                    {previewOpen && (
+                      <aside
+                        id="lesson-preview"
+                        className="ce-preview-pane"
+                        aria-label={t('teach.previewTitle')}
+                      >
+                        <h3>{t('teach.previewTitle')}</h3>
+                        <p className="teach-note ce-preview-hint">{t('teach.previewHint')}</p>
+                        <LessonPreview draft={lessonToPreview(lesson)} />
+                      </aside>
+                    )}
                   </section>
                 </>
               )}

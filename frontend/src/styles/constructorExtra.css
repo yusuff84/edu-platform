@@ -1,0 +1,285 @@
+/* Дополнение к конструктору курса (T28): предпросмотр урока, сводка структуры
+   и кнопки жизненного цикла. Подключается из Constructor.tsx и
+   LessonPreview.tsx; общий styles.css и constructor.css не изменяются.
+   Все классы — с префиксом .ce- . */
+
+/* ---------- Шапка курса: сводка структуры ---------- */
+
+.ce-structure {
+  color: #555;
+  margin: 0.5rem 0 0;
+}
+
+/* ---------- Шапка курса: жизненный цикл ---------- */
+
+.ce-lifecycle {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin: 0.5rem 0 0;
+}
+
+/* Ссылка «Публичная страница» — визуально кнопка, как .teach-link-btn. */
+.ce-public-link {
+  display: inline-block;
+  padding: 0.5rem 1rem;
+  border: 1px solid #1a1a1a;
+  border-radius: 6px;
+  text-decoration: none;
+  color: #1a1a1a;
+  background: #fff;
+}
+
+.ce-public-link:hover {
+  background: #f5f5f5;
+}
+
+/* ---------- Редактор урока: форма + предпросмотр рядом ---------- */
+
+.ce-editor-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.ce-editor-head h2 {
+  margin: 0;
+}
+
+/* Кнопка «Предпросмотр»: открытая панель — заметное состояние. */
+.ce-toggle-preview[aria-expanded='true'] {
+  background: #eef2ff;
+  border-color: #3f51b5;
+  color: #3f51b5;
+}
+
+/* Двухколоночный режим: форма и панель предпросмотра рядом, не модалка.
+   Секция становится гридом; заголовок и подсказки занимают обе колонки. */
+.ce-editor-split {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(300px, 440px);
+  gap: 1rem 1.25rem;
+  align-items: start;
+}
+
+.ce-editor-split > .ce-editor-head,
+.ce-editor-split > .muted {
+  grid-column: 1 / -1;
+}
+
+@media (max-width: 980px) {
+  .ce-editor-split {
+    grid-template-columns: 1fr;
+  }
+
+  /* В одну колонку sticky-панель не нужна. */
+  .ce-editor-split .ce-preview-pane {
+    position: static;
+  }
+}
+
+.ce-preview-pane {
+  position: sticky;
+  top: 1rem;
+  border: 1px solid #dfe3ea;
+  border-radius: 8px;
+  background: #fbfcfe;
+  padding: 0.9rem 1rem;
+}
+
+.ce-preview-pane h3 {
+  margin: 0 0 0.25rem;
+  font-size: 1rem;
+}
+
+.ce-preview-hint {
+  margin: 0 0 0.75rem;
+}
+
+/* ---------- Предпросмотр: общее ---------- */
+
+.ce-preview-empty {
+  font-style: italic;
+}
+
+.ce-preview-title {
+  margin: 0.5rem 0 0.25rem;
+}
+
+/* ---------- Предпросмотр: квиз ---------- */
+
+.ce-quiz {
+  list-style: none;
+  padding: 0;
+  margin: 0.5rem 0 0;
+  display: grid;
+  gap: 0.75rem;
+}
+
+.ce-quiz-item {
+  border: 1px solid #e5e5e5;
+  border-radius: 6px;
+  padding: 0.5rem 0.65rem;
+  background: #fff;
+}
+
+.ce-quiz-text {
+  margin: 0 0 0.35rem;
+  font-weight: 600;
+}
+
+.ce-quiz-options {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 0.2rem;
+}
+
+.ce-quiz-option {
+  display: flex;
+  align-items: baseline;
+  gap: 0.4rem;
+  padding: 0.15rem 0.35rem;
+  border-radius: 4px;
+}
+
+/* Правильный вариант: подсветка + бейдж «Верный ответ». */
+.ce-quiz-option-correct {
+  background: #e3f4e4;
+  border: 1px solid #b8dfba;
+}
+
+.ce-quiz-radio {
+  font-size: 0.8rem;
+}
+
+.ce-quiz-option-text {
+  flex: 1 1 auto;
+}
+
+.ce-badge-ok {
+  background: #2e7d32;
+  color: #fff;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  padding: 0.05rem 0.45rem;
+  white-space: nowrap;
+}
+
+.ce-badge-hidden {
+  display: inline-block;
+  background: #fff3cd;
+  color: #7a5b00;
+  border: 1px solid #f0c36d;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  padding: 0.05rem 0.45rem;
+  margin-left: 0.35rem;
+  white-space: nowrap;
+}
+
+.ce-quiz-explanation {
+  margin: 0.35rem 0 0;
+  font-size: 0.875rem;
+  color: #555;
+}
+
+/* ---------- Предпросмотр: код-задача ---------- */
+
+.ce-code-language {
+  margin: 0.5rem 0 0.25rem;
+}
+
+.ce-template {
+  margin: 0.5rem 0;
+}
+
+.ce-template h4 {
+  margin: 0.5rem 0 0.25rem;
+}
+
+.ce-template pre {
+  background: #f4f4f5;
+  border: 1px solid #e5e5e5;
+  border-radius: 8px;
+  padding: 0.75rem;
+  overflow-x: auto;
+}
+
+.ce-template code {
+  font-family: ui-monospace, 'Cascadia Code', Consolas, monospace;
+  font-size: 0.9em;
+  white-space: pre;
+}
+
+.ce-tests {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 0.5rem;
+  font-size: 0.85rem;
+}
+
+.ce-tests th,
+.ce-tests td {
+  border: 1px solid #e0e0e0;
+  padding: 0.3rem 0.45rem;
+  text-align: left;
+  vertical-align: top;
+}
+
+.ce-tests th {
+  background: #f5f5f5;
+  font-weight: 600;
+}
+
+.ce-test-io {
+  font-family: ui-monospace, 'Cascadia Code', Consolas, monospace;
+  white-space: pre-wrap;
+}
+
+/* ---------- Перестановка: вопросы, варианты, тесты ---------- */
+
+.ce-reorder {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  flex-wrap: wrap;
+}
+
+/* Кнопки перестановки в строке варианта ответа: при нехватке ширины переносим. */
+.ce-option-row {
+  flex-wrap: wrap;
+}
+
+.ce-q-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.ce-q-head label {
+  margin: 0;
+}
+
+/* ---------- Перенос урока в другой модуль ---------- */
+
+.ce-move-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.ce-move-row label {
+  margin: 0;
+}
+
+.ce-move-row .select {
+  max-width: 22rem;
+}
