@@ -44,17 +44,22 @@ origin'у** — просто перенаправить 3000 на другой �
 ```bash
 # PowerShell
 $env:WEB_PORT="3001"
-$env:ALLOWED_ORIGINS="http://localhost:3001,http://127.0.0.1:3001"
+# Важно: список — это allowlist. Оставьте в нём и :3000, иначе сквозные
+# скрипты (они шлют Origin http://localhost:3000) получат 403 на не-GET.
+$env:ALLOWED_ORIGINS="http://localhost:3000,http://127.0.0.1:3000,http://localhost:3001,http://127.0.0.1:3001"
 docker compose up -d --build --force-recreate api web
 
 # bash
-WEB_PORT=3001 ALLOWED_ORIGINS="http://localhost:3001,http://127.0.0.1:3001" \
+WEB_PORT=3001 ALLOWED_ORIGINS="http://localhost:3000,http://127.0.0.1:3000,http://localhost:3001,http://127.0.0.1:3001" \
   docker compose up -d --build --force-recreate api web
 ```
 
 `ALLOWED_ORIGINS` по умолчанию — `http://localhost:3000,http://127.0.0.1:3000`
-(см. `docker-compose.yml`, `internal/config/config.go`). Сквозной скрипт
-принимает порт отдельно: `powershell -File qa-abc.ps1 -WebUrl http://localhost:3001`.
+(см. `docker-compose.yml`, `internal/config/config.go`). Если фронтенд отдаётся
+на другом порту, а `ALLOWED_ORIGINS` не поправлен, UI отвечает
+`403 «Недопустимый источник запроса»` на любой не-GET — вход, сохранение,
+архивацию курса. Сквозные скрипты принимают порт отдельно:
+`powershell -File qa-abc.ps1 -WebUrl http://localhost:3001`.
 
 ## Демо-учётки
 
@@ -137,6 +142,24 @@ powershell -File qa-abc.ps1 -BaseUrl http://127.0.0.1:8082 -WebUrl http://127.0.
 CSRF-защита (T10) вернёт `403`. Лимиты rate-limit на `/auth/login` составляют
 10/мин на IP; при частых повторных запусках задайте `RATE_LIMIT_AUTH_PER_MIN=0`
 на время прогона ( сами лимиты покрыты контрактными тестами).
+
+### Волна P3: `qa-p3.ps1` (**80 проверок**)
+
+Разделы «конструктор курса», «ученики», «супер-админ» проверяет отдельный
+скрипт — прежние 49 проверок остаются в `qa-abc.ps1` как регрессия:
+
+```bash
+docker compose up -d --build db api web runner
+
+# Блоки: D — конструктор (T21), E — ученики курса (T22),
+#        F — кабинет ученика (T23), G — супер-админ (T24/T25).
+powershell -File qa-p3.ps1 -AdminEmail admin@local -AdminPassword admin1234
+```
+
+Скрипт создаёт свои сущности с меткой времени (`p3-teacher-<stamp>@example.test`
+и т. д.), поэтому повторный прогон на той же базе тоже даёт 80/80. Требуется
+поднятый `web` — но только для проверки `P0`; без него она уходит в `SKIP`
+(`-SkipWeb`, чтобы не проверять вовсе).
 
 ## Документация API
 
