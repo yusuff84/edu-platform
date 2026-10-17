@@ -1,4 +1,9 @@
-# syntax=docker/dockerfile:1
+# Фронтенд-сборка нарочно без директивы `# syntax=docker/dockerfile:1`:
+# вся здесь используемая грамматика (AS / COPY --from / EXPOSE / CMD) есть у
+# встроенного BuildKit-фронтенда, а директива тянет отдельный образ
+# docker/dockerfile:1. На части окружений он давал выходной образ с нерабочим
+# entrypoint'ом («exec format error» при старте контейнера) — лишняя точка
+# отказа удалена, функционально сборка не меняется.
 FROM node:20-alpine AS build
 WORKDIR /app
 COPY package.json ./

@@ -2,8 +2,9 @@ package contract_test
 
 // Контрактные тесты US6 (журнал платежей и комиссия) — эндпоинты от T07:
 // GET /admin/payments, GET/PUT /admin/settings. Подтверждают форму ответа
-// Task/00-api-contract.md и расхождение №6 (в журнале нет email/имени
-// студента — только studentId).
+// Task/00-api-contract.md: в журнале есть email/имя студента (расхождение №6
+// закрыто T16 — раньше здесь был тест-фиксатор, ожидавший ПОЛНОГО ОТСУТСТВИЯ
+// этих полей).
 
 import (
 	"net/http"
@@ -69,12 +70,18 @@ func TestAdminPaymentsJournal(t *testing.T) {
 	if studentID == "" {
 		t.Fatalf("нет studentId: %s", rec.Body.String())
 	}
-	// ПОДТВЕРЖДЕНОЕ РАСХОЖДЕНИЕ №6: email/имени студента в журнале нет —
-	// только обрезанный в UI UUID. Фиксируем фактическую форму.
-	for _, banned := range []string{"studentEmail", "studentName", "email", "displayName"} {
-		if _, has := row[banned]; has {
-			t.Fatalf("расхождение №6 закрыто — появилось поле %s; обновите Task/00-api-contract.md", banned)
-		}
+	// T16 (п.3): email и имя студента в журнале — расхождение №6 закрыто.
+	// Раньше здесь стоял тест-фиксатор, падавший при появлении studentEmail.
+	if row["studentEmail"] != "journal-student@example.com" {
+		t.Fatalf("studentEmail отсутствует или неверен: %s", rec.Body.String())
+	}
+	if name, hasName := row["studentName"]; !hasName {
+		t.Fatalf("в строке журнала нет studentName: %s", rec.Body.String())
+	} else if _, isString := name.(string); !isString {
+		t.Fatalf("studentName должен быть строкой (допустимо пустой), got %v", name)
+	}
+	if row["studentId"] == row["studentEmail"] {
+		t.Fatalf("studentEmail не должен дублировать UUID studentId: %s", rec.Body.String())
 	}
 	totals, _ := journal["totals"].(map[string]any)
 	if totals["amountCents"] != float64(10000) || totals["platformFeeCents"] != float64(1500) || totals["teacherAmountCents"] != float64(8500) {
@@ -143,6 +150,67 @@ func TestAdminPaymentsJournal(t *testing.T) {
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("limit=abc: status=%d body=%s", rec.Code, rec.Body.String())
 	}
+
+	// Клампинг limit (фактическое поведение handler):
+	//   <=0 → 20 (по умолчанию), 1 → 1 (минимум НЕ округляется до 20),
+	//   >100 → 100. Закрепляем факт, чтобы изменение было заметным.
+	for _, c := range []struct {
+		query string
+		limit float64
+	}{
+		{"limit=0", 20},
+		{"limit=-5", 20},
+		{"limit=1", 1},
+		{"limit=100", 100},
+		{"limit=101", 100},
+	} {
+		rec = doRequest(t, router, http.MethodGet, "/api/v1/admin/payments?"+c.query, nil, adminCookies)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("%s: status=%d body=%s", c.query, rec.Code, rec.Body.String())
+		}
+		decodeBody(t, rec, &journal)
+		if limit, _ := journal["limit"].(float64); limit != c.limit {
+			t.Fatalf("%s: limit=%v, ждали %v", c.query, journal["limit"], c.limit)
+		}
+	}
+
+	// Второй платёж: totals считаются по ВСЕМ записям с учётом фильтров,
+	// но БЕЗ пагинации — на любой странице totals суммируют всё.
+	student2, _ := registerUser(t, router, "journal-student2@example.com", "password123", "")
+	rec = doRequest(t, router, http.MethodPost, "/api/v1/enrollments", map[string]any{
+		"courseId": courseID, "provider": "mock",
+	}, student2)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("enroll 2: status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	decodeBody(t, rec, &enroll)
+	rec = doRequest(t, router, http.MethodPost, "/api/v1/payments/webhook/mock", map[string]any{
+		"providerPaymentId": enroll["providerPaymentId"], "status": "succeeded",
+	}, nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("webhook 2: status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	rec = doRequest(t, router, http.MethodGet, "/api/v1/admin/payments?page=2&limit=1", nil, adminCookies)
+	decodeBody(t, rec, &journal)
+	if pageItems, _ := journal["items"].([]any); len(pageItems) != 1 {
+		t.Fatalf("страница 2 при limit=1 должна содержать 1 запись: %s", rec.Body.String())
+	}
+	totals, _ = journal["totals"].(map[string]any)
+	if totals["amountCents"] != float64(20000) || totals["platformFeeCents"] != float64(3000) || totals["teacherAmountCents"] != float64(17000) {
+		t.Fatalf("totals на странице 2 должны суммировать ВСЕ записи: %s", rec.Body.String())
+	}
+	if total, _ := journal["total"].(float64); total != 2 {
+		t.Fatalf("total=%v, ждали 2", journal["total"])
+	}
+	// Строка на странице 2 (старейший платёж) тоже несёт email студента
+	// (не UUID). Сортировка журнала — новые первыми, значит page 2 = первый
+	// платёж journal-student.
+	decodeBody(t, rec, &journal)
+	items, _ = journal["items"].([]any)
+	row2 := items[0].(map[string]any)
+	if row2["studentEmail"] != "journal-student@example.com" {
+		t.Fatalf("studentEmail второй строки: %s", rec.Body.String())
+	}
 }
 
 // Настройки комиссии: GET возвращает текущую, PUT меняет,
@@ -176,6 +244,26 @@ func TestAdminSettingsCommission(t *testing.T) {
 	rec = doRequest(t, router, http.MethodPut, "/api/v1/admin/settings", map[string]any{}, adminCookies)
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("пустой settings: status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	// Неизвестное поле — 400 (DisallowUnknownFields: контракт, «золотое правило»).
+	rec = doRequest(t, router, http.MethodPut, "/api/v1/admin/settings", map[string]any{
+		"commissionPct": 15, "bonus": true,
+	}, adminCookies)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("неизвестное поле settings: status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	// Границы диапазона 0..90 включительно — валидны (только края — 400).
+	for _, pct := range []int{0, 90} {
+		rec = doRequest(t, router, http.MethodPut, "/api/v1/admin/settings", map[string]any{
+			"commissionPct": pct,
+		}, adminCookies)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("commissionPct=%d (граница): status=%d body=%s", pct, rec.Code, rec.Body.String())
+		}
+		decodeBody(t, rec, &settings)
+		if settings["commissionPct"] != float64(pct) {
+			t.Fatalf("граница %d: ответ %s", pct, rec.Body.String())
+		}
 	}
 
 	// Меняем на 25.

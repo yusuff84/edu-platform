@@ -440,13 +440,8 @@ button:focus-visible {
   box-shadow: 0 12px 24px -8px rgba(0, 0, 0, 0.5);
 }
 
-.floaty {
-  position: absolute;
-  pointer-events: none;
-  animation: floaty 5.5s ease-in-out infinite;
-  filter: drop-shadow(0 10px 14px rgba(20, 20, 20, 0.18));
-}
-
+/* T18: класс .floaty удалён — не использовался в разметке; @keyframes floaty
+   сохранён — им пользуется .cta-f в блоке marketing (ниже). */
 @keyframes floaty {
   0%,
   100% {
@@ -782,10 +777,9 @@ textarea.input:focus {
   outline: none;
 }
 
-input.invalid,
-textarea.invalid {
-  border-color: var(--danger);
-}
+/* T18: input.invalid/textarea.invalid удалены — класс invalid не назначается
+   ни в одной *.tsx (проверены и className, и шаблонные строки; aria-invalid —
+   это атрибут, а не класс). */
 
 .form-grid {
   display: grid;
@@ -800,12 +794,7 @@ textarea.invalid {
   margin: 2px 0 0;
 }
 
-.inline-form {
-  display: flex;
-  gap: 10px;
-  align-items: center;
-  flex-wrap: wrap;
-}
+/* T18: .inline-form удалён — класс не использовался (grep по *.tsx). */
 
 /* ---------- course page ---------- */
 .crumbs {
@@ -976,18 +965,7 @@ textarea.invalid {
   align-items: center;
 }
 
-.avatar {
-  width: 52px;
-  height: 52px;
-  border-radius: 50%;
-  background: var(--sun);
-  display: grid;
-  place-items: center;
-  font-weight: 800;
-  font-size: 19px;
-  color: #141414;
-  flex: none;
-}
+/* T18: .avatar удалён — класс не использовался ни в одной *.tsx (grep по src). */
 
 .notice {
   background: var(--sun-soft);
@@ -998,21 +976,8 @@ textarea.invalid {
   font-weight: 600;
 }
 
-.verdict {
-  border-radius: var(--r-sm);
-  padding: 13px 16px;
-  font-weight: 800;
-}
-
-.verdict.ok {
-  background: var(--ok-bg);
-  color: #14663a;
-}
-
-.verdict.fail {
-  background: var(--danger-bg);
-  color: #a4261b;
-}
+/* T18: .verdict/.verdict.ok/.verdict.fail удалены — Learn использует
+   собственные learn-verdict-pass/fail, классы .verdict не встречаются (grep). */
 
 /* ---------- reviews ---------- */
 .review {
@@ -1025,76 +990,37 @@ textarea.invalid {
 }
 
 /* ---------- cabinet ---------- */
-.cab-stats,
-.adm-stats {
+/* T18: класс .adm-stats удалён — не использовался ни в одной *.tsx
+   (проверено grep'ом по всему frontend/src). */
+.cab-stats {
   display: grid;
   gap: 12px;
   margin: 16px 0 20px;
-}
-
-.cab-stats {
   grid-template-columns: repeat(3, 1fr);
 }
 
-.adm-stats {
-  grid-template-columns: repeat(4, 1fr);
-}
-
-.cab-stats > div,
-.adm-stats > div {
+.cab-stats > div {
   background: #fff;
   border: 1px solid var(--line);
   border-radius: 18px;
   padding: 14px 18px;
 }
 
-.cab-stats b,
-.adm-stats b {
+.cab-stats b {
   font-size: 22px;
   display: block;
   letter-spacing: -0.02em;
 }
 
-.cab-stats span,
-.adm-stats span {
+.cab-stats span {
   color: var(--muted);
   font-size: 13px;
   font-weight: 700;
 }
 
-.tabs {
-  display: flex;
-  gap: 9px;
-  flex-wrap: wrap;
-  margin: 14px 0;
-}
-
-.tabs a,
-.tabs button {
-  border: 1.5px solid var(--line);
-  border-radius: 999px;
-  padding: 10px 20px;
-  text-decoration: none;
-  font-weight: 800;
-  font-size: 13.5px;
-  font-family: var(--font);
-  background: #fff;
-  color: var(--fg);
-  cursor: pointer;
-  transition: all 0.15s;
-}
-
-.tabs a:hover,
-.tabs button:hover {
-  border-color: #141414;
-}
-
-.tabs a.active,
-.tabs button.active {
-  background: #141414;
-  color: #fff;
-  border-color: #141414;
-}
+/* T18: блок .tabs (4 правила) удалён — класс tabs не используется в разметке
+   (SUPPORT_TABS в marketing.tsx — это константа, а не класс; tab-переключатели
+   каталога и marketing используют .seg). */
 
 .enrolled-grid {
   display: grid;
@@ -1278,41 +1204,11 @@ tr:last-child td {
   overflow: auto;
 }
 
-textarea.code-edit {
-  width: 100%;
-  min-height: 180px;
-  font-family: ui-monospace, Menlo, Consolas, monospace;
-  font-size: 13.8px;
-  background: #0b1420;
-  color: #e6f0f8;
-  border: 1.5px solid #22394e;
-  border-radius: var(--r-md);
-  padding: 16px;
-}
+/* T18: textarea.code-edit удалён — LessonView использует другой класс
+   code-editor (определяется в learn.css), класса code-edit нет в разметке. */
 
-.quiz-q {
-  border: 1px solid var(--line);
-  border-radius: var(--r-md);
-  padding: 18px;
-  margin: 12px 0;
-  background: #fff;
-}
-
-.quiz-q fieldset {
-  border: 0;
-  padding: 0;
-  margin: 0 0 14px;
-}
-
-.quiz-q fieldset:last-of-type {
-  margin-bottom: 0;
-}
-
-.quiz-q legend {
-  font-weight: 800;
-  padding: 0;
-  margin-bottom: 8px;
-}
+/* T18: блок .quiz-q (4 правила) удалён — квиз LessonView использует класс
+   quiz из learn.css; класс quiz-q не встречается в *.tsx (grep). */
 
 .radio {
   display: flex;
@@ -2233,9 +2129,6 @@ textarea.code-edit {
 @media (max-width: 760px) {
   .outcomes {
     grid-template-columns: 1fr;
-  }
-  .adm-stats {
-    grid-template-columns: 1fr 1fr;
   }
   .perks {
     grid-template-columns: 1fr;

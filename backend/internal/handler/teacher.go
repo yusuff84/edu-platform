@@ -181,6 +181,10 @@ func (a *App) TeacherCreateLesson(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "Модуль не принадлежит этому курсу")
 		return
 	}
+	// Расхождение №4 (закрыто T16): startsAt раньше принимался, но не копировался
+	// в repo.Lesson — планирование живых эфиров не работало. Разбираем строку
+	// здесь: мусор в поле — ошибка запроса, а не тихо потерянный эфир.
+	// Формат разбирает parseLessonStartsAt: RFC3339, datetime-local или дата.
 	l := &repo.Lesson{
 		ModuleID: mod.ID,
 		Title:    strings.TrimSpace(req.Title),

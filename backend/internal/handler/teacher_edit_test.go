@@ -118,7 +118,8 @@ func TestTeacherUpdateCourse(t *testing.T) {
 		`{"status":"published"}`, withCookie(cookie)); rec.Code != http.StatusBadRequest {
 		t.Fatalf("статус через PATCH: status=%d, ждали 400 (модерация — через submit)", rec.Code)
 	}
-	// Занятый slug — 400.
+	// Занятый slug — 400 (правило 400/409 T20: уникальность slug проверяется
+	// на этапе валидации тела — см. TestSlugConflictIs400Consistent).
 	app.Store.CreateCourse(&repo.Course{TeacherID: u.ID, Slug: "taken-slug-1", Title: "x", Description: "y"})
 	if rec := doJSON(t, router, http.MethodPatch, "/api/v1/teacher/courses/"+c.ID,
 		`{"slug":"taken-slug-1"}`, withCookie(cookie)); rec.Code != http.StatusBadRequest {
@@ -208,6 +209,56 @@ func mustUser(t *testing.T, app *App, email string, role repo.Role) *repo.User {
 		t.Fatalf("создание %s: %v", email, err)
 	}
 	return u
+}
+
+// TestSlugConflictIs400Consistent — единое правило кодов 400/409 (решение T20,
+// раздел 3 задачи). В API ДВЕ категории отказов:
+//
+//	400 — валидация тела запроса, включая уникальность ссылочных значений
+//	      (email при регистрации, slug при создании/правке курса): поле
+//	      невалидно ИЛИ ссылается на уже занятое значение — оба случая
+//	      читаются как «тело некорректно для текущего состояния данных»;
+//	409 — конфликт с машиной состояний САМОГО целевого ресурса: покупка
+//	      при активной записи, повторный отзыв, редактирование курса вне
+//	      черновика, удаление непустого модуля.
+//
+// Slug-конфликт в обеих точках (POST /teacher/courses и PATCH
+// /teacher/courses/{id}) отвечает 400 — единообразно. Альтернатива (409 по
+// RFC 9110) потребовала бы правки продакшен-кодов handler/teacher.go:67 и
+// teacher_edit.go:112 — вне владения T20; тесты и контракт фиксируют факт.
+func TestSlugConflictIs400Consistent(t *testing.T) {
+	app, router := newTestRouter(devConfig())
+	u := mustUser(t, app, "t-slug@x.ru", repo.RoleTeacher)
+	cookie := sessionCookieFor(t, app, u.ID)
+
+	// Курс с занятым slug'ом.
+	app.Store.CreateCourse(&repo.Course{TeacherID: u.ID, Slug: "busy-slug", Title: "x", Description: "y"})
+
+	// POST: создание с занятым slug'ом — 400.
+	if rec := doJSON(t, router, http.MethodPost, "/api/v1/teacher/courses",
+		`{"title":"Новый","description":"О","slug":"busy-slug"}`, withCookie(cookie)); rec.Code != http.StatusBadRequest {
+		t.Fatalf("POST занятый slug: status=%d, ждали 400 (валидация тела)", rec.Code)
+	}
+	// POST: синтаксически невалидный slug — тоже 400 (одна категория — 400).
+	if rec := doJSON(t, router, http.MethodPost, "/api/v1/teacher/courses",
+		`{"title":"Новый","description":"О","slug":"Плохой Slug"}`, withCookie(cookie)); rec.Code != http.StatusBadRequest {
+		t.Fatalf("POST невалидный slug: status=%d, ждали 400", rec.Code)
+	}
+
+	// PATCH: смена на занятый slug — 400 (та же категория, что и POST).
+	c, _ := setupTeacherCourse(t, app, u.ID)
+	if rec := doJSON(t, router, http.MethodPatch, "/api/v1/teacher/courses/"+c.ID,
+		`{"slug":"busy-slug"}`, withCookie(cookie)); rec.Code != http.StatusBadRequest {
+		t.Fatalf("PATCH занятый slug: status=%d, ждали 400", rec.Code)
+	}
+
+	// Контраст: конфликт состояния РЕСУРСА — 409 (не 400): удаление курса,
+	// находящегося на модерации (teacher_crud.go: draft-guard).
+	app.Store.SetCourseStatus(c.ID, repo.CourseReview, "")
+	if rec := doJSON(t, router, http.MethodDelete, "/api/v1/teacher/courses/"+c.ID,
+		"", withCookie(cookie)); rec.Code != http.StatusConflict {
+		t.Fatalf("DELETE курса на модерации: status=%d, ждали 409 (конфликт состояния)", rec.Code)
+	}
 }
 
 // TestWiringMockPayPage — сквозная проверка T09: /pay/mock/{id} на верхнем

@@ -8,6 +8,8 @@ import {
   ApiError,
   createInvite,
   formatDate,
+  formatMoney,
+  formatPrice,
   getAdminSettings,
   moderateCourse,
   paymentJournal,
@@ -49,14 +51,8 @@ function isPaymentStatus(value: string | null): value is PaymentStatus {
 }
 
 /**
- * Денежная сумма в рублях. formatPrice из client.ts не используется намеренно:
- * для 0 он возвращает «Бесплатно», что неверно для итогов и комиссий.
+ * Короткий идентификатор для таблицы.
  */
-function money(cents: number): string {
-  return `${new Intl.NumberFormat('ru-RU').format(cents / 100)} ₽`;
-}
-
-/** Короткий идентификатор для таблицы. */
 function shortId(id: string): string {
   return id.length > 8 ? id.slice(0, 8) : id;
 }
@@ -336,7 +332,8 @@ export default function Admin(): JSX.Element {
                   </div>
                   <div>
                     <dt>{t('course.price')}</dt>
-                    <dd>{money(c.priceCents)}</dd>
+                    {/* Это цена курса — для неё «Бесплатно» при 0 уместно (как в каталоге). */}
+                    <dd>{formatPrice(c.priceCents)}</dd>
                   </div>
                 </dl>
                 <div className="admin-queue-actions btn-row">
@@ -443,13 +440,13 @@ export default function Admin(): JSX.Element {
           <div className="admin-totals">
             <strong>{t('admin.totalsLabel')}</strong>
             <span>
-              {t('admin.total')}: {money(journalData.totals.amountCents)}
+              {t('admin.total')}: {formatMoney(journalData.totals.amountCents)}
             </span>
             <span>
-              {t('admin.commission')}: {money(journalData.totals.platformFeeCents)}
+              {t('admin.commission')}: {formatMoney(journalData.totals.platformFeeCents)}
             </span>
             <span>
-              {t('admin.toTeacher')}: {money(journalData.totals.teacherAmountCents)}
+              {t('admin.toTeacher')}: {formatMoney(journalData.totals.teacherAmountCents)}
             </span>
           </div>
         )}
@@ -475,14 +472,20 @@ export default function Admin(): JSX.Element {
                   <tr key={item.id}>
                     <td data-label={t('admin.colDate')}>{formatDate(item.createdAt)}</td>
                     <td data-label={t('admin.colStudent')}>
-                      <code title={item.studentId}>{shortId(item.studentId)}</code>
+                      {/* Имя → email → короткий id: студента надо узнать по человекочитаемому
+                          признаку, а UUID в журнале US6 не помогает админу работать. */}
+                      <span title={item.studentId}>
+                        {item.studentName ||
+                          item.studentEmail ||
+                          shortId(item.studentId)}
+                      </span>
                     </td>
                     <td data-label={t('admin.colCourse')} className="admin-td-course">
                       {item.courseTitle}
                     </td>
-                    <td data-label={t('admin.colAmount')}>{money(item.amountCents)}</td>
-                    <td data-label={t('admin.colCommission')}>{money(item.platformFeeCents)}</td>
-                    <td data-label={t('admin.colTeacher')}>{money(item.teacherAmountCents)}</td>
+                    <td data-label={t('admin.colAmount')}>{formatMoney(item.amountCents)}</td>
+                    <td data-label={t('admin.colCommission')}>{formatMoney(item.platformFeeCents)}</td>
+                    <td data-label={t('admin.colTeacher')}>{formatMoney(item.teacherAmountCents)}</td>
                     <td data-label={t('admin.colProvider')}>{item.provider}</td>
                     <td data-label={t('admin.colStatus')}>
                       <span className={`admin-badge admin-badge--${item.status}`}>

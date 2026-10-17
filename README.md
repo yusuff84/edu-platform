@@ -34,34 +34,78 @@ docker compose up -d --build
 
 Миграции применяются автоматически при старте API.
 
-## Демо-учётки: важное предупреждение
+### Если порт 3000 занят другим проектом
 
-`specs/001-it-courses-mvp/quickstart.md` обещает `admin@local / admin1234` и
-`teacher@local / teacher1`, но в `backend/internal/migrate/migrations/002_seed.sql`
-лежат **невалидные bcrypt-заглушки** — войти под этими учётками **нельзя**,
-пока пароль не установить вручную. Миграция намеренно не правится.
+Порт фронта настраивается через `WEB_PORT`, но **CSRF и CORS привязаны к
+origin'у** — просто перенаправить 3000 на другой порт недостаточно, браузер
+получит отказ на любых не-GET запросах (вход, регистрация). Меняйте обе
+переменные одной парой:
 
-Рабочие варианты:
+```bash
+# PowerShell
+$env:WEB_PORT="3001"
+$env:ALLOWED_ORIGINS="http://localhost:3001,http://127.0.0.1:3001"
+docker compose up -d --build --force-recreate api web
 
-1. **Рекомендуемый — сид админа через env.** Задайте `ADMIN_EMAIL` и
-   `ADMIN_PASSWORD` в `.env` и перезапустите API: при старте создаётся админ
-   с настоящим bcrypt-хешем (если email ещё не занят). Дальше учителей заводите
-   приглашениями (`/invites`), студентов — обычной регистрацией.
-2. **Установить пароль для seed-пользователя.** Сгенерируйте bcrypt-хеш и
-   обновите строку в БД:
+# bash
+WEB_PORT=3001 ALLOWED_ORIGINS="http://localhost:3001,http://127.0.0.1:3001" \
+  docker compose up -d --build --force-recreate api web
+```
 
-   ```bash
-   # сгенерировать хеш (нужен Docker; $2y$ принимается backend'ом — проверено)
-   docker run --rm httpd:alpine sh -c "htpasswd -bnBC 10 '' admin1234 | tr -d ':\n'; echo"
-   # применить к демо-админу (подставить <ХЕШ>; в PowerShell хеш — в одинарных кавычках!)
-   docker compose exec db psql -U edu -d edu \
-     -c "UPDATE users SET password_hash='<ХЕШ>' WHERE email='admin@local';"
-   # то же для преподавателя: email 'teacher@local'
-   ```
+`ALLOWED_ORIGINS` по умолчанию — `http://localhost:3000,http://127.0.0.1:3000`
+(см. `docker-compose.yml`, `internal/config/config.go`). Сквозной скрипт
+принимает порт отдельно: `powershell -File qa-abc.ps1 -WebUrl http://localhost:3001`.
 
-Без этих действий демо-пользователи из SQL-сида входить не могут.
-В **in-memory режиме** (без `DATABASE_URL`, только разработка) есть рабочая
-демо-учётка преподавателя: `demo-teacher@local / teach1234`.
+## Демо-учётки
+
+### Админ — работает сразу
+
+`.env` уже содержит dev-заглушки `ADMIN_EMAIL=admin@local` / `ADMIN_PASSWORD=admin1234`,
+поэтому после `docker compose up` админ входит **без ручных действий**:
+
+```bash
+docker compose up -d --build db api runner
+# http://localhost:3000  →  admin@local / admin1234
+```
+
+В чём была проблема и как она закрыта (T16): в
+`backend/internal/migrate/migrations/002_seed.sql` лежат **невалидные
+bcrypt-заглушки** — `$2a$10$AAA…Aadmin1234`, то есть 50 символов-заглушка плюс
+открытый текст пароля. Настоящий bcrypt — 60 символов псевдослучайных.
+Первоначальный `seedAdmin` видел, что пользователь уже создан миграцией, и
+выходил, не исправляя хеш — войти было нельзя никогда.
+
+Сейчас `seedAdmin` **перезаписывает битый хеш** настоящим bcrypt при явно
+заданных `ADMIN_EMAIL` + `ADMIN_PASSWORD`. Миграции не правились — она уже
+применена и является артефактом SDD-процесса.
+
+Для прода задавайте свои значения через свой env-file:
+```bash
+docker compose --env-file .env.prod up -d
+```
+
+### Преподаватель
+
+`teacher@local` из SQL-сида по-прежнему с поддельным хешем — переменных под
+него нет, чтобы не расширять scope. **Два рабочих способа получить учителя:**
+
+1. **Рекомендуемый — приглашение.** Войдите админом → `/admin` → создайте
+   приглашение → откройте скопированную ссылку `/register?inviteToken=...`.
+   Регистрация сразу даст роль преподавателя (T17 починил чтение токена из query).
+2. **In-memory режим** (без `DATABASE_URL`, только разработка):
+   `demo-teacher@local / teach1234`.
+
+### Ручная установка пароля (запасной вариант)
+
+Если нужен именно `teacher@local`:
+
+```bash
+# сгенерировать хеш (нужен Docker; $2y$ принимается backend'ом — проверено)
+docker run --rm httpd:alpine sh -c "htpasswd -bnBC 10 '' teacher1 | tr -d ':\n'; echo"
+# применить (в PowerShell хеш — в одинарных кавычках!)
+docker compose exec db psql -U edu -d edu \
+  -c "UPDATE users SET password_hash='<ХЕШ>' WHERE email='teacher@local';"
+```
 
 ## Тесты и QA
 
@@ -71,20 +115,21 @@ cd runner   && go test ./...     # тесты песочницы
 cd frontend && npm ci && npm run build   # tsc --noEmit + vite build
 ```
 
-Сквозной QA-скрипт (39 проверок, код возврата 0/1):
+Сквозной QA-скрипт (**49 проверок**, код возврата 0/1):
 
 ```bash
 # Требует запущенного стенда. web (фронтенд) не обязателен — недоступность
 # считается SKIP, а не провалом:
 docker compose up -d db api runner
 
-powershell -File qa-abc.ps1                    # PowerShell 5.1
-pwsh -File qa-abc.ps1                          # или PowerShell 7
+powershell -File qa-abc.ps1 -AdminEmail admin@local -AdminPassword admin1234
+pwsh -File qa-abc.ps1 -AdminEmail admin@local -AdminPassword admin1234  # PS 7
 
-# Скрипт идемпотентен: каждый запуск регистрирует qa-<timestamp>@example.test.
-# Для блока US6 (журнал платежей, комиссия, приглашения) нужен админ —
-# задайте пару ADMIN_EMAIL/ADMIN_PASSWORD в .env перед запуском стенда.
-powershell -File qa-abc.ps1 -SkipAdmin         # без админ-блока
+# Скрипт идемпотентен: каждый запуск регистрирует qa-<timestamp>@example.test,
+# второй прогон на «грязной» БД тоже даёт 49/49.
+# Значения -AdminEmail/-AdminPassword — из ADMIN_EMAIL/ADMIN_PASSWORD в .env
+# (там уже подставлены dev-заглушки, см. «Демо-учётки»).
+powershell -File qa-abc.ps1 -SkipAdmin         # без админ-блока (US6)
 powershell -File qa-abc.ps1 -BaseUrl http://127.0.0.1:8082 -WebUrl http://127.0.0.1:3000
 ```
 
@@ -166,21 +211,30 @@ dev-значения (`SESSION_SECRET=change-me` и т.п.) — иначе не 
 
 Завершено (волна 3): контрактные тесты и qa-скрипт `qa-abc.ps1` (T12),
 сквозная проводка маршрутов и compose (T13), документация (T14).
-Статус всех 15 задач — [`Task/STATUS.md`](Task/STATUS.md).
+
+Закрыто (волны A–C): 7 бэкенд-багов включая **демо-учётки** (T16),
+`inviteToken` из ссылки и редирект со входа (T17), code-splitting и
+дедупликация стилей (T18), CRUD конструктора (T19), +15 тестов и сверка
+контракта (T20).
+
+Статус всех 20 задач — [`Task/STATUS.md`](Task/STATUS.md).
 
 Известные ограничения:
 
-- конструктор: созданы создание курсов/модулей/уроков, плюс (T13) чтение
-  курса по id, правка карточки курса и переименование модуля. Удаление,
-  перестановка и редактирование урока после создания — в бэклоге;
-- `POST /teacher/courses/{id}/lessons` принимает `startsAt`, но не сохраняет
-  его в урок — планирование эфиров пока не работает. Закреплено тестом-фиксатором
-  `teacher_test.go:TestStartsAtNotPersistedDiscrepancy4`, который упадёт при починке;
-- `GET /admin/payments` отдаёт только `studentId`, без email/имени студента —
-  в админке колонка «Студент» показывает обрезанный UUID;
-- при провале квиза/кода в ответе `POST .../complete` нет `percent`/`nextLesson`;
-- демо-пользователи SQL-сида не могут войти без ручной настройки пароля
-  (см. раздел «Демо-учётки»).
+- конструктор: создание, правка карточки курса и модуля, правка/удаление
+  урока, удаление модуля и курса, перестановка модулей и уроков, счётчики
+  в списке курсов — **закрыто T19**. В бэклоге осталась только **архивация
+  опубликованных курсов**: `DELETE` работает только в `draft`, потому что
+  каскад в Postgres удаляет платежи и записи, что сломало бы журнал US6;
+- `PATCH /teacher/courses/{id}` не имеет guard по статусу и работает для
+  `review`/`published`, тогда как остальные операции конструктора возвращают
+  `409` вне `draft`. Метаданные правятся в любом статусе — единообразия нет;
+- `GET /admin/payments` отдаёт `studentEmail`/`studentName` (T16), но
+  **фильтра по email студента нет**;
+- `teacher@local` из SQL-сида по-прежнему с поддельным хешем — переменных под
+  него нет. Учителя заводите приглашением (см. «Демо-учётки»);
+- `slugRe` пропускает только латиницу, цифры и дефис: кириллический slug
+  отклоняется `400`, а публичный каталог не транслитерирует.
 
 ## Спецификации
 

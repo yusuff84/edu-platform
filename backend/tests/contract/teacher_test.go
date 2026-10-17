@@ -9,6 +9,7 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+	"time"
 
 	"edu-platform/backend/internal/repo"
 )
@@ -303,10 +304,11 @@ func TestQuizCorrectAnswersDoNotLeak(t *testing.T) {
 	}
 }
 
-// Расхождение №4 ЗАКРЫТО: POST /teacher/courses/{id}/lessons теперь
-// сохраняет startsAt (handler/teacher.go копирует поле в repo.Lesson).
-// Тест проверяет сохранение и видимость даты в публичном виде урока.
-func TestStartsAtPersistedDiscrepancy4Fixed(t *testing.T) {
+// Расхождение №4 (T16) ЗАКРЫТО: POST /teacher/courses/{id}/lessons сохраняет
+// startsAt — планирование живых эфиров работает. Раньше здесь жил тест-фиксатор
+// TestStartsAtNotPersistedDiscrepancy4, ожидавший startsAt=null: он упал бы при
+// починке бага, поэтому проверка перевёрнута.
+func TestStartsAtPersisted(t *testing.T) {
 	app, router := newTestApp()
 	teacherCookies, courseID, _ := seedPublishedCourse(t, app, router, 0)
 	mods := app.Store.ListModulesByCourse(courseID)
@@ -320,12 +322,19 @@ func TestStartsAtPersistedDiscrepancy4Fixed(t *testing.T) {
 	}
 	var lesson map[string]any
 	decodeBody(t, rec, &lesson)
-	got, _ := lesson["startsAt"].(string)
-	if !strings.HasPrefix(got, "2030-01-01T12:00:00") {
-		t.Fatalf("startsAt должен сохраниться, got %v (%s)", lesson["startsAt"], rec.Body.String())
+	if lesson["startsAt"] != "2030-01-01T12:00:00Z" {
+		t.Fatalf("startsAt должен сохраниться и вернуться в ответе: got %v, body=%s",
+			lesson["startsAt"], rec.Body.String())
 	}
 	if lesson["liveUrl"] == "" {
 		t.Fatalf("liveUrl должен сохраниться: %s", rec.Body.String())
+	}
+	// Проверяем, что поле дошло именно до хранилища (баг жил на шаге
+	// копирования req.StartsAt → repo.Lesson), а не было просто эхом ответа.
+	id, _ := lesson["id"].(string)
+	stored, ok := app.Store.GetLesson(id)
+	if !ok || stored.StartsAt == nil || stored.StartsAt.Format(time.RFC3339) != "2030-01-01T12:00:00Z" {
+		t.Fatalf("startsAt не сохранён в repo.Lesson: %+v", stored)
 	}
 
 	// Некорректная дата — 400.

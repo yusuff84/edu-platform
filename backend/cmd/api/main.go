@@ -40,7 +40,9 @@ func main() {
 func openStore(cfg *config.Config) (repo.StoreAPI, func()) {
 	newMem := func() (repo.StoreAPI, func()) {
 		s := repo.NewStore()
-		s.SetCommissionPct(cfg.CommissionPct)
+		if err := s.SetCommissionPct(cfg.CommissionPct); err != nil {
+			log.Printf("ПРЕДУПРЕЖДЕНИЕ: не удалось задать комиссию в памяти: %v", err)
+		}
 		seedDemo(s)
 		return s, nil
 	}
@@ -168,23 +170,80 @@ func seedDemo(s *repo.Store) {
 	log.Printf("демо-сид: курс «Python с нуля» (учитель demo-teacher@local / teach1234)")
 }
 
-// seedAdmin создаёт админа только если заданы ADMIN_EMAIL и ADMIN_PASSWORD.
-// Без этих переменных сидирование не выполняется — секретов в коде нет.
+// seedAdmin создаёт/чинит демо-учётки (Task/T16-backend-bugs.md, п.7).
+// Без ADMIN_EMAIL/ADMIN_PASSWORD сидирование админа не выполняется —
+// секретов в коде нет.
+//
+// Важно: миграция 002_seed.sql создаёт admin@local и teacher@local с
+// ПОДЕЛЬНЫМИ bcrypt-хешами (50 символов-заглушка + открытый текст пароля),
+// поэтому одного лишь «пользователь уже существует» недостаточно — хеш
+// сверяется с ожидаемым паролем и при расхождении перезаписывается
+// настоящим bcrypt. Миграции не трогаем (артефакт SDD, уже применена).
 func seedAdmin(store repo.StoreAPI, cfg *config.Config) {
-	if cfg.AdminEmail == "" || cfg.AdminPassword == "" {
+	if cfg.AdminEmail != "" && cfg.AdminPassword != "" {
+		ensureAccount(store, cfg.AdminEmail, cfg.AdminPassword, repo.RoleAdmin, "админ")
+	}
+
+	// Преподаватель из той же миграции тоже приходит с поддельным хешем.
+	// config.go (T10) не входит во владение T16, поэтому TEACHER_* читаем
+	// напрямую; дефолты совпадают с демо-данными миграции: сам хеш
+	// "$2a$10$BBB...BBBteacher1" заканчивается открытым паролем «teacher1»,
+	// как admin-хеш — «admin1234» (см. .env).
+	email := strings.TrimSpace(os.Getenv("TEACHER_EMAIL"))
+	if email == "" {
+		email = "teacher@local"
+	}
+	password := os.Getenv("TEACHER_PASSWORD")
+	if password == "" {
+		password = "teacher1"
+	}
+	ensureAccount(store, email, password, repo.RoleTeacher, "преподаватель")
+}
+
+// ensureAccount создаёт учётку либо чинит её: невалидный bcrypt-хеш или
+// несовпадающий пароль → перезапись настоящим хешем; роль приводится к
+// требуемой. label — имя роли по-русски для логов. Каждое действие
+// логируется (создан / исправлен / уже корректен), чтобы сквозной прогон
+// было видно в docker compose logs api.
+func ensureAccount(store repo.StoreAPI, email, password string, role repo.Role, label string) {
+	user, exists := store.GetUserByEmail(email)
+	if !exists {
+		hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+		if err != nil {
+			log.Printf("не удалось захешировать пароль %s: %v", email, err)
+			return
+		}
+		if _, err := store.CreateUser(email, string(hash), role); err != nil {
+			log.Printf("не удалось создать %s: %v", email, err)
+			return
+		}
+		log.Printf("создан %s %s", label, email)
 		return
 	}
-	if _, ok := store.GetUserByEmail(cfg.AdminEmail); ok {
-		return
+
+	fixed := false
+	// Ошибка парсинга (поддельная заглушка из миграции) или несовпадение
+	// пароля → хеш невалиден для входа, перезаписываем настоящим.
+	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(password)); err != nil {
+		hash, herr := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+		if herr != nil {
+			log.Printf("не удалось захешировать пароль %s: %v", email, herr)
+			return
+		}
+		if !store.SetUserPasswordHash(user.ID, string(hash)) {
+			log.Printf("не удалось исправить пароль %s: пользователь не найден", email)
+			return
+		}
+		log.Printf("исправлен пароль: %s %s — хеш в базе был поддельным или не совпадал с заданным", label, email)
+		fixed = true
 	}
-	hash, err := bcrypt.GenerateFromPassword([]byte(cfg.AdminPassword), bcrypt.DefaultCost)
-	if err != nil {
-		log.Printf("не удалось захешировать пароль админа: %v", err)
-		return
+	if user.Role != role {
+		if store.SetUserRole(user.ID, role) {
+			log.Printf("исправлена роль: %s %s → %s", email, user.Role, role)
+			fixed = true
+		}
 	}
-	if _, err := store.CreateUser(cfg.AdminEmail, string(hash), repo.RoleAdmin); err != nil {
-		log.Printf("не удалось создать админа: %v", err)
-		return
+	if !fixed {
+		log.Printf("%s %s: хеш уже корректен", label, email)
 	}
-	log.Printf("создан админ %s", cfg.AdminEmail)
 }

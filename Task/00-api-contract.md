@@ -41,7 +41,9 @@
 { "id": "uuid", "email": "string", "role": "student|teacher|admin", "displayName": "string" }
 ```
 
-Ошибки: `400` (валидация, невалидный invite-токен), `409` (email занят).
+Ошибки: `400` (валидация, невалидный invite-токен, **занятый email** —
+расхождение №8: документ ранее обещал `409`, факт закреплён тестом
+`auth_test.go` и проверкой A6 в `qa-abc.ps1`).
 
 ---
 
@@ -55,7 +57,10 @@
 
 ## 3. `POST /auth/logout`
 
-Тело пустое. Ответ `204 No Content` (не `200`, не JSON).
+Тело пустое. Фактически ответ `200` с JSON `{"status":"ok"}`, а не `204`
+(расхождение №2: документ обещал `204 No Content`; код и контрактный тест
+`tests/contract/auth_test.go` закрепляют `200`, фронтенд принимает оба
+варианта — см. отчёт T10).
 
 ---
 
@@ -308,9 +313,12 @@ Query: `q` (поиск), `page`, `limit`.
   "nextLesson": { "lessonId": "uuid", "title": "string", "kind": "video_text" } | null }
 ```
 
-Провал:
+Провал (T16: `percent`/`nextLesson` добавлены и при провале — по той же
+логике, что и при успехе, чтобы фронт обновлял ленту без рефетча):
 ```json
-{ "passed": false, "completed": false, "message": "текст ошибки" }
+{ "passed": false, "completed": false, "message": "текст ошибки",
+  "percent": 40,
+  "nextLesson": { "lessonId": "uuid", "title": "string", "kind": "video_text" } | null }
 ```
 (для quiz дополнительно `correct: 1, total: 5`)
 
@@ -352,7 +360,9 @@ Query: `q` (поиск), `page`, `limit`.
 
 ## 21. `GET /healthz` и `GET /api/v1/healthz`
 
-Ответ `200`, текст `ok`.
+Ответ `200`, JSON `{"status":"ok"}` (расхождение №5: документ ранее обещал
+плоский текст `ok`; факт — см. `handler/middleware.go:healthz` и проверку A1
+в `qa-abc.ps1`).
 
 ---
 
@@ -363,7 +373,9 @@ Query: `q` (поиск), `page`, `limit`.
 ```json
 {
   "items": [
-    { "id": "uuid", "studentId": "uuid", "courseId": "uuid", "courseTitle": "string",
+    { "id": "uuid", "studentId": "uuid", "studentEmail": "student@example.com",
+      "studentName": "Имя студента (может быть пустым — тогда показывать studentEmail)",
+      "courseId": "uuid", "courseTitle": "string",
       "amountCents": 4900, "platformFeeCents": 735, "teacherAmountCents": 4165,
       "currency": "RUB", "provider": "mock", "providerPaymentId": "string",
       "status": "pending|succeeded|failed|refunded",
@@ -373,6 +385,8 @@ Query: `q` (поиск), `page`, `limit`.
   "totals": { "amountCents": 123400, "platformFeeCents": 18510, "teacherAmountCents": 104890 }
 }
 ```
+> `studentEmail`/`studentName` добавлены T16 (расхождение №6 закрыто):
+> колонка «Студент» в админке больше не показывает обрезанный UUID.
 
 ### `GET /admin/settings`
 ```json
@@ -382,6 +396,19 @@ Query: `q` (поиск), `page`, `limit`.
 ### `PUT /admin/settings`
 Тело: `{ "commissionPct": 15 }` (`0..90`)
 Ответ `200`: `{ "commissionPct": 15 }`
+Ошибка записи в БД → `500 {"error": "..."}` (T16: раньше Postgres глотал
+ошибку, API отвечал `200`, но значение не сохранялось).
+
+### `POST /admin/enrollments/{studentId}/courses/{courseId}/revoke` и `.../unrevoke` (T16, п.6)
+Только роль `admin`. Ручной отзыв/восстановление доступа к курсу.
+
+Ответ `200`:
+```json
+{ "studentId": "uuid", "courseId": "uuid", "status": "revoked|active" }
+```
+`revoke` → `status: "revoked"` (доступ закрыт: `/me/courses` больше не отдаёт
+курс, `.../complete` отвечает `403`), `unrevoke` → `status: "active"`.
+Ошибки: `400` (не UUID), `404` (записи нет).
 
 ---
 
@@ -400,20 +427,41 @@ Query: `q` (поиск), `page`, `limit`.
 | # | Расхождение | Где | Статус | Что делать |
 |---|---|---|---|---|
 | 1 | `User.displayName` обещан контрактом, но `handler/auth.go` не отдаёт его | backend | ✅ закрыто T10 | Принимать `displayName?: string` — фронт не должен падать без него |
-| 2 | `POST /auth/logout` возвращает `200 {"status":"ok"}`, а не `204` | backend | ✅ закрыто T10 | Клиент обрабатывает оба варианта; не полагаться на `204` |
+| 2 | `POST /auth/logout` возвращает `200 {"status":"ok"}`, а не `204` | backend | ✅ закрыто T10; **документ исправлен T20** (п.3) | Клиент обрабатывает оба варианта; не полагаться на `204` |
 | 3 | `listReviews` теряет `avgRating`/`ratingsCount` из конверта (клиент возвращает плоский массив) | T01 → T04 | ⚠️ осознанно | **Рейтинг курса бери из `getCourse()`** (`course.avgRating`, `course.ratingsCount`), а не из `listReviews()` |
-| 4 | `POST /teacher/courses/{id}/lessons` принимает `startsAt`, но **не сохраняет** его в урок | backend | ❌ не закрыто | Преподаватель не может запланировать эфир. Ничего не подстраивай во фронтенде — шли по контракту и опиши в отчёте |
-| 5 | `GET /healthz` возвращает JSON `{"status":"ok"}`, а не текст `ok` | backend | ⚠️ так и осталось | Сверяйся с `docs/API.md`, он описывает фактическое поведение |
-| 6 | `GET /admin/payments` отдаёт только `studentId`, без email/имени | backend | ❌ не закрыто | В админке колонка «Студент» показывает обрезанный UUID. Требует расширения контракта, T08 не подстраивал |
+| 4 | `POST /teacher/courses/{id}/lessons` принимает `startsAt`, но **не сохраняет** его в урок | backend | ✅ закрыто T16 | `req.StartsAt` парсится и копируется в `repo.Lesson`; некорректная дата — `400`. Тест-фиксатор обновлён: `teacher_test.go:TestStartsAtPersisted` |
+| 5 | `GET /healthz` возвращает JSON `{"status":"ok"}`, а не текст `ok` | backend | ⚠️ код не менялся; **документ исправлен T20** (п.21) | Сверяйся с `docs/API.md`, он описывает фактическое поведение; проверка A1 в `qa-abc.ps1` |
+| 6 | `GET /admin/payments` отдаёт только `studentId`, без email/имени | backend | ✅ закрыто T16 | В строке журнала теперь есть `studentEmail` и `studentName` (пустое имя → показывать email). Тест-фиксатор в `admin_payments_test.go` обновлён на проверку наличия полей |
 | 7 | `formatPrice(0)` возвращает «Бесплатно» — неверно для итогов журнала | frontend | ⚠️ обойдено | T08 использовал локальный форматтер `money()`; `client.ts` не менялся |
 | 8 | `POST /auth/register` при занятом email отвечает `400`, а контракт обещает `409` | backend | ✅ подтверждено | Закреплено тестом `auth_test.go:20-26` и проверкой A6 в `qa-abc.ps1`. **Контракт поправлен на 400** — чинить код бессмысленно, тест уже зафиксировал поведение |
 
 Все расхождения подтверждены контрактными тестами T12. Тест-фиксатор
-`teacher_test.go:TestStartsAtNotPersistedDiscrepancy4` **специально упадёт**,
-когда расхождение №4 починят — это сигнал обновить документацию.
+`teacher_test.go:TestStartsAtNotPersistedDiscrepancy4` **специально упал**,
+когда расхождение №4 починили (T16) — по нему обновлено ожидание:
+тест переименован в `TestStartsAtPersisted` и теперь требует `startsAt != null`.
+Аналогично обновлён фиксатор в `admin_payments_test.go` (расхождение №6).
 
-Расхождение 4 — реальный баг бэкенда (`handler/teacher.go`: поле не копируется в `repo.Lesson`).
+Расхождение 4 было реальным багом бэкенда (`handler/teacher.go`: поле не
+копировалось в `repo.Lesson`) — закрыто T16.
 Если заметишь похожее — пиши в отчёте, не правь чужие файлы.
+
+## Правило кодов 400/409 (закреплено T20)
+
+Фактическая семантика API, зафиксирована тестом
+`internal/handler/teacher_edit_test.go:TestSlugConflictIs400Consistent`
+и сквозной проверкой B7d в `qa-abc.ps1`:
+
+- **`400 Bad Request`** — ошибка валидации тела/параметров запроса, в том
+  числе **уникальность ссылаемых значений**: занятый `email` при
+  `POST /auth/register`, занятый `slug` при `POST/PATCH /teacher/courses`
+  (одинаково в `teacher.go:67` и `teacher_edit.go:112`).
+- **`409 Conflict`** — конфликт с **целевым состоянием ресурса**: активная
+  запись на курс при повторной покупке, существующий отзыв, удаление/правка
+  вне статуса `draft`, удаление непустого модуля.
+
+Альтернатива по RFC 9110 (slug → 409) потребовала бы правки прод-хендлеров,
+что выходит за границы владения T20; код и документ согласованы на правиле
+выше, ветка-исключение отсутствует.
 
 ## Что НЕ делать
 

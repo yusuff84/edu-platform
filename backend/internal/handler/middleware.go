@@ -121,6 +121,9 @@ func NewRouter(app *App) http.Handler {
 			// модуля). Монтируется внутрь этого блока, чтобы пути были
 			// относительными (/courses/{id}), а requireAuth/requireRole — уже навешены.
 			app.RegisterTeacherEditRoutes(r)
+			// T19: CRUD конструктора (правка урока, удаление, порядок, счётчики
+			// в списке) — та же точка монтирования, что у RegisterTeacherEditRoutes.
+			app.RegisterTeacherCRUDRoutes(r)
 		})
 
 		r.Route("/admin", func(r chi.Router) {
@@ -143,6 +146,7 @@ func NewRouter(app *App) http.Handler {
 		// получилось бы /admin/admin/payments. requireAuth + requireRole(admin)
 		// вешаются внутри метода через .With, двойная обёртка не нужна.
 		app.RegisterAdminPaymentsRoutes(r)
+		app.RegisterAdminEnrollmentRoutes(r) // T16: /admin/enrollments/{studentId}/courses/{courseId}/revoke|unrevoke
 
 		// Webhook-и провайдеров оплачивают CSRF-проверку подписью (T09),
 		// поэтому исключены из csrfProtect — платёжки шлют их без Origin.
