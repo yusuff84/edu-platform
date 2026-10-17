@@ -1,0 +1,226 @@
+/* T30 — стили кабинета ученика: Profile.tsx, MyCourses.tsx, Learn.tsx.
+   Префикс .pf- — чтобы не конфликтовать с общими слоями. Общие классы
+   (.panel, .btn, .input, .progress, .progress-bar, .progress-meta, .muted,
+   .error, table/th/td из styles.css) переиспользуются, а не дублируются. */
+
+/* ---------- Нейтральный плейсхолдер прогресса, пока он грузится ---------- */
+
+.pf-progress-pending {
+  background: linear-gradient(90deg, #efeee9 0%, #e3e1da 50%, #efeee9 100%);
+  background-size: 200% 100%;
+  animation: pf-pending 1.4s linear infinite;
+}
+
+@keyframes pf-pending {
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: 0 0;
+  }
+}
+
+/* ---------- Подписи и статусы на карточках MyCourses ---------- */
+
+/* «Курс пройден» — приглушённо-зелёная подпись вместо счётчика уроков. */
+.pf-course-done {
+  color: #14663a;
+  font-weight: 700;
+}
+
+/* Статус записи вместо полосы прогресса, если прогресс недоступен. */
+.pf-enroll-status {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+/* ---------- Профиль: карточка аккаунта ---------- */
+
+.pf-card {
+  margin-bottom: 20px;
+}
+
+.pf-facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px;
+  margin: 0 0 18px;
+}
+
+.pf-facts div {
+  min-width: 0;
+}
+
+.pf-facts dt {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+}
+
+.pf-facts dd {
+  margin: 4px 0 0;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+/* ---------- Профиль: форма отображаемого имени ---------- */
+
+.pf-name-form {
+  display: grid;
+  gap: 8px;
+  max-width: 420px;
+}
+
+.pf-label {
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.pf-hint {
+  margin: 0;
+  font-size: 13px;
+}
+
+.pf-saved {
+  margin: 0;
+  color: #14663a;
+  font-weight: 700;
+}
+
+.pf-save {
+  justify-self: start;
+}
+
+.pf-error {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+/* ---------- Профиль: история платежей ---------- */
+
+.pf-payments h2 {
+  margin-bottom: 6px;
+}
+
+.pf-table-wrap {
+  overflow-x: auto;
+  margin-top: 10px;
+}
+
+.pf-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  overflow: hidden;
+}
+
+.pf-table th,
+.pf-table td {
+  text-align: left;
+  padding: 13px 14px;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.pf-table th {
+  color: var(--muted);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  background: #faf9f6;
+}
+
+.pf-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+/* Статусы платежей в цветах дизайн-системы (как .st-* в styles.css). */
+.pf-badge {
+  display: inline-block;
+  font-size: 12.5px;
+  font-weight: 800;
+  border-radius: 999px;
+  padding: 5px 12px;
+  white-space: nowrap;
+}
+
+.pf-badge--pending {
+  background: var(--warn-bg);
+  color: #8a5e14;
+}
+
+.pf-badge--succeeded {
+  background: var(--ok-bg);
+  color: #14663a;
+}
+
+.pf-badge--failed {
+  background: var(--danger-bg);
+  color: #a4261b;
+}
+
+.pf-badge--refunded {
+  background: #eef1ee;
+  color: #444;
+}
+
+/* «Ожидает подтверждения» — processedAt === null (контракт T23). */
+.pf-processing {
+  display: block;
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.pf-pager {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 14px;
+}
+
+/* ---------- Адаптив ---------- */
+
+@media (max-width: 720px) {
+  /* Таблица платежей превращается в карточки с подписями data-label. */
+  .pf-table thead {
+    display: none;
+  }
+
+  .pf-table,
+  .pf-table tbody,
+  .pf-table tr,
+  .pf-table td {
+    display: block;
+  }
+
+  .pf-table tr {
+    border-bottom: 1px solid var(--line-soft);
+    padding: 6px 0;
+  }
+
+  .pf-table tbody tr:last-child {
+    border-bottom: 0;
+  }
+
+  .pf-table td {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    border: 0;
+    padding: 6px 14px;
+  }
+
+  .pf-table td::before {
+    content: attr(data-label);
+    color: var(--muted);
+    font-weight: 700;
+  }
+}
