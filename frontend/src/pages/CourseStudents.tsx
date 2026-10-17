@@ -42,12 +42,8 @@ const COURSE_STATUS_LABEL: Record<CourseStatus, RuKey> = {
   archived: 'teach.statusArchived',
 };
 
-// Тексты без ключей в ru.json (ru.json менять нельзя, см. отчёт
-// frontend/tests/T29-course-students.md):
-//  - 403/404 — точная формулировка из ТЗ T29; отдельного ключа под этот экран нет;
-//  - «Показано … из …» в пагинации — в словаре есть только admin.showing/admin.of
-//    (пространство админки), чужой раздел не переиспользуем.
-const MSG_NO_ACCESS = 'Курс не найден или нет доступа';
+// 403/404: текст из ТЗ T29, ключ добавлен координатором после волны.
+const MSG_NO_ACCESS = t('courseStudents.noAccess');
 
 // ---------- Утилиты ----------
 
@@ -362,7 +358,7 @@ export default function CourseStudents(): JSX.Element {
                     {t('common.prev')}
                   </button>
                   <span className="muted">
-                    Показано {rangeFrom}–{rangeTo} из {total}
+                    {t('admin.showing')} {rangeFrom}–{rangeTo} {t('admin.of')} {total}
                   </span>
                   <button
                     type="button"

@@ -62,8 +62,7 @@ export default function AdminStats(): JSX.Element {
               onClick={() => void stats.refetch()}
               disabled={stats.isFetching}
             >
-              {/* Ключа «Обновить» в ru.json нет — литерал, см. отчёт T27. */}
-              Обновить
+              {t('adminStats.refresh')}
             </button>
           </div>
 

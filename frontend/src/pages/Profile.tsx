@@ -213,7 +213,7 @@ export default function Profile(): JSX.Element {
                           {t(STATUS_LABEL[p.status])}
                         </span>
                         {p.processedAt === null && (
-                          <span className="pf-processing">ожидает подтверждения</span>
+                          <span className="pf-processing">{t('profile.pendingPayment')}</span>
                         )}
                       </td>
                     </tr>

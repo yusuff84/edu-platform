@@ -38,10 +38,10 @@ export type LessonPreviewData = {
   };
 };
 
-// Литералы без ключа в ru.json (кандидаты в словарь — см. отчёт T28):
+// Ключи добавлены координатором после волны (см. отчёт T28):
 // пустой черновик и пометка правильного варианта в предпросмотре.
-const MSG_PREVIEW_EMPTY = 'Заполните текст, чтобы увидеть предпросмотр';
-const MSG_CORRECT = 'Верный ответ';
+const MSG_PREVIEW_EMPTY = t('teach.previewEmpty');
+const MSG_CORRECT = t('teach.correctAnswer');
 
 /** Есть ли в черновике хоть что-то, что стоит показывать. */
 function hasContent(d: LessonPreviewData): boolean {

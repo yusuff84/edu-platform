@@ -125,8 +125,7 @@ function ReviewsPanel({ courseId }: { courseId: string }): JSX.Element {
       )}
 
       {reviews.data && items.length === 0 && (
-        // Ключа под пустой список отзывов в админке нет — литерал, см. отчёт T27.
-        <p className="muted">Отзывов у курса нет</p>
+        <p className="muted">{t('adminCourses.reviewsEmpty')}</p>
       )}
 
       {items.length > 0 && (
@@ -223,12 +222,12 @@ export default function AdminCourses(): JSX.Element {
   });
 
   function onCourseAction(course: AdminCourseRow, action: CourseAction): void {
-    // Ключей подтверждения для этих двух действий в ru.json нет — литералы,
-    // см. отчёт T27.
-    const question =
+    // Название курса подставляем сами: в словаре нет интерполяции (t.ts).
+    const confirmText =
       action === 'archive'
-        ? `Отправить курс «${course.title}» в архив?`
-        : `Снять курс «${course.title}» с публикации и вернуть в черновики?`;
+        ? t('adminCourses.confirmArchive')
+        : t('adminCourses.confirmUnpublish');
+    const question = `${confirmText} «${course.title}»?`;
     if (!window.confirm(question)) return;
     setActionMsg(null);
     courseAction.mutate({ id: course.id, action });

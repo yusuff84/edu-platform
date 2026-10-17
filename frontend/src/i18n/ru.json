@@ -352,6 +352,7 @@
   "adminStats.active": "Активные",
   "adminStats.avgRating": "Средний рейтинг",
   "adminStats.reviewsTotal": "Отзывов",
+  "adminStats.refresh": "Обновить",
 
   "adminCourses.title": "Курсы",
   "adminCourses.search": "Поиск по названию",
@@ -402,5 +403,19 @@
   "profile.progressEmpty": "Вы ещё не записались ни на один курс",
   "profile.lessonsDone": "Пройдено уроков",
   "profile.nextLesson": "Следующий урок",
-  "profile.courseDone": "Курс пройден"
+  "profile.courseDone": "Курс пройден",
+  "profile.pendingPayment": "ожидает подтверждения",
+
+  "teach.correctAnswer": "Верный ответ",
+  "teach.previewEmpty": "Заполните текст, чтобы увидеть предпросмотр",
+  "teach.confirmUnarchive": "Вернуть курс из архива в черновики?",
+
+  "courseStudents.noAccess": "Курс не найден или нет доступа",
+
+  "adminCourses.reviewsEmpty": "Отзывов у курса нет",
+  "adminCourses.confirmArchive": "Отправить в архив",
+  "adminCourses.confirmUnpublish": "Снять с публикации",
+
+  "my.progressRevoked": "Запись на курс отозвана",
+  "my.progressFailed": "Не удалось загрузить прогресс"
 }

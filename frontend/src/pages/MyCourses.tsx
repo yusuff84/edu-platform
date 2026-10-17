@@ -120,8 +120,8 @@ export default function MyCourses(): JSX.Element {
             // записи, а не выдуманные проценты. 404 — курс удалён.
             const revoked = errStatus === 403;
             const statusText = revoked
-              ? 'Запись на курс отозвана'
-              : 'Не удалось загрузить прогресс';
+              ? t('my.progressRevoked')
+              : t('my.progressFailed');
 
             // «Продолжить»: серверный nextLessonId, иначе — страница курса
             // (/learn/{id} сам выберет первый урок); при completed — тоже она.

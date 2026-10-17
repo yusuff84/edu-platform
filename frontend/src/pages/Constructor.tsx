@@ -856,10 +856,10 @@ export default function Constructor(): JSX.Element {
     onError: (e: unknown) => setNotice({ text: errText(e), kind: 'error' }),
   });
 
-  // Возврат из архива обратим и безобиден — отдельного ключа подтверждения
-  // в словаре нет, лишний window.confirm не ставим.
+  // Возврат из архива — обратимое действие, но подтверждение ставим: учитель
+  // может нажать случайно, а курс сразу станет черновиком.
   function onUnarchiveCourse(): void {
-    unarchiveMutation.mutate();
+    if (window.confirm(t('teach.confirmUnarchive'))) unarchiveMutation.mutate();
   }
 
   const withdrawMutation = useMutation({
