@@ -131,6 +131,7 @@ func NewRouter(app *App) http.Handler {
 			r.Post("/invites", app.AdminCreateInvite)
 			r.Get("/courses/review", app.AdminReviewQueue)
 			r.Post("/courses/{id}/moderate", app.AdminModerateCourse)
+			app.RegisterAdminConsoleRoutes(r)
 			// T07 (журнал платежей и настройки) сюда НЕ подключать: метод
 			// RegisterAdminPaymentsRoutes регистрирует АБСОЛЮТНЫЕ пути
 			// /admin/payments и /admin/settings (см. handler/admin_payments.go),
