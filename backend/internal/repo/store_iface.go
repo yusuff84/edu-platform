@@ -92,12 +92,17 @@ type StoreAPI interface {
 	// CountCompletedLessons реализован, но не вызывается ни одним хендлером:
 	// API для будущего (прогресс-бар «M из N уроков»). См. отчёт T13.
 	CountCompletedLessons(studentID, courseID string) int
+	// ListCompletedLessonIDs — id пройденных уроков курса в порядке программы (T23).
+	// Никогда не nil (пустой слайс — если ничего не пройдено).
+	ListCompletedLessonIDs(studentID, courseID string) []string
 	// Payments
 	CreatePayment(p *Payment) (*Payment, error)
 	GetPaymentByProviderID(id string) (*Payment, bool)
 	FindPendingPayment(studentID, courseID string) (*Payment, bool)
 	SetPaymentStatus(id string, status PaymentStatus) bool
 	ListPaymentsJournal(f PaymentFilter) (items []PaymentJournalRow, total int, totals PaymentTotals, err error)
+	// ListPaymentsByStudent — платежи ученика, новые первыми (T23).
+	ListPaymentsByStudent(studentID string) []*Payment
 	// Reviews
 	CreateReview(studentID, courseID string, rating int, body string) (*Review, error)
 	ListReviewsByCourse(courseID string) []*Review
