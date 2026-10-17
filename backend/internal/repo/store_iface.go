@@ -52,6 +52,10 @@ type StoreAPI interface {
 	// CountContentByCourses — счётчики «модули/уроки» по курсам преподавателя
 	// одним запросом (T19: убирает N+1 в GET /teacher/courses).
 	CountContentByCourses(teacherID string) map[string]ContentCounts
+	// CloneCourse — глубокая копия курса с модулями и уроками (T21).
+	// Копия создаётся черновиком, slug подбирается по свободному (<slug>-copy-N).
+	// ErrNotFound — исходного курса нет.
+	CloneCourse(courseID string) (*Course, error)
 	// Modules
 	CreateModule(courseID, title string) *Module
 	GetModule(id string) (*Module, bool)
@@ -80,6 +84,9 @@ type StoreAPI interface {
 	// ReorderLessons применяет полный список позиций уроков курса одной
 	// транзакцией (T19; позиция — порядковый номер урока внутри модуля).
 	ReorderLessons(courseID string, items []PositionItem) error
+	// MoveLessonToModule переносит урок в конец другого модуля (T21).
+	// ErrNotFound — урока или модуля нет.
+	MoveLessonToModule(lessonID, moduleID string) error
 	// Enrollments
 	GetEnrollment(studentID, courseID string) (*Enrollment, bool)
 	EnsureEnrollment(studentID, courseID string) (*Enrollment, bool)
