@@ -1,0 +1,412 @@
+/* Админ-консоль (T27): экраны «Сводка» (/admin/stats) и «Курсы» (/admin/courses).
+   Импортируется из pages/AdminStats.tsx и pages/AdminCourses.tsx.
+   Все собственные селекторы — с префиксом .ac-; базовые классы (.btn, .input,
+   .muted, .error, .sr-only) и дизайн-токены берутся из styles.css. */
+
+/* ---------- Общие элементы страниц ---------- */
+
+.ac-page {
+  max-width: 1200px;
+}
+
+.ac-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem 1rem;
+  margin-bottom: 1rem;
+}
+
+.ac-head h1 {
+  margin: 0;
+}
+
+.ac-head .btn {
+  margin-top: 0;
+}
+
+/* Сообщение об успехе/ошибке действия: текст, не alert() (см. отчёт T27). */
+.ac-msg {
+  margin: 0 0 0.75rem;
+  padding: 0.55rem 0.8rem;
+  border-radius: var(--r-sm);
+  font-weight: 600;
+}
+
+.ac-msg--ok {
+  background: var(--ok-bg);
+  color: var(--ok);
+}
+
+.ac-msg--error {
+  background: var(--danger-bg);
+  color: var(--danger);
+}
+
+/* Блок ошибки с кнопкой повтора (своя копия паттерна из admin.css). */
+.ac-error {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+  margin: 0.5rem 0;
+}
+
+.ac-error p {
+  margin: 0;
+}
+
+.ac-error .btn {
+  margin-top: 0;
+}
+
+/* ---------- Сводка: карточки ---------- */
+
+.ac-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 1rem;
+  align-items: start;
+}
+
+.ac-card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  padding: 1rem 1.1rem;
+  box-shadow: var(--shadow-sm);
+}
+
+.ac-card__title {
+  margin: 0 0 0.65rem;
+  font-size: 18px;
+}
+
+.ac-rows {
+  display: grid;
+  gap: 0.4rem;
+  margin: 0;
+}
+
+.ac-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding-bottom: 0.3rem;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.ac-row:last-child {
+  padding-bottom: 0;
+  border-bottom: none;
+}
+
+.ac-row dt {
+  color: var(--muted);
+}
+
+.ac-row dd {
+  margin: 0;
+  font-weight: 800;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Скелетон загрузки сводки. */
+
+.ac-skeleton {
+  display: block;
+  height: 0.85rem;
+  border-radius: 6px;
+  background: #eceae4;
+  animation: ac-pulse 1.2s ease-in-out infinite;
+}
+
+.ac-skeleton + .ac-skeleton {
+  margin-top: 0.55rem;
+}
+
+.ac-skeleton--title {
+  height: 1.05rem;
+  width: 50%;
+}
+
+.ac-skeleton--short {
+  width: 70%;
+}
+
+@keyframes ac-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.55;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ac-skeleton {
+    animation: none;
+  }
+}
+
+/* ---------- Курсы: фильтры ---------- */
+
+.ac-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.75rem 1rem;
+  margin-bottom: 0.75rem;
+}
+
+.ac-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 12.5px;
+  font-weight: 800;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.ac-field .input {
+  text-transform: none;
+  letter-spacing: normal;
+  font-size: 15.5px;
+  font-weight: 600;
+  color: var(--fg);
+}
+
+.ac-search {
+  min-width: 18rem;
+  max-width: 26rem;
+}
+
+.ac-field select.input {
+  min-width: 12rem;
+}
+
+/* ---------- Курсы: таблица ---------- */
+
+.ac-table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  -webkit-overflow-scrolling: touch;
+}
+
+.ac-table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 980px;
+}
+
+.ac-table th,
+.ac-table td {
+  padding: 0.55rem 0.65rem;
+  border-bottom: 1px solid var(--line-soft);
+  text-align: left;
+  font-size: 0.9rem;
+  vertical-align: top;
+  white-space: nowrap;
+}
+
+.ac-table th {
+  background: #f8f7f4;
+  color: #55524c;
+  font-size: 0.85rem;
+}
+
+.ac-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.ac-table tbody tr:hover {
+  background: #fbfaf8;
+}
+
+.ac-td-title {
+  white-space: normal;
+  min-width: 12rem;
+  max-width: 18rem;
+  font-weight: 700;
+}
+
+.ac-td-actions {
+  white-space: normal;
+}
+
+.ac-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.ac-actions .btn {
+  margin-top: 0;
+}
+
+/* Метки статусов курса. */
+
+.ac-badge {
+  display: inline-block;
+  padding: 0.12rem 0.55rem;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.ac-badge--draft {
+  background: #efece6;
+  color: #57534a;
+}
+
+.ac-badge--review {
+  background: var(--warn-bg);
+  color: #8a6100;
+}
+
+.ac-badge--published {
+  background: var(--ok-bg);
+  color: var(--ok);
+}
+
+.ac-badge--archived {
+  background: #e9edf7;
+  color: #3d4f7c;
+}
+
+/* Кнопка опасного действия внутри таблицы отзывов. */
+
+.btn.ac-btn--danger {
+  background: var(--danger);
+  border-color: var(--danger);
+  color: #fff;
+}
+
+.btn.ac-btn--danger:hover {
+  background: #b52e21;
+  border-color: #b52e21;
+}
+
+/* ---------- Курсы: раскрытая панель отзывов ---------- */
+
+.ac-tr-reviews > td {
+  background: #faf9f6;
+}
+
+.ac-reviews {
+  padding: 0.35rem 0.25rem 0.5rem;
+}
+
+.ac-reviews__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.5rem;
+  max-width: 60rem;
+}
+
+.ac-reviews__item {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  padding: 0.6rem 0.75rem;
+}
+
+.ac-reviews__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem 0.85rem;
+}
+
+.ac-reviews__head .btn {
+  margin-top: 0;
+  margin-left: auto; /* кнопка удаления — справа */
+}
+
+.ac-reviews__body {
+  margin: 0.45rem 0 0;
+  white-space: normal;
+}
+
+.ac-stars {
+  color: #d98a00;
+  letter-spacing: 0.08em;
+  font-size: 1rem;
+}
+
+/* ---------- Курсы: пагинация ---------- */
+
+.ac-pager {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-top: 0.85rem;
+}
+
+.ac-pager .btn {
+  margin-top: 0;
+}
+
+/* ---------- Узкий экран: строки таблицы превращаются в карточки ---------- */
+
+@media (max-width: 720px) {
+  .ac-table {
+    min-width: 0;
+  }
+
+  .ac-table thead {
+    display: none;
+  }
+
+  .ac-table,
+  .ac-table tbody,
+  .ac-table tr,
+  .ac-table td {
+    display: block;
+    width: 100%;
+  }
+
+  .ac-table tr {
+    padding: 0.35rem 0;
+    border-bottom: 6px solid var(--line-soft);
+  }
+
+  .ac-table tr:last-child {
+    border-bottom: none;
+  }
+
+  .ac-table td {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 0.75rem;
+    white-space: normal;
+    border-bottom: none;
+    padding: 0.3rem 0.65rem;
+  }
+
+  .ac-table td::before {
+    content: attr(data-label);
+    flex: 0 0 auto;
+    font-weight: 700;
+    color: var(--muted);
+  }
+
+  .ac-td-title {
+    max-width: none;
+  }
+}
