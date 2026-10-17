@@ -132,7 +132,7 @@ func seedDemo(s *repo.Store) {
 		Slug:        "python-s-nulya",
 		Title:       "Python с нуля",
 		Description: "Первый курс для новичков: установка, переменные, ветвления.",
-		PriceCents:  4900,
+		PriceCents:  490000,
 		Currency:    "RUB",
 		Status:      repo.CoursePublished,
 	})

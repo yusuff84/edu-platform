@@ -152,7 +152,7 @@ npm run build
 | 1 | `User.displayName` обещан контрактом, `handler/auth.go` не отдаёт | ✅ закрыто T10 — добавлен в `Register`/`Login`/`Me` |
 | 2 | `POST /auth/logout` возвращает `200 {"status":"ok"}`, а не `204` | ✅ оставлено `200`; **документ исправлен T20** |
 | 3 | `listReviews` теряет `avgRating`/`ratingsCount` | ✅ учтено — T04 берёт рейтинг из `getCourse()` |
-| 4 | `POST .../lessons` принимает `startsAt`, но **не сохраняет** его в урок | ✅ **закрыто T16** — `teacher.go:172-183`; фиксатор переименован в `TestStartsAtPersisted` и требует `startsAt != null` |
+| 4 | `POST .../lessons` принимает `startsAt`, но **не сохраняет** его в урок | ✅ **закрыто T16** — handler копирует поле в `repo.Lesson` (RFC3339, `datetime-local` и просто дата); фиксатор переименован в `TestStartsAtPersisted` и требует `startsAt != null` |
 | 5 | `GET /admin/payments` не отдаёт email/имя студента — только `studentId` | ✅ **закрыто T16** — `LEFT JOIN users`, поля `studentEmail`/`studentName` доведены до типов и до колонки «Студент» (коммит `2699064`) |
 | 6 | `formatPrice(0)` возвращает «Бесплатно», что неверно для итогов журнала | ✅ **закрыто T17** — добавлен `formatMoney`, `Admin.tsx` возвращён на общий форматтер, дубль `money()` удалён |
 | 7 | При провале квиза/кода в ответе нет `percent`/`nextLesson` | ✅ **закрыто T16** — `failWithProgress` в `progress.go` |

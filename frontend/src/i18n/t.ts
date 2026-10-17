@@ -29,7 +29,6 @@ export function t(key: RuKey): string {
   // ({"catalog": {"title": ...}}) без изменения всех вызовов t().
   const direct = (ru as Record<string, unknown>)[key];
   if (typeof direct === 'string') return direct;
-
   let node: unknown = ru;
   for (const part of key.split('.')) {
     if (typeof node !== 'object' || node === null) return key;

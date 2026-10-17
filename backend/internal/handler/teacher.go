@@ -150,6 +150,18 @@ type createLessonRequest struct {
 	CodeTask *repo.CodeTask  `json:"codeTask"`
 }
 
+// parseLessonStartsAt разбирает дату начала урока: RFC3339, datetime-local
+// без зоны (считаем местным временем) или просто дата (полночь местная).
+func parseLessonStartsAt(raw string) (time.Time, error) {
+	if t, err := time.Parse(time.RFC3339, raw); err == nil {
+		return t, nil
+	}
+	if t, err := time.ParseInLocation("2006-01-02T15:04", raw, time.Local); err == nil {
+		return t, nil
+	}
+	return time.ParseInLocation("2006-01-02", raw, time.Local)
+}
+
 // TeacherCreateLesson — POST /teacher/courses/{id}/lessons с валидацией по kind.
 func (a *App) TeacherCreateLesson(w http.ResponseWriter, r *http.Request) {
 	_, c, ok := a.ownCourse(w, r)
@@ -169,18 +181,10 @@ func (a *App) TeacherCreateLesson(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "Модуль не принадлежит этому курсу")
 		return
 	}
-	// T16 (п.1, расхождение №4): startsAt раньше принимался, но не копировался
+	// Расхождение №4 (закрыто T16): startsAt раньше принимался, но не копировался
 	// в repo.Lesson — планирование живых эфиров не работало. Разбираем строку
 	// здесь: мусор в поле — ошибка запроса, а не тихо потерянный эфир.
-	var startsAt *time.Time
-	if req.StartsAt != nil && strings.TrimSpace(*req.StartsAt) != "" {
-		t, err := time.Parse(time.RFC3339, strings.TrimSpace(*req.StartsAt))
-		if err != nil {
-			writeErr(w, http.StatusBadRequest, "Некорректный startsAt: ожидается дата в формате RFC3339 (например 2030-01-01T12:00:00Z)")
-			return
-		}
-		startsAt = &t
-	}
+	// Формат разбирает parseLessonStartsAt: RFC3339, datetime-local или дата.
 	l := &repo.Lesson{
 		ModuleID: mod.ID,
 		Title:    strings.TrimSpace(req.Title),
@@ -188,9 +192,19 @@ func (a *App) TeacherCreateLesson(w http.ResponseWriter, r *http.Request) {
 		BodyMD:   req.BodyMD,
 		VideoURL: strings.TrimSpace(req.VideoURL),
 		LiveURL:  strings.TrimSpace(req.LiveURL),
-		StartsAt: startsAt,
 		Quiz:     req.Quiz,
 		CodeTask: req.CodeTask,
+	}
+	if req.StartsAt != nil {
+		raw := strings.TrimSpace(*req.StartsAt)
+		if raw != "" {
+			parsed, err := parseLessonStartsAt(raw)
+			if err != nil {
+				writeErr(w, http.StatusBadRequest, "Некорректная дата начала (нужен RFC3339, например 2026-10-09T19:00:00+03:00)")
+				return
+			}
+			l.StartsAt = &parsed
+		}
 	}
 	switch req.Kind {
 	case repo.LessonVideoText:

@@ -304,11 +304,10 @@ func TestQuizCorrectAnswersDoNotLeak(t *testing.T) {
 	}
 }
 
-// T16 (п.1): POST /teacher/courses/{id}/lessons СОХРАНЯЕТ startsAt —
-// планирование живых эфиров работает (расхождение №4 Task/00-api-contract.md
-// закрыто). Раньше здесь жил тест-фиксатор TestStartsAtNotPersistedDiscrepancy4,
-// ожидавший startsAt=null: он упал бы при починке бага — по нему обновлено
-// ожидание и формулировка.
+// Расхождение №4 (T16) ЗАКРЫТО: POST /teacher/courses/{id}/lessons сохраняет
+// startsAt — планирование живых эфиров работает. Раньше здесь жил тест-фиксатор
+// TestStartsAtNotPersistedDiscrepancy4, ожидавший startsAt=null: он упал бы при
+// починке бага, поэтому проверка перевёрнута.
 func TestStartsAtPersisted(t *testing.T) {
 	app, router := newTestApp()
 	teacherCookies, courseID, _ := seedPublishedCourse(t, app, router, 0)
@@ -336,5 +335,14 @@ func TestStartsAtPersisted(t *testing.T) {
 	stored, ok := app.Store.GetLesson(id)
 	if !ok || stored.StartsAt == nil || stored.StartsAt.Format(time.RFC3339) != "2030-01-01T12:00:00Z" {
 		t.Fatalf("startsAt не сохранён в repo.Lesson: %+v", stored)
+	}
+
+	// Некорректная дата — 400.
+	rec = doRequest(t, router, http.MethodPost, "/api/v1/teacher/courses/"+courseID+"/lessons", map[string]any{
+		"moduleId": mods[0].ID, "title": "Эфир 2", "kind": "live",
+		"liveUrl": "https://live.example/stream", "startsAt": "когда-нибудь",
+	}, teacherCookies)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("некорректный startsAt: status=%d body=%s", rec.Code, rec.Body.String())
 	}
 }
