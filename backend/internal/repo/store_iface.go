@@ -144,6 +144,23 @@ type StoreAPI interface {
 	// (T16, п.4): раньше Postgres глотал её, API отвечал 200, а в базу ничего
 	// не попадало. Кэш в памяти обновляется ТОЛЬКО после успешной записи.
 	SetCommissionPct(n int) error
+
+	// ---- T25: админ-консоль (сводка, курсы, отзывы, записи) ----
+
+	// AdminOverview — агрегаты для сводки супер-админа одним вызовом (T25).
+	AdminOverview() AdminTotals
+	// ListAllCourses — курсы всех статусов с фильтрами для админки (T25),
+	// новые первыми; total — до пагинации.
+	ListAllCourses(f CourseFilter) (items []*Course, total int)
+	// DeleteReview удаляет отзыв и пересчитывает рейтинг курса (T25).
+	// ErrNotFound — отзыва нет.
+	DeleteReview(id string) error
+	// ListEnrollmentRows — все записи на курсы с данными ученика и курса (T25),
+	// новые первыми; total — до пагинации.
+	ListEnrollmentRows(f EnrollmentFilter) (items []EnrollmentRow, total int)
+	// CourseContentCounts — курсы → (модули, уроки, ученики) одним вызовом
+	// (T25, без N+1 в списке курсов).
+	CourseContentCounts() map[string]ContentCounts
 }
 
 // PaymentFilter — параметры журнала платежей для админки (US6).
@@ -181,9 +198,16 @@ type PositionItem struct {
 }
 
 // ContentCounts — счётчики программы курса в списке «мои курсы» (T19).
+// T25 добавил Students: studentsCount в списке курсов админки
+// (CourseContentCounts). CountContentByCourses (T19) новое поле не
+// заполняет — в «моих курсах» преподавателя оно остаётся нулевым, и
+// форма ответа /teacher/courses не меняется.
 type ContentCounts struct {
 	Modules int
 	Lessons int
+	// Students — число АКТИВНЫХ учеников курса (revoked/refunded доступ
+	// отозван и в счёт не идёт).
+	Students int
 }
 
 // StudentProgress — агрегат по одному ученику курса (T22).
