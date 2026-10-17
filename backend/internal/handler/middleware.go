@@ -158,6 +158,7 @@ func NewRouter(app *App) http.Handler {
 
 		r.With(app.requireAuth).Get("/me/courses", app.MyCourses)
 		r.With(app.requireAuth).Post("/me/courses/{id}/lessons/{lessonId}/complete", app.CompleteLesson)
+		app.RegisterMeExtraRoutes(r)
 	})
 	return r
 }

@@ -106,6 +106,9 @@ type StoreAPI interface {
 	// StudentProgress — карта studentID → прогресс по курсу одним запросом (T22).
 	// Ключи — только ученики, у которых есть записи на курс.
 	StudentProgress(courseID string) map[string]StudentProgress
+	// ListCompletedLessonIDs — id пройденных уроков курса в порядке программы (T23).
+	// Никогда не nil (пустой слайс — если ничего не пройдено).
+	ListCompletedLessonIDs(studentID, courseID string) []string
 	// Payments
 	CreatePayment(p *Payment) (*Payment, error)
 	GetPaymentByProviderID(id string) (*Payment, bool)
@@ -114,6 +117,8 @@ type StoreAPI interface {
 	ListPaymentsJournal(f PaymentFilter) (items []PaymentJournalRow, total int, totals PaymentTotals, err error)
 	// ListPaymentsByCourse — платежи по курсу; фильтрацию по статусу делает handler (T22).
 	ListPaymentsByCourse(courseID string) []*Payment
+	// ListPaymentsByStudent — платежи ученика, новые первыми (T23).
+	ListPaymentsByStudent(studentID string) []*Payment
 	// Reviews
 	CreateReview(studentID, courseID string, rating int, body string) (*Review, error)
 	ListReviewsByCourse(courseID string) []*Review
