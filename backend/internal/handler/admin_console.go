@@ -1,13 +1,16 @@
 package handler
 
 // T25 — админ-консоль супер-админа: сводка состояния платформы, список
-// курсов всех статусов (архивация/снятие с публикации), модерация отзывов
-// и полный список записей на курсы.
+// курсов всех статусов (архивация/снятие с публикации/возврат из архива),
+// модерация отзывов и полный список записей на курсы.
+// T48 — сортировка/фильтры курсов (sort/dir/teacherEmail/from/to) и записей
+// (q/status), unarchive (archived → draft).
 //
 // Маршруты регистрируются внутри r.Route("/admin", ...) в middleware.go
 // (RegisterAdminConsoleRoutes): requireAuth + requireRole(admin) навешаны
 // родителем, пути относительные. Коды: 400 — валидация query, 409 — конфликт
-// состояния (курс уже в архиве / не опубликован), 404 — нет сущности.
+// состояния (курс уже в архиве / не в архиве / не опубликован), 404 — нет
+// сущности.
 //
 // JSON-поля — ровно по контракту T25 (фронтенд T27 пишется параллельно);
 // items всегда массив (make, не nil), денежные суммы — в копейках.
@@ -35,6 +38,7 @@ func (a *App) RegisterAdminConsoleRoutes(r chi.Router) {
 	r.Get("/stats", a.AdminStats)
 	r.Get("/courses", a.AdminListCourses)
 	r.Post("/courses/{id}/archive", a.AdminArchiveCourse)
+	r.Post("/courses/{id}/unarchive", a.AdminUnarchiveCourse)
 	r.Post("/courses/{id}/unpublish", a.AdminUnpublishCourse)
 	r.Get("/courses/{id}/reviews", a.AdminCourseReviews)
 	r.Delete("/reviews/{id}", a.AdminDeleteReview)
@@ -137,10 +141,13 @@ type adminCourseListResponse struct {
 	Limit int               `json:"limit"`
 }
 
-// AdminListCourses — GET /admin/courses?status=&q=&page=&limit=: курсы всех
-// статусов (T25). 400 — статус вне draft|review|published|archived или
-// нечисловые page/limit. Счётчики — одним вызовом CourseContentCounts
-// (без N+1); teacherEmail — из справочника пользователей (с кэшем по id).
+// AdminListCourses — GET /admin/courses?status=&q=&page=&limit=
+// (T25) + sort=&dir=&teacherEmail=&from=&to= (T48): курсы всех статусов.
+// 400 — статус вне draft|review|published|archived, нечисловые page/limit,
+// sort вне createdAt|updatedAt|title|price|students, dir вне asc|desc,
+// мусорные from/to или from > to. Счётчики — одним вызовом
+// CourseContentCounts (без N+1); teacherEmail — из справочника пользователей
+// (с кэшем по id).
 func (a *App) AdminListCourses(w http.ResponseWriter, r *http.Request) {
 	if !a.adminOnly(w, r) {
 		return
@@ -159,9 +166,36 @@ func (a *App) AdminListCourses(w http.ResponseWriter, r *http.Request) {
 			"Некорректный статус: допустимы draft, review, published, archived")
 		return
 	}
+	// T48: сортировка и направление. Пустые значения — дефолты контракта
+	// (createdAt/desc), поэтому старые запросы работают как раньше.
+	sortParam := strings.TrimSpace(q.Get("sort"))
+	switch sortParam {
+	case "", "createdAt", "updatedAt", "title", "price", "students":
+	default:
+		writeErr(w, http.StatusBadRequest,
+			"Параметр sort должен быть одним из: createdAt, updatedAt, title, price, students")
+		return
+	}
+	dirParam := strings.TrimSpace(q.Get("dir"))
+	switch dirParam {
+	case "", "asc", "desc":
+	default:
+		writeErr(w, http.StatusBadRequest, "Параметр dir должен быть asc или desc")
+		return
+	}
+	// T48: период по createdAt — тем же парсером, что журнал платежей (T31);
+	// тексты ошибок («Дата в формате ГГГГ-ММ-ДД», «Начало периода позже конца»)
+	// приходят оттуда.
+	from, to, ok := parseJournalPeriod(w, r)
+	if !ok {
+		return
+	}
 
 	items, total := a.Store.ListAllCourses(repo.CourseFilter{
 		Page: page, Limit: limit, Status: status, Q: q.Get("q"),
+		Sort: sortParam, Dir: dirParam,
+		TeacherEmail: strings.TrimSpace(q.Get("teacherEmail")),
+		From:         from, To: to,
 	})
 	counts := a.Store.CourseContentCounts()
 	emails := make(map[string]string)
@@ -187,7 +221,7 @@ func (a *App) AdminListCourses(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// ---- POST /admin/courses/{id}/archive|unpublish ----
+// ---- POST /admin/courses/{id}/archive|unarchive|unpublish ----
 
 // AdminArchiveCourse — POST /admin/courses/{id}/archive (T25): 200
 // {"course": {...}} со статусом archived; 409 — курс уже archived; 404 — нет
@@ -224,6 +258,29 @@ func (a *App) AdminUnpublishCourse(w http.ResponseWriter, r *http.Request) {
 	}
 	if c.Status != repo.CoursePublished {
 		writeErr(w, http.StatusConflict, "Снять с публикации можно только опубликованный курс")
+		return
+	}
+	a.Store.SetCourseStatus(c.ID, repo.CourseDraft, c.ModerationComment)
+	updated, _ := a.Store.GetCourseByID(c.ID)
+	writeJSON(w, http.StatusOK, map[string]any{"course": updated})
+}
+
+// AdminUnarchiveCourse — POST /admin/courses/{id}/unarchive (T48): 200
+// {"course": {...}} со статусом draft (archived → draft, как у
+// /teacher/courses/{id}/unarchive из T21); 409 — курс не в архиве; 404 — нет
+// курса. Комментарий модерации сохраняется: SetCourseStatus получает текущее
+// значение, а не пустую строку.
+func (a *App) AdminUnarchiveCourse(w http.ResponseWriter, r *http.Request) {
+	if !a.adminOnly(w, r) {
+		return
+	}
+	c, found := a.Store.GetCourseByID(strings.TrimSpace(chi.URLParam(r, "id")))
+	if !found {
+		writeErr(w, http.StatusNotFound, "Курс не найден")
+		return
+	}
+	if c.Status != repo.CourseArchived {
+		writeErr(w, http.StatusConflict, "Вернуть из архива можно только архивный курс")
 		return
 	}
 	a.Store.SetCourseStatus(c.ID, repo.CourseDraft, c.ModerationComment)
@@ -320,9 +377,11 @@ type adminEnrollmentListResponse struct {
 	Limit int                   `json:"limit"`
 }
 
-// AdminEnrollments — GET /admin/enrollments?courseId=&studentId=&page=&limit=
-// (T25): все записи на курсы, новые первыми; фильтры комбинируются через
-// AND; 400 — нечисловая пагинация или courseId/studentId не UUID.
+// AdminEnrollments — GET /admin/enrollments?courseId=&studentId=&q=&status=
+// &page=&limit= (T25/T48): все записи на курсы, новые первыми; фильтры
+// комбинируются через AND; 400 — нечисловая пагинация, courseId/studentId
+// не UUID, status вне active|refunded|revoked. T48: q — подстрока без учёта
+// регистра по email ИЛИ displayName ученика.
 func (a *App) AdminEnrollments(w http.ResponseWriter, r *http.Request) {
 	if !a.adminOnly(w, r) {
 		return
@@ -347,9 +406,19 @@ func (a *App) AdminEnrollments(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	// T48: статус записи — точное совпадение; пусто — любой.
+	status := repo.EnrollmentStatus(strings.TrimSpace(q.Get("status")))
+	switch status {
+	case "", repo.EnrollmentActive, repo.EnrollmentRefunded, repo.EnrollmentRevoked:
+	default:
+		writeErr(w, http.StatusBadRequest,
+			"Некорректный статус записи: допустимы active, refunded, revoked")
+		return
+	}
 
 	rows, total := a.Store.ListEnrollmentRows(repo.EnrollmentFilter{
 		Page: page, Limit: limit, CourseID: courseID, StudentID: studentID,
+		Q: strings.TrimSpace(q.Get("q")), Status: status,
 	})
 	items := make([]adminEnrollmentItem, 0, len(rows))
 	for _, row := range rows {

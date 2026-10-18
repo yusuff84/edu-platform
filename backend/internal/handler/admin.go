@@ -45,13 +45,41 @@ func (a *App) AdminCreateInvite(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// adminReviewQueueItem — элемент очереди модерации: полная форма Course
+// (встраивание указателя разворачивает все JSON-поля, как teacherCourseItem
+// в teacher_crud.go) + T48: email автора и объём программы. Прежние поля
+// контракта T07/T25 не меняются.
+type adminReviewQueueItem struct {
+	*repo.Course
+	TeacherEmail string `json:"teacherEmail"`
+	ModulesCount int    `json:"modulesCount"`
+	LessonsCount int    `json:"lessonsCount"`
+}
+
 // AdminReviewQueue — GET /admin/courses/review: очередь модерации.
+// T48: к каждому элементу аддитивно добавлены teacherEmail ("" — автор не
+// найден), modulesCount и lessonsCount — одним вызовом CourseContentCounts,
+// без N+1 (как в списке курсов админки T25); email — с кэшем по id автора.
 func (a *App) AdminReviewQueue(w http.ResponseWriter, r *http.Request) {
 	list := a.Store.ListCoursesByStatus(repo.CourseReview)
-	if list == nil {
-		list = []*repo.Course{}
+	counts := a.Store.CourseContentCounts()
+	emails := make(map[string]string)
+	items := make([]adminReviewQueueItem, 0, len(list))
+	for _, c := range list {
+		email, cached := emails[c.TeacherID]
+		if !cached {
+			if u, ok := a.Store.GetUserByID(c.TeacherID); ok {
+				email = u.Email
+			}
+			emails[c.TeacherID] = email
+		}
+		cc := counts[c.ID]
+		items = append(items, adminReviewQueueItem{
+			Course: c, TeacherEmail: email,
+			ModulesCount: cc.Modules, LessonsCount: cc.Lessons,
+		})
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"items": list, "total": len(list)})
+	writeJSON(w, http.StatusOK, map[string]any{"items": items, "total": len(items)})
 }
 
 type moderateRequest struct {

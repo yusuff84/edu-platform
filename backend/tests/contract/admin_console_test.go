@@ -386,8 +386,11 @@ func TestAdminConsoleCoursesList(t *testing.T) {
 	if len(qItems) != 1 || qItems[0].(map[string]any)["id"] != reviewID {
 		t.Fatalf("очередь модерации сломана: %s", rec.Body.String())
 	}
-	if _, hasEmail := qItems[0].(map[string]any)["teacherEmail"]; hasEmail {
-		t.Fatalf("review queue отдаёт поле списка T25 — маршрут затёрт: %s", rec.Body.String())
+	// T48 добавил очереди teacherEmail/modulesCount/lessonsCount (аддитивно,
+	// по контракту P6), поэтому «тень маршрута» проверяем по полю списка T25,
+	// которого у очереди нет и быть не должно: studentsCount.
+	if _, hasStudents := qItems[0].(map[string]any)["studentsCount"]; hasStudents {
+		t.Fatalf("review queue отвечает полем списка T25 — маршрут затёрт: %s", rec.Body.String())
 	}
 
 	// И она по-прежнему чиста от status-фильтров T25 (мусор игнорируется
