@@ -163,13 +163,22 @@ type StoreAPI interface {
 	CourseContentCounts() map[string]ContentCounts
 }
 
-// PaymentFilter — параметры журнала платежей для админки (US6).
+// PaymentFilter — параметры журнала платежей для админки (US6, T31).
 // Пагинация 1-based: Limit по умолчанию 20, максимум 100; Page по умолчанию 1.
 // Status "" и CourseID "" означают «любой»; фильтры комбинируются через AND.
+//
+// T31: Q — подстрока (без учёта регистра) по email ИЛИ displayName студента,
+// пусто — без фильтра. From/To — границы периода по дате создания платежа
+// (нулевое значение — границы нет); обе границы включительно, To — «до конца
+// суток», то есть платежи дня To попадают в выборку. Total и Totals считаются
+// по одному и тому же отфильтрованному набору, пагинация — после фильтрации.
 type PaymentFilter struct {
 	Page, Limit int
 	Status      PaymentStatus
 	CourseID    string
+	Q           string
+	From        time.Time
+	To          time.Time
 }
 
 // PaymentJournalRow — строка журнала платежей: платёж + название курса
