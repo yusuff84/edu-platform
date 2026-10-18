@@ -220,6 +220,10 @@ func TestTeacherCourseLifecycle(t *testing.T) {
 
 // Endpoints редактирования от T13: GET/PATCH /teacher/courses/{id},
 // PATCH .../modules/{moduleID}. Студент — 403.
+// T33: PATCH карточки разрешён в draft|review|published (курс здесь уже
+// опубликован — это осознанное исключение, карточка не проходит модерацию
+// заново), а в архиве — 409. Полная статусная матрица — в
+// teacher_card_status_test.go.
 func TestTeacherEditEndpoints(t *testing.T) {
 	app, router := newTestApp()
 	teacherCookies, courseID, _ := seedPublishedCourse(t, app, router, 0)
@@ -283,6 +287,19 @@ func TestTeacherEditEndpoints(t *testing.T) {
 		if rec.Code != http.StatusForbidden {
 			t.Fatalf("%s %s для студента: status=%d", req.method, req.path, rec.Code)
 		}
+	}
+
+	// T33: в архиве карточка заморожена — 409. Проверка идёт последней,
+	// чтобы архивация не влияла на предыдущие шаги.
+	rec = doRequest(t, router, http.MethodPost, "/api/v1/teacher/courses/"+courseID+"/archive", nil, teacherCookies)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("archive: status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	rec = doRequest(t, router, http.MethodPatch, "/api/v1/teacher/courses/"+courseID, map[string]any{
+		"title": "Правка архива",
+	}, teacherCookies)
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("patch карточки в архиве: status=%d body=%s, ждали 409", rec.Code, rec.Body.String())
 	}
 }
 

@@ -3,6 +3,8 @@ package handler
 // Тесты бэклога T06 (T13): GET/PATCH /teacher/courses/{id},
 // PATCH /teacher/courses/{id}/modules/{moduleID} и сквозная проводка
 // маршрутов T07/T09 (админ-журнал, mock-страница оплаты).
+// T33: здесь же статусная матрица правки карточки — draft|review|published
+// разрешены, archived → 409 (см. TestTeacherUpdateCourse).
 
 import (
 	"encoding/json"
@@ -130,6 +132,46 @@ func TestTeacherUpdateCourse(t *testing.T) {
 		`{"slug":"my-own-slug"}`, withCookie(cookie)); rec.Code != http.StatusOK {
 		t.Fatalf("свой slug: status=%d body=%s", rec.Code, rec.Body.String())
 	}
+
+	// --- T33: статусная матрица правки карточки ---------------------------
+	// draft — 200 (проверено выше). review и published — тоже 200: осознанное
+	// исключение из «менять можно только черновик», карточка не проходит
+	// модерацию заново. archived — 409, причём до валидации тела.
+
+	// review → 200.
+	app.Store.SetCourseStatus(c.ID, repo.CourseReview, "")
+	if rec := doJSON(t, router, http.MethodPatch, "/api/v1/teacher/courses/"+c.ID,
+		`{"title":"На модерации"}`, withCookie(cookie)); rec.Code != http.StatusOK {
+		t.Fatalf("PATCH в review: status=%d body=%s, ждали 200", rec.Code, rec.Body.String())
+	}
+
+	// published → 200.
+	app.Store.SetCourseStatus(c.ID, repo.CoursePublished, "")
+	if rec := doJSON(t, router, http.MethodPatch, "/api/v1/teacher/courses/"+c.ID,
+		`{"title":"Опубликованный","priceCents":4200}`, withCookie(cookie)); rec.Code != http.StatusOK {
+		t.Fatalf("PATCH в published: status=%d body=%s, ждали 200", rec.Code, rec.Body.String())
+	}
+
+	// archived → 409, в сторе ничего не изменилось.
+	app.Store.SetCourseStatus(c.ID, repo.CourseArchived, "")
+	rec = doJSON(t, router, http.MethodPatch, "/api/v1/teacher/courses/"+c.ID,
+		`{"title":"Переписать архив","priceCents":9999}`, withCookie(cookie))
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("PATCH в archived: status=%d body=%s, ждали 409", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), "заморожена") {
+		t.Fatalf("ожидали текст «карточка заморожена»: %s", rec.Body.String())
+	}
+	if stored, _ := app.Store.GetCourseByID(c.ID); stored.Title != "Опубликованный" ||
+		stored.PriceCents != 4200 || stored.Status != repo.CourseArchived {
+		t.Fatalf("архивный курс изменился: %+v", stored)
+	}
+
+	// archived + пустое тело → 409, а не 400: guard раньше валидации тела.
+	if rec := doJSON(t, router, http.MethodPatch, "/api/v1/teacher/courses/"+c.ID,
+		`{}`, withCookie(cookie)); rec.Code != http.StatusConflict {
+		t.Fatalf("пустое тело в archived: status=%d, ждали 409 (guard раньше валидации)", rec.Code)
+	}
 }
 
 func TestTeacherUpdateModule(t *testing.T) {
@@ -219,8 +261,9 @@ func mustUser(t *testing.T, app *App, email string, role repo.Role) *repo.User {
 //	      невалидно ИЛИ ссылается на уже занятое значение — оба случая
 //	      читаются как «тело некорректно для текущего состояния данных»;
 //	409 — конфликт с машиной состояний САМОГО целевого ресурса: покупка
-//	      при активной записи, повторный отзыв, редактирование курса вне
-//	      черновика, удаление непустого модуля.
+//	      при активной записи, повторный отзыв, правка структуры вне
+//	      черновика, правка карточки архивного курса (T33), удаление
+//	      непустого модуля.
 //
 // Slug-конфликт в обеих точках (POST /teacher/courses и PATCH
 // /teacher/courses/{id}) отвечает 400 — единообразно. Альтернатива (409 по
