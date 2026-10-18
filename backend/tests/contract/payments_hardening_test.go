@@ -345,11 +345,15 @@ func TestPaymentsHardeningUnknownPaymentAndProvider(t *testing.T) {
 	}
 }
 
-// 5. Preflight (T35, п.5): OPTIONS /api/v1/auth/me с разрешённого origin →
-// 204 (факт реализации; контракт допускал 200) и полный набор CORS-заголовков;
-// OPTIONS с неразрешённого origin → без Access-Control-Allow-Origin.
+// 5. Preflight (T35, п.5; путь уточнён T42): OPTIONS реального POST-маршрута
+// (/api/v1/auth/login) с разрешённого origin → 204 (факт реализации; контракт
+// допускал 200) и полный набор CORS-заголовков; с T42 Allow-Methods
+// перечисляет методы именно этого пути: POST есть, GET (не зарегистрирован
+// у /auth/login) — нет. OPTIONS с неразрешённого origin → без
+// Access-Control-Allow-Origin.
 func TestPaymentsHardeningPreflightCORS(t *testing.T) {
 	const allowed = "http://localhost:3000"
+	const preflightPath = "/api/v1/auth/login" // реальный POST-маршрут (T42)
 	cfg := &config.Config{
 		PaymentsProvider: "mock",
 		CommissionPct:    15,
@@ -359,7 +363,7 @@ func TestPaymentsHardeningPreflightCORS(t *testing.T) {
 	}
 	_, router := newTestAppWithCfg(cfg)
 
-	rec := doRequestHeaders(t, router, http.MethodOptions, "/api/v1/auth/me", nil, nil, map[string]string{
+	rec := doRequestHeaders(t, router, http.MethodOptions, preflightPath, nil, nil, map[string]string{
 		"Origin":                         allowed,
 		"Access-Control-Request-Method":  "POST",
 		"Access-Control-Request-Headers": "content-type",
@@ -373,6 +377,9 @@ func TestPaymentsHardeningPreflightCORS(t *testing.T) {
 	if got := rec.Header().Get("Access-Control-Allow-Methods"); !strings.Contains(got, "POST") {
 		t.Fatalf("Access-Control-Allow-Methods=%q, ждали POST в списке", got)
 	}
+	if got := rec.Header().Get("Access-Control-Allow-Methods"); strings.Contains(got, "GET") {
+		t.Fatalf("Access-Control-Allow-Methods=%q: у POST-маршрута /auth/login не должно быть GET (T42)", got)
+	}
 	if got := rec.Header().Get("Access-Control-Allow-Headers"); !strings.Contains(got, "Content-Type") {
 		t.Fatalf("Access-Control-Allow-Headers=%q, ждали Content-Type в списке", got)
 	}
@@ -384,7 +391,7 @@ func TestPaymentsHardeningPreflightCORS(t *testing.T) {
 	}
 
 	// Неразрешённый origin: CORS-заголовков доступа быть не должно.
-	rec = doRequestHeaders(t, router, http.MethodOptions, "/api/v1/auth/me", nil, nil, map[string]string{
+	rec = doRequestHeaders(t, router, http.MethodOptions, preflightPath, nil, nil, map[string]string{
 		"Origin":                        "https://evil.example",
 		"Access-Control-Request-Method": "POST",
 	})
