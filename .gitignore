@@ -12,6 +12,9 @@ runner/runner
 # logs
 *.log
 
+# сборка контрактных тестов API-клиента (T37, frontend/package.json test:build)
+.tmp-api-test/
+
 # env — в репозитории лежит только dev-копия .env (не секреты, см. README);
 # реальные значения задавайте через --env-file. Новые/локальные env — не коммитить.
 .env
