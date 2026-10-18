@@ -170,6 +170,97 @@ func TestYandexAuthCallbackFullFlow(t *testing.T) {
 	}
 }
 
+// TestYandexAuthCallbackRejectsBlockedUser — T32: блокировка (T24) действует и
+// на входе через Яндекс. Негатив: существующий заблокированный пользователь
+// получает 403 с тем же текстом, что на парольном входе, и не получает ни одной
+// cookie; разблокировка возвращает вход; новый пользователь создаётся active.
+func TestYandexAuthCallbackRejectsBlockedUser(t *testing.T) {
+	fake := &fakeYandex{profile: auth.Profile{
+		ExternalID: "999", Email: "blocked@ya.ru", DisplayName: "Заблокированный",
+	}}
+	app, router := oauthRouter(t, fake)
+
+	// Пользователь с email из подставного профиля существует и заблокирован.
+	u, err := app.Store.CreateUser("blocked@ya.ru", "хеш-заглушка", repo.RoleStudent)
+	if err != nil {
+		t.Fatalf("не удалось подготовить пользователя: %v", err)
+	}
+	if !app.Store.SetUserStatus(u.ID, repo.UserBlocked) {
+		t.Fatal("SetUserStatus(blocked): пользователь не найден")
+	}
+
+	// 1. Callback заблокированного: 403, Set-Cookie нет вовсе (в том числе
+	// сессионной), поэтому и /auth/me у этого клиента — 401.
+	rec := doJSON(t, router, http.MethodGet, "/api/v1/auth/yandex/start", "", nil)
+	st := stateCookieOf(t, rec)
+	cb := doJSON(t, router, http.MethodGet,
+		"/api/v1/auth/yandex/callback?state="+url.QueryEscape(st.Value)+"&code=blocked-1", "", withState(st))
+	if cb.Code != http.StatusForbidden {
+		t.Fatalf("callback заблокированного: status=%d, ждали 403; body=%s", cb.Code, cb.Body.String())
+	}
+	if sc := cb.Header().Values("Set-Cookie"); len(sc) != 0 {
+		t.Fatalf("в ответе 403 не должно быть Set-Cookie: %v", sc)
+	}
+	if !strings.Contains(cb.Body.String(), "Учётная запись заблокирована") {
+		t.Fatalf("текст отказа должен совпадать с парольным входом: %s", cb.Body.String())
+	}
+	me := doJSON(t, router, http.MethodGet, "/api/v1/auth/me", "", nil)
+	if me.Code != http.StatusUnauthorized {
+		t.Fatalf("me без сессии: status=%d, ждали 401; body=%s", me.Code, me.Body.String())
+	}
+
+	// 2. После разблокировки тот же вход работает: 302, cookie сессии, me — 200.
+	if !app.Store.SetUserStatus(u.ID, repo.UserActive) {
+		t.Fatal("SetUserStatus(active): пользователь не найден")
+	}
+	rec = doJSON(t, router, http.MethodGet, "/api/v1/auth/yandex/start", "", nil)
+	st = stateCookieOf(t, rec)
+	cb = doJSON(t, router, http.MethodGet,
+		"/api/v1/auth/yandex/callback?state="+url.QueryEscape(st.Value)+"&code=active-1", "", withState(st))
+	if cb.Code != http.StatusFound {
+		t.Fatalf("callback разблокированного: status=%d, ждали 302; body=%s", cb.Code, cb.Body.String())
+	}
+	var sess *http.Cookie
+	for _, c := range cb.Result().Cookies() {
+		if c.Name == sessionCookie {
+			sess = c
+		}
+	}
+	if sess == nil || sess.Value == "" {
+		t.Fatalf("разблокированному не выдана session cookie; Set-Cookie: %v", cb.Header().Values("Set-Cookie"))
+	}
+	me = doJSON(t, router, http.MethodGet, "/api/v1/auth/me", "", withCookie(sess))
+	if me.Code != http.StatusOK {
+		t.Fatalf("me с сессией: status=%d, ждали 200; body=%s", me.Code, me.Body.String())
+	}
+
+	// 3. Новый пользователь: 302 с cookie, в сторе он active.
+	fake.profile = auth.Profile{ExternalID: "1000", Email: "novy@ya.ru"}
+	rec = doJSON(t, router, http.MethodGet, "/api/v1/auth/yandex/start", "", nil)
+	st = stateCookieOf(t, rec)
+	cb = doJSON(t, router, http.MethodGet,
+		"/api/v1/auth/yandex/callback?state="+url.QueryEscape(st.Value)+"&code=new-1", "", withState(st))
+	if cb.Code != http.StatusFound {
+		t.Fatalf("callback нового пользователя: status=%d, ждали 302; body=%s", cb.Code, cb.Body.String())
+	}
+	var newSess *http.Cookie
+	for _, c := range cb.Result().Cookies() {
+		if c.Name == sessionCookie {
+			newSess = c
+		}
+	}
+	if newSess == nil || newSess.Value == "" {
+		t.Fatalf("новому пользователю не выдана session cookie; Set-Cookie: %v", cb.Header().Values("Set-Cookie"))
+	}
+	nu, ok := app.Store.GetUserByEmail("novy@ya.ru")
+	if !ok {
+		t.Fatal("новый OAuth-пользователь не создан")
+	}
+	if nu.Status != repo.UserActive {
+		t.Fatalf("статус нового OAuth-пользователя: %q, ждали %q", nu.Status, repo.UserActive)
+	}
+}
+
 func TestYandexAuthCallbackRejectsBadState(t *testing.T) {
 	fake := &fakeYandex{profile: auth.Profile{ExternalID: "1", Email: "x@ya.ru"}}
 	_, router := oauthRouter(t, fake)

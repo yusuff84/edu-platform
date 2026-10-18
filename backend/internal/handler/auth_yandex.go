@@ -134,6 +134,15 @@ func (a *App) YandexAuthCallback(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	// T32: блокировка (T24) действует и на входе через Яндекс — сессии не
+	// будет, отказ тот же по коду и тексту, что на парольном входе. В ответе
+	// 403 не должно быть ни одной Set-Cookie, поэтому снимаем подготовленную
+	// выше очистку state-cookie: вход просто не состоялся.
+	if u.Status == repo.UserBlocked {
+		w.Header().Del("Set-Cookie")
+		writeBlockedUser(w)
+		return
+	}
 	// Имя из профиля Яндекса — только при первом входе (не затираем
 	// ручную правку пользователя).
 	if u.DisplayName == "" && profile.DisplayName != "" {
