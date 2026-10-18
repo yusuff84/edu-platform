@@ -161,6 +161,31 @@ powershell -File qa-p3.ps1 -AdminEmail admin@local -AdminPassword admin1234
 поднятый `web` — но только для проверки `P0`; без него она уходит в `SKIP`
 (`-SkipWeb`, чтобы не проверять вовсе).
 
+### Интеграционные тесты Postgres (`backend/tests/postgres`)
+
+Методы волны P3 и счётчики сводки проверяются не только сквозным QA, но и на
+**живом Postgres**: пакет `backend/tests/postgres` включается при заданном
+`TEST_DATABASE_URL`, а без него каждый тест делает `t.Skip` — обычный
+`go test ./...` остаётся зелёным и без базы. Тесты создают свои сущности
+с уникальными email/slug и не трогают чужие данные, поэтому запускать их можно
+и рядом со стендом.
+
+```powershell
+# 1. Временный Postgres: отдельный контейнер и порт, стенд не трогаем
+docker run -d --rm --name edu-pgtest -e POSTGRES_USER=edu -e POSTGRES_PASSWORD=edu -e POSTGRES_DB=edu_test -p 55432:5432 postgres:16-alpine
+
+# 2. Прогон из контейнера с Go; миграции применяет сам тест
+docker run --rm --network host -v "$PWD\backend:/src" -v gomodcache:/go/pkg/mod -w /src -e GOFLAGS=-mod=mod -e TEST_DATABASE_URL="postgres://edu:edu@127.0.0.1:55432/edu_test?sslmode=disable" golang:1.24-alpine sh -c "go test ./tests/postgres/... -count=1 -v"
+
+# 3. Убрать за собой
+docker stop edu-pgtest
+```
+
+Покрыто: пользователи (фильтры, блокировка/разблокировка, зависимости при
+удалении), сводка админки (в том числе `users.blocked` — до T34 счётчик
+на Postgres всегда показывал 0), журнал платежей (фильтры, тоталы, пагинация),
+ученики курса и их прогресс, кабинет ученика (записи, платежи, `nextLessonId`).
+
 ## Документация API
 
 - [`docs/API.md`](docs/API.md) — сводный обзор эндпоинтов, формы запросов/ответов и таблица кодов ошибок.
