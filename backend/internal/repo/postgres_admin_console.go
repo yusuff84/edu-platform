@@ -28,14 +28,16 @@ func (s *PostgresStore) AdminOverview() AdminTotals {
 	var t AdminTotals
 	ctx, cancel := s.ctx()
 	defer cancel()
-	// UsersBlocked не сканируется: в схеме нет признака блокировки,
-	// остаётся нулевым (см. комментарий к AdminTotals).
+	// UsersBlocked считается тем же запросом: колонка users.status появилась
+	// в миграции 006_user_status.sql, блокировка работает с T24, а счётчик
+	// в сводке до T34 не выбирался (всегда 0).
 	err := s.pool.QueryRow(ctx, `
 		SELECT
 		  (SELECT COUNT(*)::int FROM users),
 		  (SELECT COUNT(*)::int FROM users WHERE role = 'student'),
 		  (SELECT COUNT(*)::int FROM users WHERE role = 'teacher'),
 		  (SELECT COUNT(*)::int FROM users WHERE role = 'admin'),
+		  (SELECT COUNT(*)::int FROM users WHERE status = 'blocked'),
 		  (SELECT COUNT(*)::int FROM users WHERE created_at >= now() - interval '7 days'),
 		  (SELECT COUNT(*)::int FROM courses),
 		  (SELECT COUNT(*)::int FROM courses WHERE status = 'draft'),
@@ -53,7 +55,7 @@ func (s *PostgresStore) AdminOverview() AdminTotals {
 		  (SELECT COUNT(*)::int FROM reviews),
 		  (SELECT COALESCE(ROUND(AVG(rating)::numeric, 1), 0)::float8 FROM reviews)
 	`).Scan(
-		&t.UsersTotal, &t.UsersStudents, &t.UsersTeachers, &t.UsersAdmins, &t.UsersNew7,
+		&t.UsersTotal, &t.UsersStudents, &t.UsersTeachers, &t.UsersAdmins, &t.UsersBlocked, &t.UsersNew7,
 		&t.CoursesTotal, &t.CoursesDraft, &t.CoursesReview, &t.CoursesPublished, &t.CoursesArchived,
 		&t.PaymentsCount, &t.PaidCents, &t.PlatformFeeCents, &t.TeacherCents, &t.PaidLast30Cents,
 		&t.EnrollmentsTotal, &t.EnrollmentsActive,
