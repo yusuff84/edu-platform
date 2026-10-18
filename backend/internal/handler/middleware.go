@@ -69,7 +69,10 @@ func NewRouter(app *App) http.Handler {
 	r.Use(app.realIP)
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
-	r.Use(app.cors)
+	// T42: cors получает сам роутер — для preflight Allow-Methods считаются
+	// по реально зарегистрированным маршрутам через Mux.Match (Match есть
+	// только у *chi.Mux, не у интерфейса chi.Router).
+	r.Use(app.cors(r))
 
 	r.Get("/healthz", healthz)
 	// T09: mock-страница оплаты. Регистрируется НА ВЕРХНЕМ УРОВНЕ роутера,
@@ -602,34 +605,57 @@ func (a *App) csrfProtect(next http.Handler) http.Handler {
 }
 
 // cors разрешает запросы с фронтенда (localhost:3000) с cookie.
-func (a *App) cors(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		origin := strings.TrimSpace(r.Header.Get("Origin"))
-		allowed := ""
-		if origin != "" {
-			for _, o := range a.Config.AllowedOrigins {
-				if origin == o {
-					allowed = o
-					break
+// T42: для preflight-запроса (OPTIONS) Access-Control-Allow-Methods собирается
+// по реальным методам запрошенного пути: перебираем GET, POST, PUT, PATCH,
+// DELETE и проверяем их через mux.Match (роутер chi v5 сам знает свои
+// маршруты, включая вложенные подроутеры). Методы, зарегистрированные для
+// пути, перечисляются в порядке перебора + OPTIONS; если для пути нет ни
+// одного маршрута — заголовок не ставится. Раньше заголовок был жёсткой
+// константой для всех путей, включая несуществующие.
+func (a *App) cors(mux *chi.Mux) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			origin := strings.TrimSpace(r.Header.Get("Origin"))
+			allowed := ""
+			if origin != "" {
+				for _, o := range a.Config.AllowedOrigins {
+					if origin == o {
+						allowed = o
+						break
+					}
 				}
 			}
-		}
-		if allowed != "" {
-			w.Header().Set("Access-Control-Allow-Origin", allowed)
-			w.Header().Set("Access-Control-Allow-Credentials", "true")
-			w.Header().Set("Vary", "Origin")
-		}
-		if r.Method == http.MethodOptions {
 			if allowed != "" {
-				w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
-				w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
-				w.Header().Set("Access-Control-Max-Age", "86400")
+				w.Header().Set("Access-Control-Allow-Origin", allowed)
+				w.Header().Set("Access-Control-Allow-Credentials", "true")
+				w.Header().Set("Vary", "Origin")
 			}
-			w.WriteHeader(http.StatusNoContent)
-			return
-		}
-		next.ServeHTTP(w, r)
-	})
+			if r.Method == http.MethodOptions {
+				if allowed != "" {
+					// Новый RouteContext на каждый Match: Match мутирует
+					// состояние контекста при обходе дерева маршрутов.
+					methods := make([]string, 0, 6)
+					for _, m := range []string{
+						http.MethodGet, http.MethodPost, http.MethodPut,
+						http.MethodPatch, http.MethodDelete,
+					} {
+						if mux.Match(chi.NewRouteContext(), m, r.URL.Path) {
+							methods = append(methods, m)
+						}
+					}
+					if len(methods) > 0 {
+						w.Header().Set("Access-Control-Allow-Methods",
+							strings.Join(append(methods, http.MethodOptions), ", "))
+					}
+					w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+					w.Header().Set("Access-Control-Max-Age", "86400")
+				}
+				w.WriteHeader(http.StatusNoContent)
+				return
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
 }
 
 // ---- pagination helper ----
