@@ -192,6 +192,108 @@
   min-width: 12rem;
 }
 
+/* ---------- Курсы: чипы статусов со счётчиками (T50) ---------- */
+
+.ac-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-bottom: 0.75rem;
+}
+
+.ac-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.35rem 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--fg);
+  font-family: var(--font);
+  font-size: 0.88rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.ac-chip:hover {
+  background: #f3f1ec;
+}
+
+.ac-chip--active {
+  background: var(--brand);
+  border-color: var(--brand);
+  color: #fff;
+}
+
+.ac-chip--active:hover {
+  background: var(--brand-dark);
+}
+
+.ac-chip__count {
+  padding: 0 0.4rem;
+  border-radius: 999px;
+  background: var(--line-soft);
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.ac-chip--active .ac-chip__count {
+  background: rgba(255, 255, 255, 0.24);
+  color: #fff;
+}
+
+/* ---------- Курсы: сортировка, период, сброс (T50) ---------- */
+
+.ac-sort {
+  display: flex;
+  align-items: stretch;
+  gap: 0.4rem;
+}
+
+.ac-sort .input {
+  min-width: 12rem;
+}
+
+/* Переключатель направления — вне uppercase-стиля .ac-field. */
+.ac-dir {
+  margin-top: 0;
+  white-space: nowrap;
+  text-transform: none;
+  letter-spacing: normal;
+  font-size: 13.5px;
+  color: var(--fg);
+}
+
+.ac-period {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.ac-period__item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.ac-period__item > span {
+  font-size: 11px;
+}
+
+.ac-period .input {
+  min-width: 10rem;
+}
+
+.ac-toolbar .btn {
+  margin-top: 0;
+}
+
+.ac-reset {
+  white-space: nowrap;
+}
+
 /* ---------- Курсы: таблица ---------- */
 
 .ac-table-wrap {
@@ -239,18 +341,43 @@
   font-weight: 700;
 }
 
+/* Длинное название обрезается, полное значение — в title ссылки (T50). */
+.ac-td-title a {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Длинный email преподавателя тоже обрезается с полным значением в title. */
+.ac-td-teacher {
+  max-width: 12rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Колонка действий — компактная: кнопки стоят в столбик и не обрезаются. */
 .ac-td-actions {
   white-space: normal;
+  width: 1%;
+  min-width: 11rem;
 }
 
 .ac-actions {
   display: flex;
-  flex-wrap: wrap;
-  gap: 0.4rem;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.35rem;
 }
 
 .ac-actions .btn {
   margin-top: 0;
+  white-space: nowrap;
+}
+
+/* Строка на время запроса: действия заблокированы, строка приглушена. */
+.ac-table tbody tr.ac-tr--busy {
+  opacity: 0.65;
 }
 
 /* Метки статусов курса. */
@@ -361,6 +488,84 @@
   margin-top: 0;
 }
 
+.ac-pager__nav {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.ac-pager__limit {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: var(--muted);
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
+.ac-pager__limit .input {
+  width: auto;
+  min-height: 40px;
+  padding: 0 0.5rem;
+}
+
+/* ---------- Курсы: модалка отклонения (T50) ---------- */
+
+.ac-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  background: rgba(20, 20, 20, 0.45);
+}
+
+.ac-modal__box {
+  width: min(34rem, 100%);
+  max-height: calc(100vh - 2rem);
+  overflow-y: auto;
+  padding: 1rem 1.15rem 1.1rem;
+  border-radius: var(--r-md);
+  background: var(--surface);
+  box-shadow: var(--shadow-pop);
+}
+
+.ac-modal__title {
+  margin: 0 0 0.35rem;
+  font-size: 20px;
+}
+
+.ac-modal__course {
+  margin: 0 0 0.75rem;
+  overflow-wrap: anywhere;
+}
+
+/* Комментарий — обычный текст, а не uppercase-подпись поля. */
+.ac-modal__comment {
+  min-height: 6rem;
+  resize: vertical;
+  text-transform: none;
+  letter-spacing: normal;
+  font-size: 15.5px;
+  font-weight: 600;
+  color: var(--fg);
+}
+
+.ac-modal__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-top: 0.85rem;
+}
+
+.ac-modal__actions .btn {
+  margin-top: 0;
+}
+
 /* ---------- Узкий экран: строки таблицы превращаются в карточки ---------- */
 
 @media (max-width: 720px) {
@@ -408,5 +613,43 @@
 
   .ac-td-title {
     max-width: none;
+  }
+
+  /* На узком экране обрезка не нужна: название и email переносятся. */
+  .ac-td-title a {
+    overflow: visible;
+    text-overflow: clip;
+    white-space: normal;
+  }
+
+  .ac-td-teacher {
+    max-width: none;
+    overflow: visible;
+    text-overflow: clip;
+  }
+
+  /* Действия — обычная строка кнопок с выравниванием по правому краю. */
+  .ac-td-actions {
+    width: auto;
+    min-width: 0;
+  }
+
+  .ac-actions {
+    flex-direction: row;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+
+  .ac-chips {
+    margin-bottom: 0.6rem;
+  }
+
+  .ac-chip {
+    font-size: 0.82rem;
+    padding: 0.3rem 0.65rem;
+  }
+
+  .ac-pager {
+    justify-content: flex-start;
   }
 }

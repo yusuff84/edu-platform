@@ -1,35 +1,47 @@
 // T27: раздел «Курсы» супер-админки (/admin/courses).
-// Список курсов всех статусов (GET /admin/courses) с поиском, фильтром статуса
-// и пагинацией; действия «В архив» / «Снять с публикации»; раскрывающаяся панель
-// отзывов курса (GET /admin/courses/{id}/reviews, DELETE /admin/reviews/{id}).
-// Контракт — Task/T25-admin-console.md.
-import { Fragment, useEffect, useState } from 'react';
+// T50: рабочий инструмент модерации — состояние выборки в URL (q, status,
+// teacherEmail, sort, dir, from, to, page), чипы статусов со счётчиками из
+// сводки, сортировка, модерация прямо в строке (опубликовать / отклонить с
+// комментарием / снять с публикации / в архив / вернуть из архива) и
+// аккуратная пагинация. Раскрывающаяся панель отзывов (T27) и выгрузка CSV
+// (T40) сохранены. Контракт волны P6 — Task/00-api-contract.md.
+import { Fragment, useEffect, useRef, useState } from 'react';
 import {
   keepPreviousData,
   useMutation,
   useQuery,
   useQueryClient,
 } from '@tanstack/react-query';
-import { Link } from 'react-router-dom';
-import { ApiError, formatDate, formatPrice } from '../api/client';
+import { Link, useSearchParams } from 'react-router-dom';
+import { ApiError, formatDate, formatPrice, moderateCourse } from '../api/client';
 import type { CourseStatus } from '../api/client';
 import {
   archiveAdminCourse,
   deleteReview,
+  getAdminStats,
   listAdminCourses,
   listCourseReviews,
+  unarchiveAdminCourse,
   unpublishAdminCourse,
 } from '../api/adminConsole';
-import type { AdminCourseRow, AdminReviewRow } from '../api/adminConsole';
+import type {
+  AdminCourseDir,
+  AdminCourseRow,
+  AdminCourseSort,
+  AdminReviewRow,
+} from '../api/adminConsole';
 import { t } from '../i18n/t';
 import type { RuKey } from '../i18n/t';
 import CsvExportButton, { csvDateStamp, exportTruncated } from '../components/CsvExportButton';
 import '../styles/adminConsole.css';
 
-/** Размер страницы: 20, как у остальных списков консоли (контракт T25). */
-const PAGE_LIMIT = 20;
+/** Размеры страницы выборки: 20 по умолчанию, 50 — «широкий» режим (T50). */
+const PAGE_LIMITS = [20, 50] as const;
 
-/** Пауза дебаунса поиска: пока пользователь печатает, запросы не уходят. */
+/** Размер страницы по умолчанию — как в контракте и остальных списках консоли. */
+const DEFAULT_LIMIT = 20;
+
+/** Пауза дебаунса текстовых фильтров: пока пользователь печатает, запросы не уходят. */
 const SEARCH_DEBOUNCE_MS = 300;
 
 /** Размер страницы выгрузки CSV (T40): 100 строк за запрос. */
@@ -38,10 +50,17 @@ const EXPORT_PAGE_LIMIT = 100;
 /** Потолок выгрузки CSV: не более 50 страниц (5000 строк) за один клик. */
 const EXPORT_MAX_PAGES = 50;
 
-/** Статусы курса в порядке контракта. */
+/** Статусы курса в порядке контракта (и порядке чипов). */
 const COURSE_STATUSES: CourseStatus[] = ['draft', 'review', 'published', 'archived'];
 
-/** Русские подписи статусов — ключи конструктора (те же четыре статуса курса). */
+/** Варианты сортировки в порядке select (контракт P6 / T48). */
+const COURSE_SORTS: AdminCourseSort[] = ['createdAt', 'updatedAt', 'title', 'price', 'students'];
+
+/** Значения сортировки по умолчанию — те же, что и на backend (T48). */
+const DEFAULT_SORT: AdminCourseSort = 'createdAt';
+const DEFAULT_DIR: AdminCourseDir = 'desc';
+
+/** Русские подписи статусов — ключи конструктора (бейдж строки). */
 const STATUS_LABEL: Record<CourseStatus, RuKey> = {
   draft: 'teach.statusDraft',
   review: 'teach.statusReview',
@@ -49,11 +68,50 @@ const STATUS_LABEL: Record<CourseStatus, RuKey> = {
   archived: 'teach.statusArchived',
 };
 
-/** Действие над курсом: в архив или снять с публикации. */
-type CourseAction = 'archive' | 'unpublish';
+/** Подписи чипов статусов: множественное число для счётчиков выборки (T50). */
+const CHIP_LABEL: Record<CourseStatus, RuKey> = {
+  draft: 'adminCourses.statusDraft',
+  review: 'adminCourses.statusReview',
+  published: 'adminCourses.statusPublished',
+  archived: 'adminCourses.statusArchived',
+};
+
+/** Подписи вариантов сортировки. */
+const SORT_LABEL: Record<AdminCourseSort, RuKey> = {
+  createdAt: 'adminCourses.sortCreated',
+  updatedAt: 'adminCourses.sortUpdated',
+  title: 'adminCourses.sortTitle',
+  price: 'adminCourses.sortPrice',
+  students: 'adminCourses.sortStudents',
+};
+
+/** Действие над курсом прямо из строки списка (T50). */
+type CourseAction = 'approve' | 'archive' | 'unpublish' | 'unarchive';
+
+/** Тост после успешного действия — ключи существующего словаря. */
+const ACTION_DONE: Record<CourseAction, RuKey> = {
+  approve: 'adminCourses.approvedDone',
+  archive: 'adminCourses.archived',
+  unpublish: 'adminCourses.unpublished',
+  unarchive: 'adminCourses.unarchivedDone',
+};
 
 function isCourseStatus(value: string): value is CourseStatus {
   return (COURSE_STATUSES as readonly string[]).includes(value);
+}
+
+function isCourseSort(value: string): value is AdminCourseSort {
+  return (COURSE_SORTS as readonly string[]).includes(value);
+}
+
+/**
+ * Строгая проверка даты ГГГГ-ММ-ДД: и формат, и реальный календарный день
+ * (2026-02-30 отбрасывается — backend тоже отвечает на неё 400).
+ */
+function isIsoDate(value: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const parsed = new Date(`${value}T00:00:00Z`);
+  return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
 }
 
 /** Текст ошибки без краха страницы: 403/401/400/сеть/прочее (как в Admin.tsx). */
@@ -168,76 +226,283 @@ function ReviewsPanel({ courseId }: { courseId: string }): JSX.Element {
   );
 }
 
+/**
+ * Модалка отклонения курса (T50): комментарий обязателен — пустой блокирует
+ * кнопку; ошибка API показывается текстом прямо в окне.
+ */
+function RejectDialog({
+  course,
+  onClose,
+  onDone,
+}: {
+  course: AdminCourseRow;
+  onClose: () => void;
+  onDone: (text: string) => void;
+}): JSX.Element {
+  const qc = useQueryClient();
+  const [comment, setComment] = useState('');
+  const [error, setError] = useState('');
+  const areaRef = useRef<HTMLTextAreaElement | null>(null);
+
+  // Фокус в поле комментария сразу при открытии окна.
+  useEffect(() => {
+    areaRef.current?.focus();
+  }, []);
+
+  const reject = useMutation({
+    mutationFn: () =>
+      moderateCourse(course.id, { decision: 'reject', comment: comment.trim() }),
+    onSuccess: () => {
+      // Курс вернулся в черновики — обновляем список и чипы статусов.
+      void qc.invalidateQueries({ queryKey: ['admin-courses'] });
+      void qc.invalidateQueries({ queryKey: ['admin-stats'] });
+      onDone(t('adminCourses.rejectedDone'));
+    },
+    onError: (e: unknown) => setError(errorText(e)),
+  });
+
+  const canSubmit = comment.trim() !== '' && !reject.isPending;
+
+  return (
+    <div
+      className="ac-modal"
+      onMouseDown={(e) => {
+        // Клик мимо окна закрывает модалку, но не во время запроса.
+        if (e.target === e.currentTarget && !reject.isPending) onClose();
+      }}
+      onKeyDown={(e) => {
+        if (e.key === 'Escape' && !reject.isPending) onClose();
+      }}
+    >
+      <div
+        className="ac-modal__box"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="ac-reject-title"
+      >
+        <h2 id="ac-reject-title" className="ac-modal__title">
+          {t('adminCourses.reject')}
+        </h2>
+        <p className="muted ac-modal__course" title={course.title}>
+          {course.title}
+        </p>
+
+        <label className="ac-field" htmlFor="ac-reject-comment">
+          <span>{t('adminCourses.rejectComment')}</span>
+          <textarea
+            id="ac-reject-comment"
+            ref={areaRef}
+            className="input ac-modal__comment"
+            rows={4}
+            value={comment}
+            onChange={(e) => {
+              setComment(e.target.value);
+              setError('');
+            }}
+          />
+        </label>
+
+        {error && (
+          <p role="alert" className="ac-msg ac-msg--error">
+            {error}
+          </p>
+        )}
+
+        <div className="ac-modal__actions">
+          <button
+            type="button"
+            className="btn btn-sm"
+            disabled={reject.isPending}
+            onClick={onClose}
+          >
+            {t('common.cancel')}
+          </button>
+          <button
+            type="button"
+            className="btn btn-sm ac-btn--danger"
+            disabled={!canSubmit}
+            onClick={() => {
+              setError('');
+              reject.mutate();
+            }}
+          >
+            {reject.isPending ? t('common.loading') : t('adminCourses.reject')}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function AdminCourses(): JSX.Element {
   const qc = useQueryClient();
+  const [searchParams, setSearchParams] = useSearchParams();
 
-  // ---- Фильтры и пагинация (состояние экрана, в URL не пишем) ----
-  // Ввод в поиск держим отдельно: запрос уходит с дебаунсом 300 мс.
-  const [searchInput, setSearchInput] = useState('');
-  const [q, setQ] = useState('');
-  const [status, setStatus] = useState<CourseStatus | ''>('');
-  const [page, setPage] = useState(1);
-  // Курс, для которого раскрыта панель отзывов (одна за раз).
-  const [reviewsCourseId, setReviewsCourseId] = useState<string | null>(null);
+  // ---- Состояние выборки живёт в URL (T50): ссылкой можно поделиться ----
+  // q — поиск по названию, teacherEmail — по автору, status — чип статуса,
+  // sort/dir — сортировка, from/to — период создания, page — страница.
+  const q = searchParams.get('q') ?? '';
+  const teacherEmail = searchParams.get('teacherEmail') ?? '';
+  const statusParam = searchParams.get('status') ?? '';
+  const status: CourseStatus | '' = isCourseStatus(statusParam) ? statusParam : '';
+  const sortParam = searchParams.get('sort') ?? '';
+  const sort: AdminCourseSort = isCourseSort(sortParam) ? sortParam : DEFAULT_SORT;
+  // Направление по умолчанию — desc (как на backend); в URL пишем только asc.
+  const dir: AdminCourseDir = searchParams.get('dir') === 'asc' ? 'asc' : DEFAULT_DIR;
+  const from = searchParams.get('from') ?? '';
+  const to = searchParams.get('to') ?? '';
+  const pageParam = Number(searchParams.get('page'));
+  const page = Number.isInteger(pageParam) && pageParam >= 1 ? pageParam : 1;
+
+  // Неверный период (формат или начало позже конца): запрос не уходит,
+  // пользователь видит понятный текст admin.periodInvalid.
+  const periodInvalid =
+    (from !== '' && !isIsoDate(from)) ||
+    (to !== '' && !isIsoDate(to)) ||
+    (from !== '' && to !== '' && from > to);
+
+  // Свежие параметры URL для отложенных обработчиков (debounce): ссылка
+  // обновляется эффектом, поэтому таймер пишет поверх актуального URL.
+  const paramsRef = useRef(searchParams);
+  useEffect(() => {
+    paramsRef.current = searchParams;
+  }, [searchParams]);
+
+  /** Точечное обновление query-параметров: null/'' — удалить параметр. */
+  function setParams(patch: Record<string, string | null>): void {
+    const next = new URLSearchParams(paramsRef.current);
+    for (const [key, value] of Object.entries(patch)) {
+      if (value === null || value === '') next.delete(key);
+      else next.set(key, value);
+    }
+    setSearchParams(next);
+  }
+
+  // ---- Текстовые фильтры: ввод локально, в URL — с дебаунсом ----
+  const [qInput, setQInput] = useState(q);
+  const [teacherInput, setTeacherInput] = useState(teacherEmail);
+
+  // URL — источник истины: сброс фильтров и переходы по истории обновляют поля.
+  useEffect(() => {
+    setQInput(q);
+  }, [q]);
+  useEffect(() => {
+    setTeacherInput(teacherEmail);
+  }, [teacherEmail]);
 
   useEffect(() => {
+    if (qInput.trim() === q) return;
     const timer = window.setTimeout(() => {
-      setQ(searchInput.trim());
+      setParams({ q: qInput.trim() || null, page: null });
     }, SEARCH_DEBOUNCE_MS);
     return () => window.clearTimeout(timer);
-  }, [searchInput]);
+    // setParams читает актуальный URL через paramsRef — в зависимостях не нужен.
+  }, [qInput, q]);
 
-  // Смена фильтров всегда возвращает на первую страницу.
   useEffect(() => {
-    setPage(1);
-  }, [q, status]);
+    if (teacherInput.trim() === teacherEmail) return;
+    const timer = window.setTimeout(() => {
+      setParams({ teacherEmail: teacherInput.trim() || null, page: null });
+    }, SEARCH_DEBOUNCE_MS);
+    return () => window.clearTimeout(timer);
+  }, [teacherInput, teacherEmail]);
 
+  // ---- Размер страницы: настройка просмотра, в URL её нет ----
+  const [limit, setLimit] = useState<number>(DEFAULT_LIMIT);
+
+  // ---- Выборка курсов по фильтрам ----
   const courses = useQuery({
-    queryKey: ['admin-courses', { q, status, page }],
+    queryKey: ['admin-courses', { q, status, teacherEmail, sort, dir, from, to, page, limit }],
     queryFn: () =>
       listAdminCourses({
         q: q || undefined,
         status: status || undefined,
+        teacherEmail: teacherEmail || undefined,
+        sort,
+        dir,
+        from: from || undefined,
+        to: to || undefined,
         page,
-        limit: PAGE_LIMIT,
+        limit,
       }),
+    // Неверный период блокирует запрос: backend ответил бы 400.
+    enabled: !periodInvalid,
     // При смене страницы/фильтра старые строки остаются до прихода новых.
     placeholderData: keepPreviousData,
     retry: (failureCount, error) => !(error instanceof ApiError) && failureCount < 2,
   });
 
-  // ---- Действия над курсом ----
+  // ---- Чипы статусов: счётчики берём из сводки платформы ----
+  const stats = useQuery({
+    queryKey: ['admin-stats'],
+    queryFn: getAdminStats,
+    retry: (failureCount, error) => !(error instanceof ApiError) && failureCount < 2,
+  });
+
+  /** Счётчик чипа: '' — «Все» (курсы всего), иначе — число курсов статуса. */
+  function chipCount(value: CourseStatus | ''): number | null {
+    const counts = stats.data?.courses;
+    if (!counts) return null;
+    return value === '' ? counts.total : counts[value];
+  }
+
+  // ---- Действия над курсом из строки списка ----
   const [actionMsg, setActionMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  // Курс, для которого открыта модалка отклонения.
+  const [rejectCourse, setRejectCourse] = useState<AdminCourseRow | null>(null);
+  // Курс, для которого раскрыта панель отзывов (одна за раз).
+  const [reviewsCourseId, setReviewsCourseId] = useState<string | null>(null);
 
   const courseAction = useMutation({
-    mutationFn: (args: { id: string; action: CourseAction }) =>
-      args.action === 'archive' ? archiveAdminCourse(args.id) : unpublishAdminCourse(args.id),
+    // Возвращаемые формы у действий разные (Course и {course}) — результат не
+    // используется, важно лишь завершение запроса и его ошибка.
+    mutationFn: (args: { id: string; action: CourseAction }): Promise<unknown> => {
+      switch (args.action) {
+        case 'approve':
+          // Решение модерации — через общий клиент (contract: {decision}).
+          return moderateCourse(args.id, { decision: 'approve' });
+        case 'archive':
+          return archiveAdminCourse(args.id);
+        case 'unpublish':
+          return unpublishAdminCourse(args.id);
+        case 'unarchive':
+          return unarchiveAdminCourse(args.id);
+      }
+    },
     onSuccess: (_res, args) => {
-      setActionMsg({
-        ok: true,
-        text:
-          args.action === 'archive'
-            ? t('adminCourses.archived')
-            : t('adminCourses.unpublished'),
-      });
-      // Смена статуса курса видна и в списке, и в сводке платформы.
+      setActionMsg({ ok: true, text: t(ACTION_DONE[args.action]) });
+      // Смена статуса курса видна и в списке, и в чипах (сводка платформы).
       void qc.invalidateQueries({ queryKey: ['admin-courses'] });
       void qc.invalidateQueries({ queryKey: ['admin-stats'] });
     },
-    // 409 (уже в архиве / не published) приходит текстом ApiError.message.
+    // 409 (курс не в том статусе) и 404 приходят текстом ApiError.message.
     onError: (e: unknown) => setActionMsg({ ok: false, text: errorText(e) }),
   });
 
+  /** Вопрос подтверждения действия: название курса подставляем сами —
+   *  в словаре нет интерполяции (t.ts). */
+  function confirmQuestion(course: AdminCourseRow, action: CourseAction): string {
+    const question =
+      action === 'approve'
+        ? t('adminCourses.confirmApprove') // ключ уже с «?»
+        : action === 'unarchive'
+          ? `${t('adminCourses.unarchive')}?`
+          : action === 'archive'
+            ? `${t('adminCourses.confirmArchive')}?`
+            : `${t('adminCourses.confirmUnpublish')}?`;
+    return `${question} «${course.title}»`;
+  }
+
   function onCourseAction(course: AdminCourseRow, action: CourseAction): void {
-    // Название курса подставляем сами: в словаре нет интерполяции (t.ts).
-    const confirmText =
-      action === 'archive'
-        ? t('adminCourses.confirmArchive')
-        : t('adminCourses.confirmUnpublish');
-    const question = `${confirmText} «${course.title}»?`;
-    if (!window.confirm(question)) return;
+    if (!window.confirm(confirmQuestion(course, action))) return;
     setActionMsg(null);
     courseAction.mutate({ id: course.id, action });
+  }
+
+  // ---- Отклонение: модалка с обязательным комментарием ----
+  function onRejected(text: string): void {
+    setRejectCourse(null);
+    setActionMsg({ ok: true, text });
   }
 
   // ---- Выгрузка CSV: вся выборка по текущим фильтрам ----
@@ -254,6 +519,11 @@ export default function AdminCourses(): JSX.Element {
       const res = await listAdminCourses({
         q: q || undefined,
         status: status || undefined,
+        teacherEmail: teacherEmail || undefined,
+        sort,
+        dir,
+        from: from || undefined,
+        to: to || undefined,
         page: pageNumber,
         limit: EXPORT_PAGE_LIMIT,
       });
@@ -296,9 +566,12 @@ export default function AdminCourses(): JSX.Element {
   // ---- Производные значения пагинации ----
   const data = courses.data;
   const total = data?.total ?? 0;
-  const rangeFrom = total === 0 ? 0 : Math.min((page - 1) * PAGE_LIMIT + 1, total);
-  const rangeTo = Math.min(page * PAGE_LIMIT, total);
+  const rangeFrom = total === 0 ? 0 : Math.min((page - 1) * limit + 1, total);
+  const rangeTo = Math.min(page * limit, total);
   const isLastPage = total > 0 && rangeTo >= total;
+  // Пагинатор прячем только на пустой первой странице: если данных не осталось,
+  // а страница не первая, кнопка «Назад» вернёт список.
+  const showPager = !!data && (total > 0 || page > 1);
 
   return (
     <div className="wrap">
@@ -311,6 +584,31 @@ export default function AdminCourses(): JSX.Element {
             </span>
           </div>
 
+          {/* Чипы статусов со счётчиками: активный чип — текущий статус. */}
+          <div className="ac-chips" role="group" aria-label={t('adminCourses.filterStatus')}>
+            <button
+              type="button"
+              className={status === '' ? 'ac-chip ac-chip--active' : 'ac-chip'}
+              aria-pressed={status === ''}
+              onClick={() => setParams({ status: null, page: null })}
+            >
+              {t('adminCourses.chipAll')}
+              <span className="ac-chip__count">{chipCount('') ?? '—'}</span>
+            </button>
+            {COURSE_STATUSES.map((s) => (
+              <button
+                key={s}
+                type="button"
+                className={status === s ? 'ac-chip ac-chip--active' : 'ac-chip'}
+                aria-pressed={status === s}
+                onClick={() => setParams({ status: status === s ? null : s, page: null })}
+              >
+                {t(CHIP_LABEL[s])}
+                <span className="ac-chip__count">{chipCount(s) ?? '—'}</span>
+              </button>
+            ))}
+          </div>
+
           <div className="ac-toolbar">
             <label className="ac-field" htmlFor="ac-courses-search">
               <span>{t('adminCourses.search')}</span>
@@ -318,37 +616,112 @@ export default function AdminCourses(): JSX.Element {
                 id="ac-courses-search"
                 className="input ac-search"
                 type="search"
-                value={searchInput}
-                onChange={(e) => setSearchInput(e.target.value)}
+                value={qInput}
+                onChange={(e) => setQInput(e.target.value)}
                 placeholder={t('adminCourses.search')}
               />
             </label>
-            <label className="ac-field" htmlFor="ac-courses-status">
-              <span>{t('adminCourses.filterStatus')}</span>
-              <select
-                id="ac-courses-status"
-                className="input"
-                value={status}
-                onChange={(e) =>
-                  setStatus(isCourseStatus(e.target.value) ? e.target.value : '')
-                }
-              >
-                <option value="">{t('admin.allStatuses')}</option>
-                {COURSE_STATUSES.map((s) => (
-                  <option key={s} value={s}>
-                    {t(STATUS_LABEL[s])}
-                  </option>
-                ))}
-              </select>
+
+            <label className="ac-field" htmlFor="ac-courses-teacher">
+              <span>{t('adminCourses.searchTeacher')}</span>
+              <input
+                id="ac-courses-teacher"
+                className="input ac-search"
+                type="search"
+                value={teacherInput}
+                onChange={(e) => setTeacherInput(e.target.value)}
+                placeholder={t('adminCourses.searchTeacher')}
+              />
             </label>
 
-            {/* T40: выгрузка всей выборки по текущим фильтрам (q, status). */}
+            <div className="ac-field">
+              <span id="ac-courses-sort-label">{t('adminCourses.sort')}</span>
+              <div className="ac-sort" role="group" aria-labelledby="ac-courses-sort-label">
+                <select
+                  className="input"
+                  value={sort}
+                  aria-label={t('adminCourses.sort')}
+                  onChange={(e) => {
+                    const next = isCourseSort(e.target.value) ? e.target.value : DEFAULT_SORT;
+                    // createdAt — значение по умолчанию: в URL его не держим.
+                    setParams({ sort: next === DEFAULT_SORT ? null : next, page: null });
+                  }}
+                >
+                  {COURSE_SORTS.map((s) => (
+                    <option key={s} value={s}>
+                      {t(SORT_LABEL[s])}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  className="btn btn-sm ac-dir"
+                  aria-pressed={dir === 'asc'}
+                  title={dir === 'asc' ? t('adminCourses.dirAsc') : t('adminCourses.dirDesc')}
+                  onClick={() => setParams({ dir: dir === 'asc' ? null : 'asc', page: null })}
+                >
+                  <span aria-hidden="true">{dir === 'asc' ? '↑' : '↓'}</span>{' '}
+                  {dir === 'asc' ? t('adminCourses.dirAsc') : t('adminCourses.dirDesc')}
+                </button>
+              </div>
+            </div>
+
+            {/* Период по дате создания; границы включительные (контракт T48). */}
+            <div className="ac-field">
+              <span>{t('admin.period')}</span>
+              <div className="ac-period" role="group" aria-label={t('admin.period')}>
+                <label className="ac-period__item" htmlFor="ac-courses-from">
+                  <span>{t('admin.periodFrom')}</span>
+                  <input
+                    id="ac-courses-from"
+                    className="input"
+                    type="date"
+                    value={from}
+                    aria-invalid={from !== '' && !isIsoDate(from) ? true : undefined}
+                    onChange={(e) => setParams({ from: e.target.value || null, page: null })}
+                  />
+                </label>
+                <label className="ac-period__item" htmlFor="ac-courses-to">
+                  <span>{t('admin.periodTo')}</span>
+                  <input
+                    id="ac-courses-to"
+                    className="input"
+                    type="date"
+                    value={to}
+                    aria-invalid={to !== '' && !isIsoDate(to) ? true : undefined}
+                    onChange={(e) => setParams({ to: e.target.value || null, page: null })}
+                  />
+                </label>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              className="btn ac-reset"
+              onClick={() => {
+                setQInput('');
+                setTeacherInput('');
+                setSearchParams({});
+              }}
+              disabled={searchParams.toString() === ''}
+            >
+              {t('adminCourses.reset')}
+            </button>
+
+            {/* T40: выгрузка всей выборки по текущим фильтрам. */}
             <CsvExportButton
               filename={`courses-${csvDateStamp()}.csv`}
               headers={exportHeaders}
               loadRows={loadExportRows}
+              disabled={periodInvalid}
             />
           </div>
+
+          {periodInvalid && (
+            <p role="alert" className="error">
+              {t('admin.periodInvalid')}
+            </p>
+          )}
 
           {actionMsg && (
             <p
@@ -383,7 +756,12 @@ export default function AdminCourses(): JSX.Element {
           )}
 
           {data && data.items.length > 0 && (
-            <div className="ac-table-wrap">
+            <div
+              className="ac-table-wrap"
+              role="region"
+              aria-label={t('adminCourses.title')}
+              tabIndex={0}
+            >
               <table className="ac-table">
                 <thead>
                   <tr>
@@ -401,26 +779,30 @@ export default function AdminCourses(): JSX.Element {
                 <tbody>
                   {data.items.map((course) => {
                     const reviewsOpen = reviewsCourseId === course.id;
+                    // На время запроса по этой строке её действия блокируются.
+                    const rowBusy =
+                      courseAction.isPending && courseAction.variables?.id === course.id;
                     return (
                       <Fragment key={course.id}>
-                        <tr>
+                        <tr className={rowBusy ? 'ac-tr--busy' : undefined}>
                           <td
                             data-label={t('adminCourses.colTitle')}
                             className="ac-td-title"
                           >
-                            {/* Название — ссылка на публичную страницу курса. */}
+                            {/* Название — ссылка на публичную страницу курса (новая вкладка). */}
                             <Link
                               to={`/courses/${encodeURIComponent(course.slug)}`}
                               target="_blank"
                               rel="noreferrer"
-                              title={t('adminCourses.open')}
+                              title={course.title}
                             >
                               {course.title}
                             </Link>
                           </td>
                           <td
                             data-label={t('adminCourses.colTeacher')}
-                            title={course.teacherId}
+                            className="ac-td-teacher"
+                            title={course.teacherEmail}
                           >
                             {course.teacherEmail}
                           </td>
@@ -458,24 +840,64 @@ export default function AdminCourses(): JSX.Element {
                               >
                                 {t('adminCourses.reviews')}
                               </button>
-                              {course.status !== 'archived' && (
+                              {/* Ученики курса — та же страница, что в кабинете учителя. */}
+                              <Link
+                                className="btn btn-sm"
+                                to={`/teach/${encodeURIComponent(course.id)}/students`}
+                              >
+                                {t('adminCourses.students')}
+                              </Link>
+                              {course.status === 'review' && (
                                 <button
                                   type="button"
-                                  className="btn btn-sm"
-                                  disabled={courseAction.isPending}
-                                  onClick={() => onCourseAction(course, 'archive')}
+                                  className="btn btn-sm btn-primary"
+                                  disabled={rowBusy}
+                                  onClick={() => onCourseAction(course, 'approve')}
                                 >
-                                  {t('adminCourses.archive')}
+                                  {t('adminCourses.approve')}
+                                </button>
+                              )}
+                              {course.status === 'review' && (
+                                <button
+                                  type="button"
+                                  className="btn btn-sm ac-btn--danger"
+                                  disabled={rowBusy}
+                                  onClick={() => {
+                                    setActionMsg(null);
+                                    setRejectCourse(course);
+                                  }}
+                                >
+                                  {t('adminCourses.reject')}
                                 </button>
                               )}
                               {course.status === 'published' && (
                                 <button
                                   type="button"
                                   className="btn btn-sm"
-                                  disabled={courseAction.isPending}
+                                  disabled={rowBusy}
                                   onClick={() => onCourseAction(course, 'unpublish')}
                                 >
                                   {t('adminCourses.unpublish')}
+                                </button>
+                              )}
+                              {course.status !== 'archived' && (
+                                <button
+                                  type="button"
+                                  className="btn btn-sm"
+                                  disabled={rowBusy}
+                                  onClick={() => onCourseAction(course, 'archive')}
+                                >
+                                  {t('adminCourses.archive')}
+                                </button>
+                              )}
+                              {course.status === 'archived' && (
+                                <button
+                                  type="button"
+                                  className="btn btn-sm"
+                                  disabled={rowBusy}
+                                  onClick={() => onCourseAction(course, 'unarchive')}
+                                >
+                                  {t('adminCourses.unarchive')}
                                 </button>
                               )}
                             </div>
@@ -500,28 +922,59 @@ export default function AdminCourses(): JSX.Element {
             </div>
           )}
 
-          {data && total > 0 && (
+          {showPager && (
             <div className="ac-pager">
-              <button
-                type="button"
-                className="btn btn-sm"
-                disabled={page <= 1 || courses.isFetching}
-                onClick={() => setPage(page - 1)}
-              >
-                {t('admin.prev')}
-              </button>
-              <span className="muted">
-                {t('admin.showing')} {rangeFrom}–{rangeTo} {t('admin.of')} {total}
-              </span>
-              <button
-                type="button"
-                className="btn btn-sm"
-                disabled={isLastPage || courses.isFetching}
-                onClick={() => setPage(page + 1)}
-              >
-                {t('admin.next')}
-              </button>
+              <div className="ac-pager__nav">
+                <button
+                  type="button"
+                  className="btn btn-sm"
+                  disabled={page <= 1 || courses.isFetching}
+                  onClick={() => setParams({ page: page > 2 ? String(page - 1) : null })}
+                >
+                  {t('admin.prev')}
+                </button>
+                <span className="muted">
+                  {t('adminCourses.showing')} {rangeFrom}–{rangeTo} {t('admin.of')} {total}
+                </span>
+                <button
+                  type="button"
+                  className="btn btn-sm"
+                  disabled={isLastPage || courses.isFetching}
+                  onClick={() => setParams({ page: String(page + 1) })}
+                >
+                  {t('admin.next')}
+                </button>
+              </div>
+              <label className="ac-pager__limit" htmlFor="ac-courses-limit">
+                {t('adminCourses.perPage')}
+                <select
+                  id="ac-courses-limit"
+                  className="input"
+                  value={limit}
+                  disabled={courses.isFetching}
+                  onChange={(e) => {
+                    setLimit(Number(e.target.value));
+                    // Смена размера страницы возвращает на первую.
+                    setParams({ page: null });
+                  }}
+                >
+                  {PAGE_LIMITS.map((value) => (
+                    <option key={value} value={value}>
+                      {value}
+                    </option>
+                  ))}
+                </select>
+              </label>
             </div>
+          )}
+
+          {/* Модалка отклонения: монтируется только для выбранного курса. */}
+          {rejectCourse && (
+            <RejectDialog
+              course={rejectCourse}
+              onClose={() => setRejectCourse(null)}
+              onDone={onRejected}
+            />
           )}
         </main>
       </div>
