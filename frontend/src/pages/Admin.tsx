@@ -1,4 +1,4 @@
-import { type FormEvent, useEffect, useMemo, useState } from 'react';
+import { type FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
@@ -16,7 +16,17 @@ import {
   reviewQueue,
   updateAdminSettings,
 } from '../api/client';
-import type { Invite, ModerationDecision, PaymentJournalItem, PaymentStatus } from '../api/client';
+// T51: список/отзыв приглашений и возврат платежа — отдельный модуль,
+// чтобы не трогать client.ts (правило волны P6).
+import { listInvites, refundPayment, revokeInvite } from '../api/adminActions';
+import type { AdminInviteRow, AdminInviteStatus } from '../api/adminActions';
+import type {
+  Course,
+  Invite,
+  ModerationDecision,
+  PaymentJournalItem,
+  PaymentStatus,
+} from '../api/client';
 import { t } from '../i18n/t';
 import type { RuKey } from '../i18n/t';
 // Стили страницы изолированы в styles/admin.css — общий styles.css не трогаем.
@@ -48,6 +58,28 @@ const STATUS_LABEL: Record<PaymentStatus, RuKey> = {
 /** Значение limit по умолчанию (контракт: 20, максимум 100). */
 const DEFAULT_LIMIT = 20;
 
+/** Размер страницы приглашений: постановка T51 ограничивает limit диапазоном 10–20. */
+const INVITES_LIMIT = 10;
+
+/** Русские подписи статусов приглашений — ключи из словаря T02. */
+const INVITE_STATUS_LABEL: Record<AdminInviteStatus, RuKey> = {
+  sent: 'admin.inviteStatusSent',
+  accepted: 'admin.inviteStatusAccepted',
+  expired: 'admin.inviteStatusExpired',
+  revoked: 'admin.inviteStatusRevoked',
+};
+
+/**
+ * Курс очереди модерации: аддитивные поля T48 (teacherEmail/modulesCount/
+ * lessonsCount) появятся после его выхода — до тех пор их может не быть,
+ * поэтому типизируем как опциональные и не падаем при отсутствии.
+ */
+type QueueCourse = Course & {
+  teacherEmail?: string;
+  modulesCount?: number;
+  lessonsCount?: number;
+};
+
 /** Размер страницы выгрузки CSV: контракт разрешает limit до 100. */
 const EXPORT_PAGE_SIZE = 100;
 
@@ -56,6 +88,22 @@ const EXPORT_MAX_PAGES = 50;
 
 function isPaymentStatus(value: string | null): value is PaymentStatus {
   return value !== null && (PAYMENT_STATUSES as readonly string[]).includes(value);
+}
+
+/** Прошла ли дата; некорректную дату считаем «не истекло» — статус не подменяем. */
+function isInviteExpired(expiresAt: string): boolean {
+  const time = new Date(expiresAt).getTime();
+  return !Number.isNaN(time) && time < Date.now();
+}
+
+/**
+ * Отображаемый статус приглашения: сырой `sent` с истёкшим expiresAt
+ * показываем как «Истекло» (бэкенд статус не пересчитывает — контракт T47).
+ * Сырой `expired` из хранилища тоже выводим как «Истекло».
+ */
+function inviteDisplayStatus(item: Pick<AdminInviteRow, 'status' | 'expiresAt'>): AdminInviteStatus {
+  if (item.status === 'sent' && isInviteExpired(item.expiresAt)) return 'expired';
+  return item.status;
 }
 
 /**
@@ -232,6 +280,15 @@ export default function Admin(): JSX.Element {
     retry: false,
   });
 
+  // ---- Приглашения: список с пагинацией (T51, контракт T47) ----
+  const [invitesPage, setInvitesPage] = useState(1);
+  const invites = useQuery({
+    queryKey: ['admin-invites', { page: invitesPage, limit: INVITES_LIMIT }],
+    queryFn: () => listInvites({ page: invitesPage, limit: INVITES_LIMIT }),
+    // 4xx — не временный сбой, ретраим только сетевые ошибки (как в журнале).
+    retry: (failureCount, error) => !(error instanceof ApiError) && failureCount < 2,
+  });
+
   // ---- Справочник курсов для фильтра: накапливаем из загруженных страниц журнала.
   // Обоснование выбора источника — в отчёте T08 (без дополнительного запроса).
   const [courseOptions, setCourseOptions] = useState<Record<string, string>>({});
@@ -347,6 +404,39 @@ export default function Admin(): JSX.Element {
     setTokenCopyError(ok ? '' : t('common.error'));
   }
 
+  // ---- Список приглашений: отзыв (T51) ----
+  const [inviteNotice, setInviteNotice] = useState('');
+  const [revokeErrors, setRevokeErrors] = useState<Record<string, string>>({});
+
+  const revokeMutation = useMutation({
+    mutationFn: (id: string) => revokeInvite(id),
+    onSuccess: (_data, id) => {
+      // Строка отозвана: ошибок по ней больше нет, показываем «тост» и refetch.
+      setRevokeErrors((prev) => {
+        if (!prev[id]) return prev;
+        const next = { ...prev };
+        delete next[id];
+        return next;
+      });
+      setInviteNotice(t('admin.inviteRevokedDone'));
+      // Отозвали последнюю строку страницы — возвращаемся на предыдущую.
+      const data = invites.data;
+      if (data && data.items.length === 1 && invitesPage > 1) setInvitesPage(invitesPage - 1);
+      void qc.invalidateQueries({ queryKey: ['admin-invites'] });
+    },
+    onError: (e: unknown, id) => {
+      setInviteNotice('');
+      // 404/409 backend отдаёт по-русски — показываем его текст (схема adminUsers).
+      setRevokeErrors((prev) => ({ ...prev, [id]: errorText(e) }));
+    },
+  });
+
+  function onRevokeInvite(id: string): void {
+    if (!window.confirm(t('admin.confirmInviteRevoke'))) return;
+    setInviteNotice('');
+    revokeMutation.mutate(id);
+  }
+
   // ---- Очередь модерации ----
   // Комментарий и ошибка валидации — по каждому курсу отдельно.
   const [comments, setComments] = useState<Record<string, string>>({});
@@ -422,6 +512,53 @@ export default function Admin(): JSX.Element {
     window.setTimeout(() => setCopiedPaymentId((prev) => (prev === id ? '' : prev)), 2000);
   }
 
+  // ---- Детали платежа и возврат средств (T51, контракт T47) ----
+  const [paymentDetails, setPaymentDetails] = useState<PaymentJournalItem | null>(null);
+  const [refundError, setRefundError] = useState('');
+  const [refundNotice, setRefundNotice] = useState('');
+  const paymentTitleRef = useRef<HTMLHeadingElement | null>(null);
+
+  function openPaymentDetails(item: PaymentJournalItem): void {
+    setPaymentDetails(item);
+    setRefundError('');
+  }
+
+  function closePaymentDetails(): void {
+    setPaymentDetails(null);
+    setRefundError('');
+  }
+
+  // Пока модалка открыта: фокус — на заголовке (модалкой можно управлять
+  // с клавиатуры), Esc — закрытие. Обработчик снимается вместе с модалкой.
+  useEffect(() => {
+    if (!paymentDetails) return;
+    paymentTitleRef.current?.focus();
+    function onKeyDown(e: KeyboardEvent): void {
+      if (e.key === 'Escape') closePaymentDetails();
+    }
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [paymentDetails]);
+
+  const refundMutation = useMutation({
+    mutationFn: (id: string) => refundPayment(id),
+    onSuccess: () => {
+      // Успех: модалка закрывается, в секции журнала — «тост», выборка refetch.
+      setPaymentDetails(null);
+      setRefundError('');
+      setRefundNotice(t('admin.refundDone'));
+      void qc.invalidateQueries({ queryKey: ['admin-payments'] });
+    },
+    // Ошибки API (409 — уже возвращён, 502 — отказ провайдера) — текстом в модалке.
+    onError: (e: unknown) => setRefundError(errorText(e)),
+  });
+
+  function onRefundPayment(id: string): void {
+    if (!window.confirm(t('admin.confirmRefund'))) return;
+    setRefundNotice('');
+    refundMutation.mutate(id);
+  }
+
   // ---- Производные значения журнала ----
   const journalData = journal.data;
   const journalTotal = journalData?.total ?? 0;
@@ -429,6 +566,18 @@ export default function Admin(): JSX.Element {
   const rangeTo = Math.min(page * limit, journalTotal);
   const isLastPage = journalTotal > 0 && rangeTo >= journalTotal;
   const showPager = !!journalData && (journalTotal > 0 || page > 1);
+
+  // ---- Производные значения списка приглашений ----
+  const invitesData = invites.data;
+  const invitesTotal = invitesData?.total ?? 0;
+  const invitesRangeFrom = invitesTotal === 0 ? 0 : (invitesPage - 1) * INVITES_LIMIT + 1;
+  const invitesRangeTo = Math.min(invitesPage * INVITES_LIMIT, invitesTotal);
+  const invitesLastPage = invitesTotal > 0 && invitesRangeTo >= invitesTotal;
+  // Пагинатор прячем только на пустой первой странице (как в журнале).
+  const showInvitesPager = !!invitesData && (invitesTotal > 0 || invitesPage > 1);
+  const revokePendingId = revokeMutation.isPending ? revokeMutation.variables : undefined;
+  // Очередь модерации: поля T48 могут ещё не приходить — берём безопасный вид.
+  const queueItems = (queue.data ?? []) as QueueCourse[];
 
   return (
     <div className="wrap">
@@ -474,7 +623,7 @@ export default function Admin(): JSX.Element {
 
         {queue.data && queue.data.length > 0 && (
           <ul className="admin-queue list teach-list">
-            {queue.data.map((c) => (
+            {queueItems.map((c) => (
               <li key={c.id} className="card admin-queue-card l-item">
                 <div className="admin-queue-card__head">
                   <strong>{c.title}</strong>
@@ -482,11 +631,24 @@ export default function Admin(): JSX.Element {
                 </div>
                 <dl className="admin-meta">
                   <div>
-                    <dt>{t('course.teacher')}</dt>
+                    <dt>{t('admin.queueTeacher')}</dt>
                     <dd>
-                      <code>{shortId(c.teacherId)}</code>
+                      {/* teacherEmail приходит после T48: до этого — прежний короткий id. */}
+                      {c.teacherEmail ? c.teacherEmail : <code>{shortId(c.teacherId)}</code>}
                     </dd>
                   </div>
+                  {typeof c.modulesCount === 'number' && (
+                    <div>
+                      <dt>{t('admin.queueModules')}</dt>
+                      <dd>{c.modulesCount}</dd>
+                    </div>
+                  )}
+                  {typeof c.lessonsCount === 'number' && (
+                    <div>
+                      <dt>{t('admin.queueLessons')}</dt>
+                      <dd>{c.lessonsCount}</dd>
+                    </div>
+                  )}
                   <div>
                     <dt>{t('course.price')}</dt>
                     {/* Это цена курса — для неё «Бесплатно» при 0 уместно (как в каталоге). */}
@@ -520,6 +682,10 @@ export default function Admin(): JSX.Element {
                   >
                     {t('admin.reject')}
                   </button>
+                  {/* Ссылка на публичную страницу курса — посмотреть перед решением. */}
+                  <Link className="btn" to={`/courses/${c.slug}`}>
+                    {t('admin.queueOpen')}
+                  </Link>
                 </div>
                 {commentErrors[c.id] && (
                   <p role="alert" className="error">
@@ -651,6 +817,11 @@ export default function Admin(): JSX.Element {
             {exportMsg.text}
           </p>
         )}
+        {refundNotice && (
+          <p role="status" className="admin-notice">
+            {refundNotice}
+          </p>
+        )}
 
         {journal.isLoading && <p>{t('admin.loading')}</p>}
         {journal.isError && (
@@ -694,6 +865,8 @@ export default function Admin(): JSX.Element {
                   <th scope="col">{t('admin.colProvider')}</th>
                   <th scope="col">{t('admin.colStatus')}</th>
                   <th scope="col">{t('admin.colPaymentId')}</th>
+                  {/* Ключа «Действия» у журнала нет: заголовком служит admin.paymentOpen. */}
+                  <th scope="col">{t('admin.paymentOpen')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -734,6 +907,15 @@ export default function Admin(): JSX.Element {
                       {copiedPaymentId === item.id && (
                         <span className="admin-copied">{t('common.done')}</span>
                       )}
+                    </td>
+                    <td data-label={t('admin.paymentOpen')}>
+                      <button
+                        type="button"
+                        className="btn btn-sm"
+                        onClick={() => openPaymentDetails(item)}
+                      >
+                        {t('admin.paymentOpen')}
+                      </button>
                     </td>
                   </tr>
                 ))}
@@ -852,7 +1034,225 @@ export default function Admin(): JSX.Element {
             )}
           </div>
         )}
+
+        {/* ---------- Список выданных приглашений (T51) ---------- */}
+        {invites.isLoading && <p>{t('admin.loading')}</p>}
+        {invites.isError && (
+          <div className="admin-error" role="alert">
+            <p className="error">{errorText(invites.error)}</p>
+            <button type="button" className="btn" onClick={() => void invites.refetch()}>
+              {t('common.retry')}
+            </button>
+          </div>
+        )}
+        {invitesData && (
+          <p className="muted admin-invites-total">
+            {t('admin.invitesTotal')}: {invitesTotal}
+          </p>
+        )}
+        {inviteNotice && (
+          <p role="status" className="admin-notice">
+            {inviteNotice}
+          </p>
+        )}
+        {invitesData && invitesData.items.length === 0 && (
+          <p className="muted">{t('admin.invitesEmpty')}</p>
+        )}
+
+        {invitesData && invitesData.items.length > 0 && (
+          <div
+            className="admin-table-wrap"
+            role="region"
+            aria-label={t('admin.invites')}
+            tabIndex={0}
+          >
+            <table className="admin-table admin-table--invites">
+              <thead>
+                <tr>
+                  <th scope="col">{t('admin.invitesColEmail')}</th>
+                  <th scope="col">{t('admin.invitesColStatus')}</th>
+                  <th scope="col">{t('admin.invitesColCreated')}</th>
+                  <th scope="col">{t('admin.invitesColExpires')}</th>
+                  <th scope="col">{t('admin.invitesColActions')}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {invitesData.items.map((item) => {
+                  const displayStatus = inviteDisplayStatus(item);
+                  return (
+                    <tr key={item.id}>
+                      <td
+                        data-label={t('admin.invitesColEmail')}
+                        className="admin-td-email"
+                      >
+                        {item.email}
+                      </td>
+                      <td data-label={t('admin.invitesColStatus')}>
+                        <span className={`admin-badge admin-badge--${displayStatus}`}>
+                          {t(INVITE_STATUS_LABEL[displayStatus])}
+                        </span>
+                      </td>
+                      <td data-label={t('admin.invitesColCreated')}>
+                        {formatDate(item.createdAt)}
+                      </td>
+                      <td data-label={t('admin.invitesColExpires')}>
+                        {formatDate(item.expiresAt)}
+                      </td>
+                      <td data-label={t('admin.invitesColActions')}>
+                        {/* Отзыв доступен только для сырого sent — как и на backend. */}
+                        {item.status === 'sent' ? (
+                          <button
+                            type="button"
+                            className="btn btn-sm"
+                            disabled={revokePendingId === item.id}
+                            onClick={() => onRevokeInvite(item.id)}
+                          >
+                            {t('admin.inviteRevoke')}
+                          </button>
+                        ) : (
+                          <span className="muted">—</span>
+                        )}
+                        {revokeErrors[item.id] && (
+                          <p role="alert" className="error admin-row-error">
+                            {revokeErrors[item.id]}
+                          </p>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {showInvitesPager && invitesData && (
+          <div className="admin-pager">
+            <button
+              type="button"
+              className="btn"
+              disabled={invitesPage <= 1 || invites.isFetching}
+              onClick={() => setInvitesPage(invitesPage - 1)}
+            >
+              {t('admin.prev')}
+            </button>
+            <span className="muted">
+              {t('admin.showing')} {invitesRangeFrom}–{invitesRangeTo} {t('admin.of')}{' '}
+              {invitesTotal}
+            </span>
+            <button
+              type="button"
+              className="btn"
+              disabled={invitesLastPage || invites.isFetching}
+              onClick={() => setInvitesPage(invitesPage + 1)}
+            >
+              {t('admin.next')}
+            </button>
+          </div>
+        )}
       </section>
+
+      {/* ---------- Модалка «Детали платежа» (T51) ---------- */}
+      {paymentDetails && (
+        <div
+          className="admin-modal-overlay"
+          // Клик по подложке (не по содержимому) закрывает модалку.
+          onClick={(e) => {
+            if (e.target === e.currentTarget) closePaymentDetails();
+          }}
+        >
+          <div
+            className="admin-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="admin-payment-details-title"
+          >
+            <div className="admin-modal__head">
+              <h3 id="admin-payment-details-title" ref={paymentTitleRef} tabIndex={-1}>
+                {t('admin.paymentDetails')}
+              </h3>
+              <button type="button" className="btn btn-sm" onClick={closePaymentDetails}>
+                {t('common.close')}
+              </button>
+            </div>
+
+            <dl className="admin-modal-meta">
+              <div>
+                <dt>{t('admin.paymentStudent')}</dt>
+                <dd>
+                  {/* Как в журнале: имя → email → короткий id. */}
+                  {paymentDetails.studentName ||
+                    paymentDetails.studentEmail ||
+                    shortId(paymentDetails.studentId)}
+                </dd>
+              </div>
+              <div>
+                <dt>{t('admin.paymentCourse')}</dt>
+                <dd>{paymentDetails.courseTitle}</dd>
+              </div>
+              <div>
+                <dt>{t('admin.paymentProvider')}</dt>
+                <dd>{paymentDetails.provider}</dd>
+              </div>
+              <div>
+                <dt>{t('admin.paymentProviderId')}</dt>
+                <dd>
+                  <code>{paymentDetails.providerPaymentId}</code>
+                </dd>
+              </div>
+              <div>
+                <dt>{t('admin.paymentAmount')}</dt>
+                <dd>{formatMoney(paymentDetails.amountCents)}</dd>
+              </div>
+              <div>
+                <dt>{t('admin.paymentFee')}</dt>
+                <dd>{formatMoney(paymentDetails.platformFeeCents)}</dd>
+              </div>
+              <div>
+                <dt>{t('admin.paymentTeacherAmount')}</dt>
+                <dd>{formatMoney(paymentDetails.teacherAmountCents)}</dd>
+              </div>
+              <div>
+                <dt>{t('admin.colStatus')}</dt>
+                <dd>
+                  <span className={`admin-badge admin-badge--${paymentDetails.status}`}>
+                    {t(STATUS_LABEL[paymentDetails.status])}
+                  </span>
+                </dd>
+              </div>
+              <div>
+                <dt>{t('admin.paymentCreated')}</dt>
+                <dd>{formatDate(paymentDetails.createdAt)}</dd>
+              </div>
+              <div>
+                <dt>{t('admin.paymentProcessed')}</dt>
+                <dd>{formatDate(paymentDetails.processedAt)}</dd>
+              </div>
+            </dl>
+
+            {/* Ошибка возврата (409/502 и пр.) — текстом в модалке. */}
+            {refundError && (
+              <p role="alert" className="error">
+                {refundError}
+              </p>
+            )}
+
+            {/* Возврат доступен только для успешного платежа — как и на backend. */}
+            {paymentDetails.status === 'succeeded' && (
+              <div className="admin-modal__actions">
+                <button
+                  type="button"
+                  className="btn admin-btn--danger"
+                  disabled={refundMutation.isPending}
+                  onClick={() => onRefundPayment(paymentDetails.id)}
+                >
+                  {refundMutation.isPending ? t('admin.loading') : t('admin.paymentRefund')}
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
         </main>
       </div>
     </div>
