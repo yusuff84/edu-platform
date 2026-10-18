@@ -14,21 +14,34 @@ import (
 
 var slugRe = regexp.MustCompile(`^[a-z0-9-]{3,120}$`)
 
-// makeSlug строит уникальный slug; кириллицу не транслитерируем —
-// используем префикс course- + короткий id, кастомный slug валидируем.
-func (a *App) makeSlug(custom string) (string, bool) {
+// makeSlug строит уникальный slug (T41): кастомный транслитерируется
+// (translitSlug) и обязан попасть в slugRe, пустой — собирается из названия
+// курса (slugFromTitle). Занятость авто-slug разрешается суффиксами -2…-9,
+// затем случайным course-<hex8> — как раньше.
+func (a *App) makeSlug(custom, title string) (string, bool) {
 	if strings.TrimSpace(custom) != "" {
-		s := strings.ToLower(strings.TrimSpace(custom))
+		s := translitSlug(custom)
 		if !slugRe.MatchString(s) || a.Store.SlugTaken(s) {
 			return "", false
 		}
 		return s, true
 	}
-	base := "course-" + strings.ReplaceAll(uuid.NewString(), "-", "")[:8]
-	for a.Store.SlugTaken(base) {
-		base = "course-" + strings.ReplaceAll(uuid.NewString(), "-", "")[:8]
+	// Короткая/пустая основа (slugFromTitle вернула "") — сразу course-<hex8>.
+	if auto := slugFromTitle(title); auto != "" {
+		if !a.Store.SlugTaken(auto) {
+			return auto, true
+		}
+		for i := 2; i <= 9; i++ {
+			if cand := slugWithSuffix(auto, i); !a.Store.SlugTaken(cand) {
+				return cand, true
+			}
+		}
 	}
-	return base, true
+	fallback := "course-" + strings.ReplaceAll(uuid.NewString(), "-", "")[:8]
+	for a.Store.SlugTaken(fallback) {
+		fallback = "course-" + strings.ReplaceAll(uuid.NewString(), "-", "")[:8]
+	}
+	return fallback, true
 }
 
 type createCourseRequest struct {
@@ -62,7 +75,7 @@ func (a *App) TeacherCreateCourse(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "Цена не может быть отрицательной")
 		return
 	}
-	slug, valid := a.makeSlug(req.Slug)
+	slug, valid := a.makeSlug(req.Slug, req.Title)
 	if !valid {
 		writeErr(w, http.StatusBadRequest, "Некорректный или занятый slug (латиница, цифры, дефис, 3–120 символов)")
 		return

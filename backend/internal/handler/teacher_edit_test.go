@@ -283,8 +283,10 @@ func TestSlugConflictIs400Consistent(t *testing.T) {
 		t.Fatalf("POST занятый slug: status=%d, ждали 400 (валидация тела)", rec.Code)
 	}
 	// POST: синтаксически невалидный slug — тоже 400 (одна категория — 400).
+	// T41: кириллица теперь транслитерируется, поэтому невалиден slug, от
+	// которого после транслитерации не остаётся и 3 символов («!!!» → пусто).
 	if rec := doJSON(t, router, http.MethodPost, "/api/v1/teacher/courses",
-		`{"title":"Новый","description":"О","slug":"Плохой Slug"}`, withCookie(cookie)); rec.Code != http.StatusBadRequest {
+		`{"title":"Новый","description":"О","slug":"!!!"}`, withCookie(cookie)); rec.Code != http.StatusBadRequest {
 		t.Fatalf("POST невалидный slug: status=%d, ждали 400", rec.Code)
 	}
 
