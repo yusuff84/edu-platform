@@ -61,7 +61,21 @@ func (a *App) CreateEnrollment(w http.ResponseWriter, r *http.Request) {
 			ProviderPaymentID: "free-" + u.ID + "-" + c.ID,
 			Status:            repo.PaymentSucceeded,
 		})
-		if err != nil && !errors.Is(err, repo.ErrAlreadyExists) {
+		switch {
+		case err == nil:
+			// Первая покупка: платёж только что создан.
+		case errors.Is(err, repo.ErrAlreadyExists):
+			// T35: providerPaymentId бесплатного платежа детерминирован,
+			// поэтому повторная покупка после возврата средств снова приходит
+			// сюда. CreatePayment возвращает (nil, ErrAlreadyExists) — раньше
+			// это была паника на p.ID → 500. Переиспользуем тот же платёж:
+			// ниже он возвращается в succeeded, доступ открывает EnsureEnrollment.
+			p = freePaymentByCourse(a.Store, u.ID, c.ID)
+			if p == nil {
+				writeErr(w, http.StatusInternalServerError, "Не удалось оформить бесплатный курс")
+				return
+			}
+		default:
 			writeErr(w, http.StatusInternalServerError, "Не удалось оформить бесплатный курс")
 			return
 		}
@@ -112,6 +126,21 @@ func enrollmentResponse(p *repo.Payment, redirectURL string, active bool) map[st
 		"redirectUrl": redirectURL, "amountCents": p.AmountCents,
 		"status": p.Status, "enrollmentActive": active,
 	}
+}
+
+// freePaymentByCourse ищет уже выданный бесплатный платёж ученика по курсу
+// (T35). Ключ детерминирован — "free-<ученик>-<курс>", поэтому при повторной
+// покупке после возврата средств новый платёж не создаётся, а переиспользуется
+// старый; nil означает расхождение данных (CreatePayment сказал «уже есть»,
+// а платежа не нашлось) — вызывающий отвечает 500.
+func freePaymentByCourse(s repo.StoreAPI, studentID, courseID string) *repo.Payment {
+	want := "free-" + studentID + "-" + courseID
+	for _, p := range s.ListPaymentsByStudent(studentID) {
+		if p.ProviderPaymentID == want {
+			return p
+		}
+	}
+	return nil
 }
 
 // PaymentWebhook — POST /payments/webhook/{provider}: проверка подписи и
