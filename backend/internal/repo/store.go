@@ -17,6 +17,11 @@ var ErrAlreadyExists = errors.New("запись уже существует")
 // ErrNotFound возвращается, когда запись не найдена (SetEnrollmentStatus).
 var ErrNotFound = errors.New("запись не найдена")
 
+// ErrConflict возвращается при конфликте с целевым состоянием ресурса
+// (например, отзыв приглашения не из статуса sent, T47). Handler мапит его
+// на 409 — как конфликты «вне статуса» в остальном API.
+var ErrConflict = errors.New("конфликт состояния записи")
+
 // Store — потокобезопасное in-memory хранилище MVP.
 // Границы методов повторяют будущие pgx-репозитории.
 type Store struct {
@@ -207,6 +212,61 @@ func (s *Store) AcceptInvite(inv *TeacherInvite) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	inv.Status = InviteAccepted
+}
+
+// ListInvites возвращает приглашения новыми первыми с пагинацией (T47):
+// createdAt DESC, page 1-based, limit 1..100 (по умолчанию 20); total —
+// количество до пагинации. Наружу уходят снимки, а не живые указатели карты.
+func (s *Store) ListInvites(page, limit int) ([]*TeacherInvite, int) {
+	page, limit = clampPageLimit(page, limit)
+
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	matched := make([]*TeacherInvite, 0, len(s.invites))
+	for _, inv := range s.invites {
+		matched = append(matched, inv)
+	}
+	sort.Slice(matched, func(i, j int) bool {
+		return matched[i].CreatedAt.After(matched[j].CreatedAt)
+	})
+
+	total := len(matched)
+	start := (page - 1) * limit
+	if start > total {
+		start = total
+	}
+	end := start + limit
+	if end > total {
+		end = total
+	}
+	items := make([]*TeacherInvite, 0, end-start)
+	for _, inv := range matched[start:end] {
+		snapshot := *inv
+		items = append(items, &snapshot)
+	}
+	return items, total
+}
+
+// RevokeInvite переводит приглашение из статуса sent в revoked (T47).
+// Проверка статуса и запись — одна критическая секция под мьютексом стора.
+// ErrNotFound — приглашения с таким id нет; ErrConflict — статус не sent
+// (accepted/expired/revoked — отзывать нечего).
+func (s *Store) RevokeInvite(id string) (*TeacherInvite, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, inv := range s.invites {
+		if inv.ID != id {
+			continue
+		}
+		if inv.Status != InviteSent {
+			return nil, ErrConflict
+		}
+		inv.Status = InviteRevoked
+		snapshot := *inv
+		return &snapshot, nil
+	}
+	return nil, ErrNotFound
 }
 
 // ---- Courses ----
@@ -756,6 +816,23 @@ func (s *Store) GetPaymentByProviderID(id string) (*Payment, bool) {
 	return p, ok
 }
 
+// GetPaymentByID ищет платёж по внутреннему id (T47: админский возврат
+// средств принимает внутренний UUID платежа, а не providerPaymentId).
+// Возвращается снимок, а не живой указатель карты: в Postgres scanPayment и
+// так создаёт новую структуру, а in-memory копия защищает читателя от гонки
+// с параллельной записью статуса (возврат/вебхук) — проверка гонки T47
+// (-race) читает статус ВНЕ a.webhookMu, когда провайдер ещё не вызван.
+func (s *Store) GetPaymentByID(id string) (*Payment, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	p, ok := s.payments[id]
+	if !ok {
+		return nil, false
+	}
+	snapshot := *p
+	return &snapshot, true
+}
+
 // FindPendingPayment ищет незавершённый платёж ученика за курс.
 func (s *Store) FindPendingPayment(studentID, courseID string) (*Payment, bool) {
 	s.mu.RLock()
@@ -769,6 +846,8 @@ func (s *Store) FindPendingPayment(studentID, courseID string) (*Payment, bool) 
 }
 
 // SetPaymentStatus меняет статус платежа, проставляя processed_at.
+// T47: refunded тоже терминальный статус — processedAt = момент возврата
+// (контракт «Возврат средств» требует заполненный processedAt в ответе).
 func (s *Store) SetPaymentStatus(id string, status PaymentStatus) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -777,7 +856,7 @@ func (s *Store) SetPaymentStatus(id string, status PaymentStatus) bool {
 		return false
 	}
 	p.Status = status
-	if status == PaymentSucceeded || status == PaymentFailed {
+	if status == PaymentSucceeded || status == PaymentFailed || status == PaymentRefunded {
 		now := time.Now().UTC()
 		p.ProcessedAt = &now
 	}

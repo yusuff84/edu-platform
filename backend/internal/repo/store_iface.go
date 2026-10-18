@@ -47,6 +47,12 @@ type StoreAPI interface {
 	CreateInvite(email, tokenHash, prefix, createdBy string, expiresAt time.Time) *TeacherInvite
 	GetInviteByTokenHash(hash string) (*TeacherInvite, bool)
 	AcceptInvite(inv *TeacherInvite)
+	// ListInvites — список приглашений для админки (T47): createdAt DESC,
+	// пагинация 1-based (limit 1..100, по умолчанию 20); total — до пагинации.
+	ListInvites(page, limit int) ([]*TeacherInvite, int)
+	// RevokeInvite отзывает приглашение из статуса sent (T47).
+	// ErrNotFound — приглашения нет; ErrConflict — статус не sent.
+	RevokeInvite(id string) (*TeacherInvite, error)
 	// Courses
 	CreateCourse(c *Course) *Course
 	GetCourseByID(id string) (*Course, bool)
@@ -127,6 +133,8 @@ type StoreAPI interface {
 	// Payments
 	CreatePayment(p *Payment) (*Payment, error)
 	GetPaymentByProviderID(id string) (*Payment, bool)
+	// GetPaymentByID — платёж по внутреннему id (T47: возврат средств).
+	GetPaymentByID(id string) (*Payment, bool)
 	FindPendingPayment(studentID, courseID string) (*Payment, bool)
 	SetPaymentStatus(id string, status PaymentStatus) bool
 	ListPaymentsJournal(f PaymentFilter) (items []PaymentJournalRow, total int, totals PaymentTotals, err error)
