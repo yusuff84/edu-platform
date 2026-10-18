@@ -6,7 +6,6 @@ package contract_test
 
 import (
 	"net/http"
-	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -106,7 +105,8 @@ func TestTeacherCourseLifecycle(t *testing.T) {
 		t.Fatal("не удалось выдать роль teacher")
 	}
 
-	// Создание курса: 201, автосlug course-xxxxxxxx.
+	// Создание курса: 201, автоslug из названия (T41: кириллица
+	// транслитерируется) — «Тестовый курс» → testovyy-kurs.
 	rec = doRequest(t, router, http.MethodPost, "/api/v1/teacher/courses", map[string]any{
 		"title": "Тестовый курс", "description": "Описание", "priceCents": 5000,
 	}, teacherCookies)
@@ -117,8 +117,8 @@ func TestTeacherCourseLifecycle(t *testing.T) {
 	decodeBody(t, rec, &course)
 	courseID, _ := course["id"].(string)
 	slug, _ := course["slug"].(string)
-	if !regexp.MustCompile(`^course-[0-9a-f]{8}$`).MatchString(slug) {
-		t.Fatalf("автосlug не вида course-xxxxxxxx: %q", slug)
+	if slug != "testovyy-kurs" {
+		t.Fatalf("автосlug не из названия курса: %q, ждали testovyy-kurs", slug)
 	}
 	if course["status"] != "draft" {
 		t.Fatalf("новый курс должен быть draft: %v", course["status"])

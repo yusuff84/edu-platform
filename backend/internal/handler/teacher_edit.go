@@ -118,7 +118,8 @@ func (a *App) TeacherUpdateCourse(w http.ResponseWriter, r *http.Request) {
 		upd.PriceCents = req.PriceCents
 	}
 	if req.Slug != nil {
-		s := strings.ToLower(strings.TrimSpace(*req.Slug))
+		// T41: кириллица транслитерируется в латиницу (как в POST-создании).
+		s := translitSlug(*req.Slug)
 		if !slugRe.MatchString(s) {
 			writeErr(w, http.StatusBadRequest, "Некорректный slug (латиница, цифры, дефис, 3–120 символов)")
 			return
