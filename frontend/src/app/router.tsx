@@ -24,6 +24,8 @@ const Admin = lazy(() => import('../pages/Admin'));
 const AdminUsers = lazy(() => import('../pages/AdminUsers'));
 const AdminCourses = lazy(() => import('../pages/AdminCourses'));
 const AdminStats = lazy(() => import('../pages/AdminStats'));
+// T49: экран «Записи на курсы» — отдельная страница подраздела.
+const AdminEnrollments = lazy(() => import('../pages/AdminEnrollments'));
 const CourseStudents = lazy(() => import('../pages/CourseStudents'));
 const Profile = lazy(() => import('../pages/Profile'));
 // В Cabinets.tsx нет default-экспорта — берём именованный TeacherCab.
@@ -214,6 +216,7 @@ export const router = createBrowserRouter([
       { path: '/admin/users', element: <RequireRole roles={['admin']}><AdminUsers /></RequireRole> },
       { path: '/admin/courses', element: <RequireRole roles={['admin']}><AdminCourses /></RequireRole> },
       { path: '/admin/stats', element: <RequireRole roles={['admin']}><AdminStats /></RequireRole> },
+      { path: '/admin/enrollments', element: <RequireRole roles={['admin']}><AdminEnrollments /></RequireRole> },
       // Ученики конкретного курса — автору курса и админу.
       { path: '/teach/:id/students', element: <RequireRole roles={['teacher', 'admin']}><CourseStudents /></RequireRole> },
       // Личный кабинет ученика: профиль и история платежей.
