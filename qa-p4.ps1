@@ -153,6 +153,23 @@ function Invoke-Api {
 # ---- Новые сессии -----------------------------------------------------------
 function New-Session { return New-Object Microsoft.PowerShell.Commands.WebRequestSession }
 
+# ---- Обёртка для /auth/* с повтором на rate-limit ---------------------------
+# Стенд ограничивает аутентификацию (RATE_LIMIT_AUTH_PER_MIN, по IP). Если
+# скрипт запускают сразу после qa-abc/qa-p3, приходит 429 «слишком много
+# запросов» — ждём окно и повторяем, чтобы приёмка не зависела от порядка
+# запуска скриптов.
+function Invoke-Auth {
+    param([string]$Method, [string]$Path, [object]$Body = $null, $Session = $null)
+    $r = $null
+    for ($i = 1; $i -le 4; $i++) {
+        $r = Invoke-Api -Method $Method -Path $Path -Body $Body -Session $Session
+        if ($r.Status -ne 429) { return $r }
+        Write-Host "  (лимит аутентификации: пауза 20 с, попытка $i)" -ForegroundColor DarkYellow
+        Start-Sleep -Seconds 20
+    }
+    return $r
+}
+
 # =============================================================================
 $stamp = (Get-Date).ToString("yyyyMMddHHmmss") + "-" + (Get-Random -Maximum 9999)
 $teacherEmail = "p4-teacher-$stamp@example.test"
@@ -193,7 +210,7 @@ Write-Host ""
 Write-Host "--- Подготовка: админ, преподаватель, ученик ---" -ForegroundColor Cyan
 
 $adminSession = New-Session
-$r = Invoke-Api -Method POST -Path "/api/v1/auth/login" -Session $adminSession `
+$r = Invoke-Auth -Method POST -Path "/api/v1/auth/login" -Session $adminSession `
     -Body @{ email = $AdminEmail; password = $AdminPassword }
 Invoke-Check "P1. Вход админа -> 200" ($r.Status -eq 200) $r.Body
 
@@ -206,14 +223,14 @@ Invoke-Check "P2. Приглашение преподавателя -> 201 с т
     ($r.Status -eq 201 -and $inviteToken -ne "") $r.Body
 
 $teacherSession = New-Session
-$r = Invoke-Api -Method POST -Path "/api/v1/auth/register" -Session $teacherSession `
+$r = Invoke-Auth -Method POST -Path "/api/v1/auth/register" -Session $teacherSession `
     -Body @{ email = $teacherEmail; password = $password; inviteToken = $inviteToken }
 Invoke-Check "P3. Регистрация преподавателя по приглашению -> 201" `
     ($r.Status -eq 201) $r.Body
 
 $studentSession = New-Session
 $studentId = ""
-$r = Invoke-Api -Method POST -Path "/api/v1/auth/register" -Session $studentSession `
+$r = Invoke-Auth -Method POST -Path "/api/v1/auth/register" -Session $studentSession `
     -Body @{ email = $studentEmail; password = $password; displayName = $studentName }
 if ($r.Status -eq 201 -and $r.Json -ne $null) { $studentId = [string]$r.Json.id }
 Invoke-Check "P4. Регистрация ученика с displayName -> 201" `
@@ -391,7 +408,7 @@ Invoke-Check "J1. GET /admin/stats: users.blocked присутствует" `
 # J2. Подопытный пользователь.
 $dummySession = New-Session
 $dummyId = ""
-$r = Invoke-Api -Method POST -Path "/api/v1/auth/register" -Session $dummySession `
+$r = Invoke-Auth -Method POST -Path "/api/v1/auth/register" -Session $dummySession `
     -Body @{ email = $dummyEmail; password = $password }
 if ($r.Status -eq 201 -and $r.Json -ne $null) { $dummyId = [string]$r.Json.id }
 Invoke-Check "J2. Регистрация подопытного -> 201" `
@@ -411,7 +428,7 @@ Invoke-Check "J4. После блокировки users.blocked = база + 1" 
     ($blockedBase -ge 0 -and $blockedNow -eq ($blockedBase + 1)) "было $blockedBase, стало $blockedNow | $($r.Body)"
 
 # J5. Вход заблокированного -> 403 с единым текстом (T32).
-$r = Invoke-Api -Method POST -Path "/api/v1/auth/login" `
+$r = Invoke-Auth -Method POST -Path "/api/v1/auth/login" `
     -Body @{ email = $dummyEmail; password = $password }
 Invoke-Check "J5. Вход заблокированного -> 403 «Учётная запись заблокирована»" `
     ($r.Status -eq 403 -and $r.Body -match "заблокирована") $r.Body
@@ -427,7 +444,7 @@ Invoke-Check "J6. Разблокировка -> 200, users.blocked вернул�
     ($unblockOk -and $blockedAfter -eq $blockedBase) "было $blockedBase, стало $blockedAfter | $($r.Body)"
 
 $loginSession = New-Session
-$r = Invoke-Api -Method POST -Path "/api/v1/auth/login" -Session $loginSession `
+$r = Invoke-Auth -Method POST -Path "/api/v1/auth/login" -Session $loginSession `
     -Body @{ email = $dummyEmail; password = $password }
 Invoke-Check "J7. Вход после разблокировки -> 200" ($r.Status -eq 200) $r.Body
 
