@@ -120,6 +120,20 @@ cd runner   && go test ./...     # тесты песочницы
 cd frontend && npm ci && npm run build   # tsc --noEmit + vite build
 ```
 
+### Проверка runner (python3/nodejs)
+
+Тесты `cd runner && go test ./...` пропускают (`SKIP`) реальный запуск python/js,
+если интерпретаторов нет в окружении, а слой сборки `runner/Dockerfile` может
+быть взят из кэша — поэтому песочницу целиком проверяем так (из корня репозитория):
+
+```powershell
+docker run --rm -v "${PWD}\runner:/src" -w /src golang:1.24-bookworm sh -c "apt-get update -qq && apt-get install -y -qq --no-install-recommends python3 nodejs >/dev/null && go vet ./... && go test ./... -count=1 -v"
+```
+
+Ожидаемый итог — `ok runner` без единого `SKIP`/`FAIL`. Если репозиторий Debian
+недоступен из вашей сети, замените `deb.debian.org` на рабочее зеркало
+(например, `mirror.yandex.ru`) в команде `apt-get update`.
+
 Сквозной QA-скрипт (**49 проверок**, код возврата 0/1):
 
 ```bash
