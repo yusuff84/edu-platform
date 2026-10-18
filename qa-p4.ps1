@@ -231,10 +231,19 @@ Invoke-Check "P3. Регистрация преподавателя по при�
 $studentSession = New-Session
 $studentId = ""
 $r = Invoke-Auth -Method POST -Path "/api/v1/auth/register" -Session $studentSession `
-    -Body @{ email = $studentEmail; password = $password; displayName = $studentName }
+    -Body @{ email = $studentEmail; password = $password }
 if ($r.Status -eq 201 -and $r.Json -ne $null) { $studentId = [string]$r.Json.id }
-Invoke-Check "P4. Регистрация ученика с displayName -> 201" `
-    ($r.Status -eq 201 -and $studentId -ne "") $r.Body
+$regOk = ($r.Status -eq 201 -and $studentId -ne "")
+# displayName задаётся отдельно (T23): контракт регистрации лишние поля
+# отклоняет, поэтому имя — через PATCH /me/profile.
+$profileOk = $false
+if ($regOk) {
+    $r = Invoke-Api -Method PATCH -Path "/api/v1/me/profile" -Session $studentSession `
+        -Body @{ displayName = $studentName }
+    $profileOk = ($r.Status -eq 200 -and $r.Json.displayName -eq $studentName)
+}
+Invoke-Check "P4. Ученик: регистрация 201 + displayName через /me/profile" `
+    ($regOk -and $profileOk) $r.Body
 
 # =============================================================================
 Write-Host ""
@@ -248,25 +257,41 @@ if ($r.Status -eq 201 -and $r.Json -ne $null) { $courseID = [string]$r.Json.id }
 Invoke-Check "H1. Создание бесплатного курса -> 201" `
     ($r.Status -eq 201 -and $courseID -ne "") $r.Body
 
-# H2/H3. Публикация: подача на модерацию и approve админом.
-$r = Invoke-Api -Method POST -Path "/api/v1/teacher/courses/$courseID/submit" -Session $teacherSession -Body @{}
-Invoke-Check "H2. Подача курса на модерацию -> 200" ($r.Status -eq 200) $r.Body
+# H2. Программа курса: submit требует минимум один модуль и один урок.
+$moduleID = ""
+$r = Invoke-Api -Method POST -Path "/api/v1/teacher/courses/$courseID/modules" -Session $teacherSession `
+    -Body @{ title = "Модуль P4" }
+if ($r.Status -eq 201 -and $r.Json -ne $null) { $moduleID = [string]$r.Json.id }
+$lessonID = ""
+if ($moduleID -ne "") {
+    $r = Invoke-Api -Method POST -Path "/api/v1/teacher/courses/$courseID/lessons" -Session $teacherSession `
+        -Body @{ moduleId = $moduleID; title = "Урок P4"; kind = "video_text"; bodyMd = "## Урок P4" }
+    if ($r.Status -eq 201 -and $r.Json -ne $null) { $lessonID = [string]$r.Json.id }
+}
+Invoke-Check "H2. Модуль и урок курса -> 201" `
+    ($moduleID -ne "" -and $lessonID -ne "") $r.Body
 
+# H3. Подача на модерацию: draft -> review.
+$r = Invoke-Api -Method POST -Path "/api/v1/teacher/courses/$courseID/submit" -Session $teacherSession -Body @{}
+Invoke-Check "H3. Подача курса на модерацию -> 200, review" `
+    ($r.Status -eq 200 -and $r.Json.status -eq "review") $r.Body
+
+# H4. Approve админом: review -> published.
 $r = Invoke-Api -Method POST -Path "/api/v1/admin/courses/$courseID/moderate" -Session $adminSession `
     -Body @{ decision = "approve" }
-Invoke-Check "H3. Approve админом -> 200, published" `
+Invoke-Check "H4. Approve админом -> 200, published" `
     ($r.Status -eq 200 -and $r.Json.status -eq "published") $r.Body
 
-# H4. Запись ученика на бесплатный курс: платёж создаётся сразу со succeeded.
+# H5. Запись ученика на бесплатный курс: платёж создаётся сразу со succeeded.
 $freeProviderID = "free-$studentId-$courseID"
 $r = Invoke-Api -Method POST -Path "/api/v1/enrollments" -Session $studentSession `
     -Body @{ courseId = $courseID }
 $enrollOk = ($r.Status -eq 201 -and $r.Json -ne $null -and
              [string]$r.Json.providerPaymentId -eq $freeProviderID -and
              [string]$r.Json.status -eq "succeeded" -and $r.Json.enrollmentActive -eq $true)
-Invoke-Check "H4. Запись на бесплатный курс -> 201, succeeded, доступ открыт" $enrollOk $r.Body
+Invoke-Check "H5. Запись на бесплатный курс -> 201, succeeded, доступ открыт" $enrollOk $r.Body
 
-# H5. Поиск по email ученика: ровно наша запись с ключевыми полями.
+# H6. Поиск по email ученика: ровно наша запись с ключевыми полями.
 $r = Invoke-Api -Method GET -Path "/api/v1/admin/payments?q=$qStudent" -Session $adminSession
 $item = $null
 if ($r.Status -eq 200 -and @($r.Json.items).Count -eq 1) { $item = @($r.Json.items)[0] }
@@ -275,45 +300,45 @@ $itemOk = ($item -ne $null -and [string]$item.studentEmail -eq $studentEmail -an
            [string]$item.providerPaymentId -eq $freeProviderID -and
            ($item.PSObject.Properties.Name -contains "courseTitle") -and
            ($item.PSObject.Properties.Name -contains "studentName"))
-Invoke-Check "H5. q=email -> 1 платёж с полями studentEmail/courseId/status" `
+Invoke-Check "H6. q=email -> 1 платёж с полями studentEmail/courseId/status" `
     ($r.Status -eq 200 -and [int]$r.Json.total -eq 1 -and $itemOk) $r.Body
 
-# H6. Поиск без учёта регистра (email заглавными).
+# H7. Поиск без учёта регистра (email заглавными).
 $r = Invoke-Api -Method GET -Path "/api/v1/admin/payments?q=$qUpper" -Session $adminSession
-Invoke-Check "H6. q=EMAIL заглавными -> найден (без учёта регистра)" `
+Invoke-Check "H7. q=EMAIL заглавными -> найден (без учёта регистра)" `
     ($r.Status -eq 200 -and [int]$r.Json.total -eq 1) $r.Body
 
-# H7. Поиск по displayName ученика (строчными буквами).
+# H8. Поиск по displayName ученика (строчными буквами).
 $r = Invoke-Api -Method GET -Path "/api/v1/admin/payments?q=$qName" -Session $adminSession
-Invoke-Check "H7. q=displayName строчными -> найден" `
+Invoke-Check "H8. q=displayName строчными -> найден" `
     ($r.Status -eq 200 -and [int]$r.Json.total -eq 1) $r.Body
 
-# H8. Несуществующий студент -> пусто.
+# H9. Несуществующий студент -> пусто.
 $r = Invoke-Api -Method GET -Path "/api/v1/admin/payments?q=zzz-nope-$stamp" -Session $adminSession
-Invoke-Check "H8. q=несуществующий -> total=0" `
+Invoke-Check "H9. q=несуществующий -> total=0" `
     ($r.Status -eq 200 -and [int]$r.Json.total -eq 0) $r.Body
 
-# H9-H11. Период: включительные границы, будущее и прошлое отсекаются.
+# H10-H12. Период: включительные границы, будущее и прошлое отсекаются.
 $r = Invoke-Api -Method GET -Path "/api/v1/admin/payments?q=$qStudent&from=$today&to=$today" -Session $adminSession
-Invoke-Check "H9. from=сегодня&to=сегодня -> платёж входит" `
+Invoke-Check "H10. from=сегодня&to=сегодня -> платёж входит" `
     ($r.Status -eq 200 -and [int]$r.Json.total -eq 1) $r.Body
 
 $r = Invoke-Api -Method GET -Path "/api/v1/admin/payments?q=$qStudent&from=$tomorrow" -Session $adminSession
-Invoke-Check "H10. from=завтра -> платёж отсекается" `
+Invoke-Check "H11. from=завтра -> платёж отсекается" `
     ($r.Status -eq 200 -and [int]$r.Json.total -eq 0) $r.Body
 
 $r = Invoke-Api -Method GET -Path "/api/v1/admin/payments?q=$qStudent&to=$yesterday" -Session $adminSession
-Invoke-Check "H11. to=вчера -> платёж отсекается" `
+Invoke-Check "H12. to=вчера -> платёж отсекается" `
     ($r.Status -eq 200 -and [int]$r.Json.total -eq 0) $r.Body
 
-# H12-H13. Ошибки разбора.
+# H13-H14. Ошибки разбора.
 $r = Invoke-Api -Method GET -Path "/api/v1/admin/payments?from=2026-13-45&q=$qStudent" -Session $adminSession
-Invoke-Check "H12. Мусорная дата -> 400" ($r.Status -eq 400) $r.Body
+Invoke-Check "H13. Мусорная дата -> 400" ($r.Status -eq 400) $r.Body
 
 $r = Invoke-Api -Method GET -Path "/api/v1/admin/payments?from=$tomorrow&to=$today&q=$qStudent" -Session $adminSession
-Invoke-Check "H13. from > to -> 400" ($r.Status -eq 400) $r.Body
+Invoke-Check "H14. from > to -> 400" ($r.Status -eq 400) $r.Body
 
-# H14. totals считаются по отфильтрованным данным.
+# H15. totals считаются по отфильтрованным данным.
 $r = Invoke-Api -Method GET -Path "/api/v1/admin/payments?q=$qStudent" -Session $adminSession
 $totalsOk = $false
 if ($r.Status -eq 200 -and $r.Json.totals -ne $null) {
@@ -323,32 +348,32 @@ if ($r.Status -eq 200 -and $r.Json.totals -ne $null) {
     $totalsOk = (($names -contains "amountCents") -and ($names -contains "platformFeeCents") -and
                  ($names -contains "teacherAmountCents") -and ([int]$r.Json.totals.amountCents -eq $sum))
 }
-Invoke-Check "H14. totals по фильтру: amountCents == сумме items" `
+Invoke-Check "H15. totals по фильтру: amountCents == сумме items" `
     ($r.Status -eq 200 -and $totalsOk) $r.Body
 
-# H15. Регрессия: status-фильтр рядом с q.
+# H16. Регрессия: status-фильтр рядом с q.
 $r = Invoke-Api -Method GET -Path "/api/v1/admin/payments?q=$qStudent&status=succeeded" -Session $adminSession
 $ok1 = ($r.Status -eq 200 -and [int]$r.Json.total -eq 1)
 $r = Invoke-Api -Method GET -Path "/api/v1/admin/payments?q=$qStudent&status=failed" -Session $adminSession
 $ok2 = ($r.Status -eq 200 -and [int]$r.Json.total -eq 0)
-Invoke-Check "H15. q + status=succeeded/failed -> 1/0" ($ok1 -and $ok2) $r.Body
+Invoke-Check "H16. q + status=succeeded/failed -> 1/0" ($ok1 -and $ok2) $r.Body
 
-# H16. Регрессия: пагинация (все страницы не пересекаются).
+# H17. Регрессия: пагинация (все страницы не пересекаются).
 $r = Invoke-Api -Method GET -Path "/api/v1/admin/payments?limit=1&page=1" -Session $adminSession
 if ($r.Status -eq 200 -and [int]$r.Json.total -ge 2 -and @($r.Json.items).Count -eq 1) {
     $id1 = [string]@($r.Json.items)[0].id
     $r2 = Invoke-Api -Method GET -Path "/api/v1/admin/payments?limit=1&page=2" -Session $adminSession
     $id2 = ""
     if ($r2.Status -eq 200 -and @($r2.Json.items).Count -eq 1) { $id2 = [string]@($r2.Json.items)[0].id }
-    Invoke-Check "H16. Пагинация limit=1: стр.1 и стр.2 различаются" `
+    Invoke-Check "H17. Пагинация limit=1: стр.1 и стр.2 различаются" `
         ($id1 -ne "" -and $id2 -ne "" -and $id1 -ne $id2) $r.Body
 } else {
-    Skip-Check "H16. Пагинация limit=1: стр.1 и стр.2 различаются" "в журнале меньше двух платежей"
+    Skip-Check "H17. Пагинация limit=1: стр.1 и стр.2 различаются" "в журнале меньше двух платежей"
 }
 
-# H17. Регрессия доступа: преподавателю журнал недоступен.
+# H18. Регрессия доступа: преподавателю журнал недоступен.
 $r = Invoke-Api -Method GET -Path "/api/v1/admin/payments" -Session $teacherSession
-Invoke-Check "H17. Преподавателю GET /admin/payments -> 403" ($r.Status -eq 403) $r.Body
+Invoke-Check "H18. Преподавателю GET /admin/payments -> 403" ($r.Status -eq 403) $r.Body
 
 # =============================================================================
 Write-Host ""
@@ -382,8 +407,8 @@ Invoke-Check "I5. GET курса в архиве -> 200, status=archived" `
 
 # I6-I7. Возврат из архива снова открывает правки.
 $r = Invoke-Api -Method POST -Path "/api/v1/teacher/courses/$courseID/unarchive" -Session $teacherSession
-$unarchiveOk = ($r.Status -eq 200 -and $r.Json.course.status -eq "published")
-Invoke-Check "I6. Unarchive -> 200, status=published" $unarchiveOk $r.Body
+$unarchiveOk = ($r.Status -eq 200 -and $r.Json.course.status -eq "draft")
+Invoke-Check "I6. Unarchive -> 200, status=draft (возврат всегда в черновик)" $unarchiveOk $r.Body
 
 $r = Invoke-Api -Method PATCH -Path "/api/v1/teacher/courses/$courseID" -Session $teacherSession `
     -Body @{ title = "P4 курс v3 $stamp" }
