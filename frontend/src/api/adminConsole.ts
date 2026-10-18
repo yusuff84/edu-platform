@@ -64,6 +64,30 @@ export type AdminCoursePage = {
   limit: number;
 };
 
+/** Поле сортировки списка курсов (контракт P6, T48): иное backend отвергает 400. */
+export type AdminCourseSort = 'createdAt' | 'updatedAt' | 'title' | 'price' | 'students';
+
+/** Направление сортировки (контракт P6, T48): по умолчанию — desc. */
+export type AdminCourseDir = 'asc' | 'desc';
+
+/** Параметры админского списка курсов (все необязательны, кроме новых — аддитивных). */
+export type AdminCourseListParams = {
+  status?: string;
+  q?: string;
+  page?: number;
+  limit?: number;
+  /** Поле сортировки; по умолчанию backend считает createdAt. */
+  sort?: AdminCourseSort;
+  /** Направление сортировки; по умолчанию backend считает desc. */
+  dir?: AdminCourseDir;
+  /** Подстрока по email преподавателя без учёта регистра (T48). */
+  teacherEmail?: string;
+  /** Нижняя граница периода по createdAt, ГГГГ-ММ-ДД (включительно, T48). */
+  from?: string;
+  /** Верхняя граница периода по createdAt, ГГГГ-ММ-ДД (включительно, T48). */
+  to?: string;
+};
+
 /** Строка отзыва курса (GET /admin/courses/{id}/reviews). */
 export type AdminReviewRow = {
   id: string;
@@ -80,22 +104,24 @@ export function getAdminStats(): Promise<AdminStats> {
 }
 
 /**
- * GET /admin/courses — курсы всех статусов, новые первыми.
+ * GET /admin/courses — курсы всех статусов.
  * Пустые параметры buildQuery не отправляет; невалидный status backend
  * отвергает 400 (в UI такому значению появиться неоткуда — фильтр закрытый).
+ * Параметры P6 (T48): sort/dir/teacherEmail/from/to — необязательные и
+ * аддитивные: старый backend их просто игнорирует.
  */
-export function listAdminCourses(params: {
-  status?: string;
-  q?: string;
-  page?: number;
-  limit?: number;
-}): Promise<AdminCoursePage> {
+export function listAdminCourses(params: AdminCourseListParams): Promise<AdminCoursePage> {
   return apiFetch<AdminCoursePage>(
     `/admin/courses${buildQuery({
       status: params.status,
       q: params.q,
       page: params.page,
       limit: params.limit,
+      sort: params.sort,
+      dir: params.dir,
+      teacherEmail: params.teacherEmail,
+      from: params.from,
+      to: params.to,
     })}`,
   );
 }
@@ -112,6 +138,17 @@ export function archiveAdminCourse(id: string): Promise<{ course: AdminCourseRow
 export function unpublishAdminCourse(id: string): Promise<{ course: AdminCourseRow }> {
   return apiFetch<{ course: AdminCourseRow }>(
     `/admin/courses/${encodeURIComponent(id)}/unpublish`,
+    { method: 'POST' },
+  );
+}
+
+/**
+ * POST /admin/courses/{id}/unarchive — вернуть курс из архива: archived → draft
+ * (комментарий модерации сохраняется, контракт P6 / T48). Иначе 409; 404.
+ */
+export function unarchiveAdminCourse(id: string): Promise<{ course: AdminCourseRow }> {
+  return apiFetch<{ course: AdminCourseRow }>(
+    `/admin/courses/${encodeURIComponent(id)}/unarchive`,
     { method: 'POST' },
   );
 }
