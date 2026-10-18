@@ -1,15 +1,29 @@
 // T26: раздел «Пользователи» супер-админки.
 // Таблица с поиском (debounce), фильтрами роль/статус, пагинацией и мутациями
 // смены роли / блокировки / удаления. Контракт backend — T24.
+// T52: карточка «Профиль пользователя» (детали, записи, платежи) и
+// инлайн-подтверждения смены роли / блокировки; правки вёрстки таблицы.
 // Стили изолированы в styles/adminUsers.css; styles.css и admin.css не изменяются.
 import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { QueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
-import { ApiError, formatDate } from '../api/client';
-import { deleteUser, listUsers, setUserRole, setUserStatus } from '../api/adminUsers';
-import type { AdminUserPage, AdminUserRow, UserStatus } from '../api/adminUsers';
-import type { Role } from '../api/types';
+import { ApiError, formatDate, formatMoney } from '../api/client';
+import {
+  deleteUser,
+  listStudentEnrollments,
+  listStudentPayments,
+  listUsers,
+  setUserRole,
+  setUserStatus,
+} from '../api/adminUsers';
+import type {
+  AdminUserPage,
+  AdminUserRow,
+  EnrollmentStatus,
+  UserStatus,
+} from '../api/adminUsers';
+import type { PaymentStatus, Role } from '../api/types';
 import { t } from '../i18n/t';
 import type { RuKey } from '../i18n/t';
 import CsvExportButton, { csvDateStamp, exportTruncated } from '../components/CsvExportButton';
@@ -28,6 +42,9 @@ const EXPORT_PAGE_LIMIT = 100;
 
 /** Потолок выгрузки CSV: не более 50 страниц (5000 строк) за один клик. */
 const EXPORT_MAX_PAGES = 50;
+
+/** Размер мини-списков в карточке «Профиль» (T52): записи и платежи. */
+const DETAILS_LIMIT = 10;
 
 /** Префикс ключа кэша списка: по нему инвалидируются все страницы с фильтрами. */
 const LIST_KEY = ['admin-users'] as const;
@@ -50,6 +67,41 @@ const STATUS_LABEL: Record<UserStatus, RuKey> = {
   active: 'adminUsers.statusActive',
   blocked: 'adminUsers.statusBlocked',
 };
+
+/** Подписи статусов записей: профильных ключей нет — переиспользуем courseStudents.* (как T30). */
+const ENROLLMENT_STATUS_LABEL: Record<EnrollmentStatus, RuKey> = {
+  active: 'courseStudents.statusActive',
+  refunded: 'courseStudents.statusRefunded',
+  revoked: 'courseStudents.statusRevoked',
+};
+
+/** Подписи статусов платежей: переиспользуем admin.status* (прецедент — Profile.tsx, T30). */
+const PAYMENT_STATUS_LABEL: Record<PaymentStatus, RuKey> = {
+  pending: 'admin.statusPending',
+  succeeded: 'admin.statusSucceeded',
+  failed: 'admin.statusFailed',
+  refunded: 'admin.statusRefunded',
+};
+
+/** Класс бейджа по статусу записи на курс (цвета — только из au-badge--*). */
+function enrollmentBadgeClass(status: EnrollmentStatus): string {
+  if (status === 'active') return 'au-badge--active';
+  if (status === 'revoked') return 'au-badge--blocked';
+  return 'au-badge--neutral';
+}
+
+/** Класс бейджа по статусу платежа. */
+function paymentBadgeClass(status: PaymentStatus): string {
+  if (status === 'succeeded') return 'au-badge--active';
+  if (status === 'failed') return 'au-badge--blocked';
+  return 'au-badge--neutral';
+}
+
+/** Опасное действие над строкой, ожидающее инлайн-подтверждения (T52). */
+type PendingConfirm =
+  | { kind: 'remove'; id: string }
+  | { kind: 'role'; id: string; next: Role }
+  | { kind: 'status'; id: string; next: UserStatus };
 
 // ---------- Утилиты ----------
 
@@ -85,6 +137,145 @@ function removeCachedUser(qc: QueryClient, id: string): void {
     if (items.length === prev.items.length) return prev;
     return { ...prev, items, total: Math.max(0, prev.total - 1) };
   });
+}
+
+// ---------- Карточка «Профиль пользователя» (T52) ----------
+
+/**
+ * Модальное окно с деталями пользователя: карточка, записи на курсы
+ * (GET /admin/enrollments?studentId=…&limit=10) и последние платежи
+ * (GET /admin/payments?q=<email>&limit=10). Монтируется только при открытии —
+ * запросы уходят по факту показа. Закрытие: Esc, кнопка «Закрыть», клик по фону.
+ */
+function UserDetails({ user, onClose }: { user: AdminUserRow; onClose: () => void }): JSX.Element {
+  // Esc закрывает окно, пока оно смонтировано.
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent): void {
+      if (e.key === 'Escape') onClose();
+    }
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [onClose]);
+
+  const enrollments = useQuery({
+    queryKey: ['admin-user-enrollments', user.id],
+    queryFn: () => listStudentEnrollments(user.id, DETAILS_LIMIT),
+    retry: (failureCount, error) => !(error instanceof ApiError) && failureCount < 2,
+  });
+
+  const payments = useQuery({
+    queryKey: ['admin-user-payments', user.email],
+    queryFn: () => listStudentPayments(user.email, DETAILS_LIMIT),
+    retry: (failureCount, error) => !(error instanceof ApiError) && failureCount < 2,
+  });
+
+  const enrollmentsItems = enrollments.data?.items ?? [];
+  const paymentsItems = payments.data?.items ?? [];
+
+  return (
+    <div className="au-modal-overlay" onClick={onClose}>
+      <div
+        className="au-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-label={t('adminUsers.detailsTitle')}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="au-modal-head">
+          <h2>{t('adminUsers.detailsTitle')}</h2>
+          <button type="button" className="btn btn-sm" onClick={onClose}>
+            {t('common.close')}
+          </button>
+        </div>
+
+        {/* ----- Основные поля пользователя ----- */}
+        <dl className="au-details">
+          <dt>{t('adminUsers.detailsId')}</dt>
+          <dd className="au-details-mono">{user.id}</dd>
+          <dt>{t('profile.email')}</dt>
+          <dd className="au-details-mono">{user.email}</dd>
+          <dt>{t('profile.displayName')}</dt>
+          <dd>{user.displayName || '—'}</dd>
+          <dt>{t('profile.role')}</dt>
+          <dd>{t(ROLE_LABEL[user.role])}</dd>
+          <dt>{t('adminUsers.colStatus')}</dt>
+          <dd>
+            <span className={`au-badge au-badge--${user.status}`}>
+              {t(STATUS_LABEL[user.status])}
+            </span>
+          </dd>
+          <dt>{t('profile.registered')}</dt>
+          <dd>{formatDate(user.createdAt)}</dd>
+        </dl>
+
+        {/* ----- Записи на курсы ----- */}
+        <section className="au-details-section" aria-label={t('adminUsers.detailsEnrollments')}>
+          <h3>{t('adminUsers.detailsEnrollments')}</h3>
+          {enrollments.isLoading && (
+            <p className="muted" role="status">
+              {t('common.loading')}
+            </p>
+          )}
+          {enrollments.isError && (
+            <p className="error" role="alert">
+              {errorText(enrollments.error)}
+            </p>
+          )}
+          {enrollments.data && enrollmentsItems.length === 0 && (
+            <p className="muted">{t('adminUsers.detailsEmpty')}</p>
+          )}
+          {enrollmentsItems.length > 0 && (
+            <ul className="au-details-list">
+              {enrollmentsItems.map((en) => (
+                <li key={en.id}>
+                  <span className="au-details-item-name">{en.courseTitle || '—'}</span>
+                  <span className={`au-badge ${enrollmentBadgeClass(en.status)}`}>
+                    {t(ENROLLMENT_STATUS_LABEL[en.status])}
+                  </span>
+                  <span className="muted au-details-item-meta">
+                    {t('profile.lessonsDone')}: {en.completedLessons}/{en.totalLessons}
+                  </span>
+                  <span className="muted au-details-item-meta">{formatDate(en.createdAt)}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+
+        {/* ----- Последние платежи ----- */}
+        <section className="au-details-section" aria-label={t('adminUsers.detailsPayments')}>
+          <h3>{t('adminUsers.detailsPayments')}</h3>
+          {payments.isLoading && (
+            <p className="muted" role="status">
+              {t('common.loading')}
+            </p>
+          )}
+          {payments.isError && (
+            <p className="error" role="alert">
+              {errorText(payments.error)}
+            </p>
+          )}
+          {payments.data && paymentsItems.length === 0 && (
+            <p className="muted">{t('adminUsers.detailsEmpty')}</p>
+          )}
+          {paymentsItems.length > 0 && (
+            <ul className="au-details-list">
+              {paymentsItems.map((p) => (
+                <li key={p.id}>
+                  <span className="au-details-item-name">{p.courseTitle || '—'}</span>
+                  <span className={`au-badge ${paymentBadgeClass(p.status)}`}>
+                    {t(PAYMENT_STATUS_LABEL[p.status])}
+                  </span>
+                  <span className="au-details-item-meta">{formatMoney(p.amountCents)}</span>
+                  <span className="muted au-details-item-meta">{formatDate(p.createdAt)}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      </div>
+    </div>
+  );
 }
 
 // ---------- Страница ----------
@@ -126,7 +317,10 @@ export default function AdminUsers(): JSX.Element {
   // ---- Локальные сообщения об операциях ----
   const [notice, setNotice] = useState(''); // успех последней мутации
   const [rowErrors, setRowErrors] = useState<Record<string, string>>({}); // ошибки по строкам
-  const [confirmId, setConfirmId] = useState(''); // строка, ждущая подтверждения удаления
+  // T52: строка, ждущая инлайн-подтверждения (удаление / смена роли / блокировка).
+  const [confirm, setConfirm] = useState<PendingConfirm | null>(null);
+  // T52: пользователь, открытый в карточке «Профиль» (null — окно закрыто).
+  const [detailsUser, setDetailsUser] = useState<AdminUserRow | null>(null);
 
   function setRowError(id: string, text: string): void {
     setRowErrors((prev) => ({ ...prev, [id]: text }));
@@ -146,12 +340,14 @@ export default function AdminUsers(): JSX.Element {
     mutationFn: (args: { id: string; role: Role }) => setUserRole(args.id, args.role),
     onSuccess: (user, args) => {
       clearRowError(args.id);
+      setConfirm(null);
       setNotice(t('adminUsers.roleChanged'));
       // Ответ применяем к кэшу сразу, чтобы select не «откатывался» до refetch.
       patchCachedUser(qc, args.id, { role: user?.role ?? args.role });
       void qc.invalidateQueries({ queryKey: LIST_KEY });
     },
     onError: (e: unknown, args) => {
+      setConfirm(null);
       setNotice('');
       setRowError(args.id, errorText(e));
     },
@@ -161,11 +357,13 @@ export default function AdminUsers(): JSX.Element {
     mutationFn: (args: { id: string; status: UserStatus }) => setUserStatus(args.id, args.status),
     onSuccess: (user, args) => {
       clearRowError(args.id);
+      setConfirm(null);
       setNotice(t('adminUsers.statusChanged'));
       patchCachedUser(qc, args.id, { status: user?.status ?? args.status });
       void qc.invalidateQueries({ queryKey: LIST_KEY });
     },
     onError: (e: unknown, args) => {
+      setConfirm(null);
       setNotice('');
       setRowError(args.id, errorText(e));
     },
@@ -175,7 +373,7 @@ export default function AdminUsers(): JSX.Element {
     mutationFn: (id: string) => deleteUser(id),
     onSuccess: (_data, id) => {
       clearRowError(id);
-      setConfirmId('');
+      setConfirm(null);
       setNotice(t('adminUsers.removed'));
       removeCachedUser(qc, id);
       // Удалили последнюю строку страницы — возвращаемся на предыдущую.
@@ -184,25 +382,51 @@ export default function AdminUsers(): JSX.Element {
       void qc.invalidateQueries({ queryKey: LIST_KEY });
     },
     onError: (e: unknown, id) => {
-      setConfirmId('');
+      setConfirm(null);
       setNotice('');
+      // 409 (есть курсы/платежи) и прочие ошибки — серверный текст (errorText).
       setRowError(id, errorText(e));
     },
   });
 
   // ---- Обработчики действий ----
+  // T52: смена роли и блокировка больше не уходят на сервер сразу — сначала
+  // инлайн-подтверждение в колонке действий (как у удаления в T26).
   function onRoleChange(user: AdminUserRow, next: Role): void {
     if (next === user.role) return;
     clearRowError(user.id);
     setNotice('');
-    roleMutation.mutate({ id: user.id, role: next });
+    setConfirm({ kind: 'role', id: user.id, next });
   }
 
   function onToggleStatus(user: AdminUserRow): void {
     const next: UserStatus = user.status === 'blocked' ? 'active' : 'blocked';
     clearRowError(user.id);
     setNotice('');
-    statusMutation.mutate({ id: user.id, status: next });
+    setConfirm({ kind: 'status', id: user.id, next });
+  }
+
+  function onRemove(user: AdminUserRow): void {
+    clearRowError(user.id);
+    setNotice('');
+    setConfirm({ kind: 'remove', id: user.id });
+  }
+
+  /** Подтверждённое действие строки — запуск соответствующей мутации. */
+  function onConfirmAction(user: AdminUserRow): void {
+    if (!confirm || confirm.id !== user.id) return;
+    if (confirm.kind === 'role') roleMutation.mutate({ id: user.id, role: confirm.next });
+    else if (confirm.kind === 'status') statusMutation.mutate({ id: user.id, status: confirm.next });
+    else removeMutation.mutate(user.id);
+  }
+
+  /** Текст подтверждения: старая → новая роль, блокировка или удаление. */
+  function confirmText(pending: PendingConfirm, user: AdminUserRow): string {
+    if (pending.kind === 'remove') return t('adminUsers.confirmRemove');
+    if (pending.kind === 'role') {
+      return `${t('adminUsers.confirmRole')} ${t(ROLE_LABEL[user.role])} → ${t(ROLE_LABEL[pending.next])}`;
+    }
+    return pending.next === 'blocked' ? t('adminUsers.confirmBlock') : t('adminUsers.confirmUnblock');
   }
 
   // ---- Состояния ожидания по строкам (для блокировки кнопок) ----
@@ -388,7 +612,9 @@ export default function AdminUsers(): JSX.Element {
                       <th scope="col">{t('adminUsers.colCreated')}</th>
                       <th scope="col">{t('adminUsers.colCourses')}</th>
                       <th scope="col">{t('adminUsers.colEnrollments')}</th>
-                      <th scope="col">{t('adminUsers.colActions')}</th>
+                      <th scope="col" className="au-col-actions">
+                        {t('adminUsers.colActions')}
+                      </th>
                     </tr>
                   </thead>
                   <tbody>
@@ -397,12 +623,23 @@ export default function AdminUsers(): JSX.Element {
                         rolePendingId === u.id ||
                         statusPendingId === u.id ||
                         removePendingId === u.id;
+                      // Подтверждение, относящееся именно к этой строке (T52).
+                      const rowConfirm = confirm && confirm.id === u.id ? confirm : null;
                       return (
                         <tr key={u.id}>
-                          <td data-label={t('adminUsers.colEmail')}>{u.email}</td>
-                          <td data-label={t('adminUsers.colName')}>{u.displayName || '—'}</td>
+                          <td className="au-col-email" data-label={t('adminUsers.colEmail')}>
+                            {u.email}
+                          </td>
+                          <td
+                            className="au-col-name"
+                            data-label={t('adminUsers.colName')}
+                            title={u.displayName || undefined}
+                          >
+                            {/* T52: длинное имя усекается многоточием, полное — в title. */}
+                            <span className="au-name-text">{u.displayName || '—'}</span>
+                          </td>
                           <td data-label={t('adminUsers.colRole')}>
-                            {/* Значение — роль с сервера; после PATCH кэш обновляется. */}
+                            {/* Значение — роль с сервера; после подтверждения кэш обновляется. */}
                             <select
                               className="input au-role-select"
                               value={u.role}
@@ -425,50 +662,58 @@ export default function AdminUsers(): JSX.Element {
                           <td data-label={t('adminUsers.colCreated')}>{formatDate(u.createdAt)}</td>
                           <td data-label={t('adminUsers.colCourses')}>{u.coursesCount}</td>
                           <td data-label={t('adminUsers.colEnrollments')}>{u.enrollmentsCount}</td>
-                          <td data-label={t('adminUsers.colActions')}>
+                          <td className="au-col-actions" data-label={t('adminUsers.colActions')}>
                             <div className="au-actions">
-                              <button
-                                type="button"
-                                className="btn btn-sm"
-                                disabled={rowBusy}
-                                onClick={() => onToggleStatus(u)}
-                              >
-                                {u.status === 'blocked'
-                                  ? t('adminUsers.unblock')
-                                  : t('adminUsers.block')}
-                              </button>
-                              {confirmId === u.id ? (
+                              {rowConfirm ? (
                                 <>
-                                  <span className="au-confirm">{t('adminUsers.confirmRemove')}</span>
+                                  <span className="au-confirm">{confirmText(rowConfirm, u)}</span>
                                   <button
                                     type="button"
-                                    className="btn btn-sm au-btn--danger"
-                                    disabled={removePendingId === u.id}
-                                    onClick={() => removeMutation.mutate(u.id)}
+                                    className={`btn btn-sm${
+                                      rowConfirm.kind === 'remove' ? ' au-btn--danger' : ''
+                                    }`}
+                                    disabled={rowBusy}
+                                    onClick={() => onConfirmAction(u)}
                                   >
                                     {t('common.confirm')}
                                   </button>
                                   <button
                                     type="button"
                                     className="btn btn-sm"
-                                    disabled={removePendingId === u.id}
-                                    onClick={() => setConfirmId('')}
+                                    disabled={rowBusy}
+                                    onClick={() => setConfirm(null)}
                                   >
                                     {t('common.cancel')}
                                   </button>
                                 </>
                               ) : (
-                                <button
-                                  type="button"
-                                  className="btn btn-sm au-btn--danger"
-                                  disabled={rowBusy}
-                                  onClick={() => {
-                                    setNotice('');
-                                    setConfirmId(u.id);
-                                  }}
-                                >
-                                  {t('adminUsers.remove')}
-                                </button>
+                                <>
+                                  <button
+                                    type="button"
+                                    className="btn btn-sm"
+                                    onClick={() => setDetailsUser(u)}
+                                  >
+                                    {t('adminUsers.open')}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="btn btn-sm"
+                                    disabled={rowBusy}
+                                    onClick={() => onToggleStatus(u)}
+                                  >
+                                    {u.status === 'blocked'
+                                      ? t('adminUsers.unblock')
+                                      : t('adminUsers.block')}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="btn btn-sm au-btn--danger"
+                                    disabled={rowBusy}
+                                    onClick={() => onRemove(u)}
+                                  >
+                                    {t('adminUsers.remove')}
+                                  </button>
+                                </>
                               )}
                             </div>
                             {rowErrors[u.id] && (
@@ -510,6 +755,9 @@ export default function AdminUsers(): JSX.Element {
               </div>
             )}
           </section>
+
+          {/* ---------- Карточка «Профиль пользователя» (T52) ---------- */}
+          {detailsUser && <UserDetails user={detailsUser} onClose={() => setDetailsUser(null)} />}
         </main>
       </div>
     </div>

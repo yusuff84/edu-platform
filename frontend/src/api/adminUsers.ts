@@ -4,10 +4,14 @@
 // включает DisallowUnknownFields, любое лишнее поле = 400.
 
 import { apiFetch, buildQuery } from './client';
+import type { PaymentJournalPage } from './client';
 import type { Role } from './types';
 
 /** Статус учётной записи (T24: активен / заблокирован). */
 export type UserStatus = 'active' | 'blocked';
+
+/** Статус записи на курс (T48: активна / возврат / отозвана). */
+export type EnrollmentStatus = 'active' | 'refunded' | 'revoked';
 
 /** Строка таблицы пользователей GET /admin/users. */
 export type AdminUserRow = {
@@ -79,4 +83,51 @@ export function deleteUser(id: string): Promise<void> {
   return apiFetch<void>(`/admin/users/${encodeURIComponent(id)}`, {
     method: 'DELETE',
   });
+}
+
+// ---------- Детали пользователя (T52, окно «Профиль») ----------
+
+/** Строка записи на курс: ответ GET /admin/enrollments (T25/T48). */
+export type AdminEnrollmentRow = {
+  id: string;
+  studentId: string;
+  studentEmail: string;
+  studentName: string;
+  courseId: string;
+  courseTitle: string;
+  status: EnrollmentStatus;
+  createdAt: string;
+  completedLessons: number;
+  totalLessons: number;
+  percent: number;
+};
+
+/** Страница записей (конверт пагинации, как в остальных списках админки). */
+export type AdminEnrollmentsPage = {
+  items: AdminEnrollmentRow[];
+  total: number;
+  page: number;
+  limit: number;
+};
+
+/**
+ * Записи пользователя на курсы для карточки «Профиль» (T52).
+ * Модуль adminEnrollments.ts появится отдельной задачей (T49) — здесь намеренно
+ * маленький локальный хелпер, чтобы не зависеть от параллельной ветки.
+ */
+export function listStudentEnrollments(
+  studentId: string,
+  limit = 10,
+): Promise<AdminEnrollmentsPage> {
+  return apiFetch<AdminEnrollmentsPage>(
+    `/admin/enrollments${buildQuery({ studentId, limit })}`,
+  );
+}
+
+/**
+ * Последние платежи пользователя по email (T52): q — тот же поиск по email/имени,
+ * что в журнале платежей (T31). Форма ответа — PaymentJournalPage.
+ */
+export function listStudentPayments(email: string, limit = 10): Promise<PaymentJournalPage> {
+  return apiFetch<PaymentJournalPage>(`/admin/payments${buildQuery({ q: email, limit })}`);
 }
