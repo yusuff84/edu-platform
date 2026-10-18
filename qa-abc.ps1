@@ -22,6 +22,11 @@
     (входит в ALLOWED_ORIGINS по умолчанию) — в прод-режиме без него
     запрос получит 403.
 
+    Автосид qa-админа (T45): если вход под AdminEmail не удался, а админ-блок
+    включён, скрипт один раз запускает qa-seed-admin.ps1 (заводит учётку через
+    сид-админа и выдаёт роль admin) и повторяет вход. Отключается -NoAutoSeed;
+    провалившаяся первая попытка входа в счёт проверок не идёт.
+
 .PARAMETER BaseUrl
     Базовый URL API стенда. По умолчанию http://localhost:8082.
 
@@ -37,6 +42,15 @@
 .PARAMETER SkipAdmin
     Пропустить админ-блоки (модерация, invite, журнал). Сценарий покупки
     и обучения при этом пропускается — остается только анонимная часть.
+
+.PARAMETER SeedAdminEmail / SeedAdminPassword
+    Сид-админ стенда (ADMIN_EMAIL/ADMIN_PASSWORD при docker compose up) —
+    им qa-seed-admin.ps1 заводит/повышает учётку AdminEmail. По умолчанию
+    admin@local / admin1234.
+
+.PARAMETER NoAutoSeed
+    Не запускать qa-seed-admin.ps1 при неудачном входе под AdminEmail
+    (прежнее поведение: B1 падает, если учётки нет на стенде).
 
 .EXAMPLE
     docker compose up -d db api runner
@@ -54,7 +68,10 @@ param(
     [string]$WebUrl = "http://localhost:3000",
     [string]$AdminEmail = "qa-admin@example.test",
     [string]$AdminPassword = "QaAdmin12345",
-    [switch]$SkipAdmin
+    [switch]$SkipAdmin,
+    [string]$SeedAdminEmail = "admin@local",
+    [string]$SeedAdminPassword = "admin1234",
+    [switch]$NoAutoSeed
 )
 
 $ErrorActionPreference = "Stop"
@@ -244,10 +261,25 @@ $quizLessonID = $null
 if ($SkipAdmin) {
     Skip-Check "B*. Админ-блок (invite, модерация)" "задан -SkipAdmin"
 } else {
-    # B1. Вход админа (сид создаётся из ADMIN_EMAIL/ADMIN_PASSWORD при старте).
+    # B1. Вход админа. Учётка qa-админа может отсутствовать на свежем стенде —
+    # тогда (если не задан -NoAutoSeed) один раз запускаем qa-seed-admin.ps1 и
+    # повторяем вход. Провалившаяся первая попытка в счёт проверок НЕ идёт:
+    # Invoke-Check вызывается один раз, по финальной попытке входа.
     $adminSession = New-Object Microsoft.PowerShell.Commands.WebRequestSession
     $r = Invoke-Api -Method POST -Path "/api/v1/auth/login" -Session $adminSession `
         -Body @{ email = $AdminEmail; password = $AdminPassword }
+    if ($r.Status -ne 200 -and -not $NoAutoSeed) {
+        Write-Host "  Вход под $AdminEmail не удался (status=$($r.Status)) — запуск автосида qa-seed-admin.ps1" -ForegroundColor DarkYellow
+        & (Join-Path $PSScriptRoot "qa-seed-admin.ps1") -BaseUrl $BaseUrl -AdminEmail $AdminEmail `
+            -AdminPassword $AdminPassword -SeedAdminEmail $SeedAdminEmail -SeedAdminPassword $SeedAdminPassword
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "  Автосид завершился с кодом $LASTEXITCODE." -ForegroundColor Yellow
+        }
+        Write-Host "  Повтор входа под $AdminEmail." -ForegroundColor DarkYellow
+        $adminSession = New-Object Microsoft.PowerShell.Commands.WebRequestSession
+        $r = Invoke-Api -Method POST -Path "/api/v1/auth/login" -Session $adminSession `
+            -Body @{ email = $AdminEmail; password = $AdminPassword }
+    }
     Invoke-Check "B1. Вход админа ($AdminEmail) -> 200, role=admin" `
         ($r.Status -eq 200 -and $r.Json -ne $null -and $r.Json.role -eq "admin") $r.Body
     $adminOk = ($r.Status -eq 200)
