@@ -6,13 +6,17 @@
 // Визуальный язык прогресс-полосы повторяет MyCourses.tsx (общие классы
 // .progress/.progress-bar из styles.css), таблица и пагинация — по образцу
 // Admin.tsx. MyCourses.tsx/Admin.tsx/client.ts при этом не меняются.
+//
+// T36: курс шапки живёт в кэше под ключом ['teach-course', id] — общим с
+// конструктором (getTeacherCourseDetail из api/teacherStudents.ts), поэтому
+// правка карточки в конструкторе сразу видна и здесь.
 
 import { useEffect, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { ApiError, formatDate, formatMoney } from '../api/client';
 import type { CourseStatus } from '../api/client';
-import { courseStats, getTeacherCourse, listCourseStudents } from '../api/teacherStudents';
+import { courseStats, getTeacherCourseDetail, listCourseStudents } from '../api/teacherStudents';
 import type { EnrollmentStatus } from '../api/teacherStudents';
 import { t } from '../i18n/t';
 import type { RuKey } from '../i18n/t';
@@ -133,9 +137,11 @@ export default function CourseStudents(): JSX.Element {
 
   // Шапка: название и статус курса. Эндпоинт T13 GET /teacher/courses/{id}
   // проверяет владение (владелец или админ) — обёртка в api/teacherStudents.ts.
+  // T36: ключ ['teach-course', courseId] общий с конструктором и форма данных
+  // одна (конверт) — правка карточки подсвечивается на обоих экранах сразу.
   const courseQuery = useQuery({
-    queryKey: ['teacher-course', courseId],
-    queryFn: () => getTeacherCourse(courseId),
+    queryKey: ['teach-course', courseId],
+    queryFn: () => getTeacherCourseDetail(courseId),
     enabled: courseId !== '',
     retry: false,
   });
@@ -157,7 +163,7 @@ export default function CourseStudents(): JSX.Element {
     retry: (failureCount, error) => !(error instanceof ApiError) && failureCount < 2,
   });
 
-  const course = courseQuery.data;
+  const course = courseQuery.data?.course;
   const stats = statsQuery.data;
   const data = listQuery.data;
 

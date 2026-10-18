@@ -16,6 +16,12 @@
 // модулями, перестановка вопросов/вариантов/тестов и жизненный цикл курса
 // (копия, архив, отзыв с модерации). Операции T21 живут в api/teacherExtra.ts.
 //
+// T36: источник курса — GET /teacher/courses/{id} (владелец или админ) под
+// ключом ['teach-course', id], общим с экраном «Ученики курса»: админ видит
+// чужой курс, правки карточки подсвечиваются на обоих экранах. В архиве
+// карточка заморожена (PATCH → 409, T33) — вместо кнопки правки подсказка
+// teach.cardArchivedHint.
+//
 // Все тела запросов собираются только из полей, относящихся к kind урока:
 // backend включает DisallowUnknownFields() — лишнее поле = 400.
 
@@ -34,7 +40,6 @@ import {
   createModule,
   formatDate,
   formatPrice,
-  getCourse,
   myTeaching,
   submitCourse,
 } from '../api/client';
@@ -46,6 +51,9 @@ import {
   unarchiveCourse,
   withdrawCourse,
 } from '../api/teacherExtra';
+// T36: детали курса конструктора — из api/teacherStudents.ts (client.ts не наш,
+// добавление туда getTeacherCourseDetail принадлежит соседней волне).
+import { getTeacherCourseDetail } from '../api/teacherStudents';
 import LessonPreview from '../components/LessonPreview';
 import type { LessonPreviewData } from '../components/LessonPreview';
 import { t } from '../i18n/t';
@@ -536,6 +544,17 @@ function errText(e: unknown): string {
   return t('common.error');
 }
 
+/**
+ * T36: текст ошибки загрузки курса конструктора. 403/404 — курса нет или нет
+ * доступа к нему (ownCourse на бэкенде), прочие сбои — общая формулировка.
+ */
+function courseErrorText(e: unknown): string {
+  if (e instanceof ApiError && (e.status === 403 || e.status === 404)) {
+    return t('courseStudents.noAccess');
+  }
+  return t('teach.courseLoadFailed');
+}
+
 function focusField(id: string): void {
   document.getElementById(id)?.focus();
 }
@@ -562,31 +581,34 @@ export default function Constructor(): JSX.Element {
   }
 
   // ---------- Данные ----------
-  // Ключи запросов сохранены: ['teaching'] и ['teach-course', id].
-  const teachingQuery = useQuery({ queryKey: ['teaching'], queryFn: myTeaching });
-
-  // Курс конструктора ищем по id из URL в своих курсах (myTeaching возвращает массив),
-  // а детали с модулями берём через getCourse по slug.
-  const ownCourse: Course | undefined = isNew
-    ? undefined
-    : teachingQuery.data?.find((c) => c.id === id);
-
+  // T36: курс конструктора грузится напрямую из GET /teacher/courses/{id}
+  // (владелец или админ) под ключом ['teach-course', id] — тем же, что и на
+  // экране «Ученики курса»: правки карточки видны обоим экранам сразу.
   const detailQuery = useQuery({
     queryKey: ['teach-course', id],
-    queryFn: () => getCourse(ownCourse?.slug ?? ''),
-    enabled: !isNew && Boolean(ownCourse?.slug),
+    queryFn: () => getTeacherCourseDetail(id ?? ''),
+    enabled: !isNew,
     retry: false,
   });
 
-  const course = detailQuery.data;
-  const modules = course?.modules ?? [];
+  const course = detailQuery.data?.course;
+  const modules = detailQuery.data?.modules ?? [];
   const editable = course?.status === 'draft';
-  // T28: сводка «модулей/уроков» считается по уже загруженному CourseDetail.
+  // T36: в архиве карточка заморожена — PATCH отвечает 409 (контракт T33),
+  // поэтому форму правки заранее не показываем, а выводим подсказку.
+  const cardFrozen = course?.status === 'archived';
+
+  // Список своих курсов нужен странице /teach/new (и инвалидациям после
+  // мутаций): курс конструктора из него больше не ищется.
+  const teachingQuery = useQuery({ queryKey: ['teaching'], queryFn: myTeaching });
+  // T28: сводка «модулей/уроков» считается по уже загруженному конверту
+  // { course, modules } (T36: тот же ответ, что и у экрана «Ученики курса»).
   const lessonsTotal = modules.reduce((n, m) => n + m.lessons.length, 0);
 
   // ---------- T19: локальное состояние CRUD ----------
 
-  // Правка карточки курса (T13 PATCH /teacher/courses/{id}): в любом статусе.
+  // Правка карточки курса (T13 PATCH /teacher/courses/{id}): в любом статусе,
+  // кроме архива (T36/T33 — там карточка заморожена и PATCH отвечает 409).
   const [cardEditing, setCardEditing] = useState(false);
   const [cardDraft, setCardDraft] = useState({ title: '', description: '', priceRub: 0 });
 
@@ -662,7 +684,7 @@ export default function Constructor(): JSX.Element {
   });
 
   function startCardEdit(): void {
-    if (!course) return;
+    if (!course || cardFrozen) return;
     setCardDraft({
       title: course.title,
       description: course.description,
@@ -806,13 +828,7 @@ export default function Constructor(): JSX.Element {
   // ключи teach.confirm*, сообщения об успехе — teach.*ed.
 
   const duplicateMutation = useMutation({
-    mutationFn: async () => {
-      const res = await duplicateCourse(course?.id ?? '');
-      // Копия должна попасть в ['teaching'] ДО перехода: конструктор ищет курс
-      // по id в этом списке, иначе после navigate мелькнёт «курс не найден».
-      await qc.refetchQueries({ queryKey: ['teaching'] });
-      return res;
-    },
+    mutationFn: () => duplicateCourse(course?.id ?? ''),
     onSuccess: (res) => {
       // Переходим на копию с чистым редактором урока и закрытым предпросмотром.
       // moduleId копии другой — сбрасываем его (пустая строка), а не оставляем
@@ -822,6 +838,10 @@ export default function Constructor(): JSX.Element {
       setLessonErrors({});
       setPreviewOpen(false);
       setNotice({ text: t('teach.duplicated'), kind: 'ok' });
+      // T36: копия грузится конструктором из GET /teacher/courses/{id} по своему
+      // id, поэтому дожидаться обновления списка ['teaching'] не нужно — просто
+      // помечаем его устаревшим.
+      void qc.invalidateQueries({ queryKey: ['teaching'] });
       void qc.invalidateQueries({ queryKey: ['teach-course'] });
       navigate(`/teach/${res.course.id}`);
     },
@@ -1216,42 +1236,23 @@ export default function Constructor(): JSX.Element {
       {/* ===== /teach/:id: редактор курса ===== */}
       {!isNew && (
         <>
-          {teachingQuery.isLoading && <p>{t('common.loading')}</p>}
+          {/* T36: курс грузится напрямую по id — сначала загрузка, затем ошибка
+              (403/404 — курса нет или нет доступа, прочее — сбой загрузки)
+              либо сам курс. */}
+          {detailQuery.isLoading && <p role="status">{t('teach.courseLoading')}</p>}
 
-          {teachingQuery.isError && !teachingQuery.isLoading && (
-            <p className="error">
-              {errText(teachingQuery.error)}{' '}
-              <button type="button" onClick={() => void teachingQuery.refetch()}>
-                {t('common.retry')}
-              </button>
-            </p>
-          )}
-
-          {teachingQuery.isSuccess && !ownCourse && (
+          {detailQuery.isError && (
             <section>
-              <h2>{t('course.notFound')}</h2>
-              <p className="muted">{t('course.notFoundHint')}</p>
+              <h2>{t('common.error')}</h2>
+              <p className="error">{courseErrorText(detailQuery.error)}</p>
+              <p>
+                <button type="button" onClick={() => void detailQuery.refetch()}>
+                  {t('common.retry')}
+                </button>
+              </p>
               <p>
                 <Link to="/teach">{t('nav.teach')}</Link>
               </p>
-            </section>
-          )}
-
-          {ownCourse && detailQuery.isLoading && <p>{t('common.loading')}</p>}
-
-          {ownCourse && detailQuery.isError && (
-            <section>
-              <h2>{t('common.error')}</h2>
-              <p className="error">
-                {detailQuery.error instanceof ApiError && detailQuery.error.status === 403
-                  ? t('error.noAccess')
-                  : detailQuery.error instanceof ApiError && detailQuery.error.status === 404
-                    ? t('course.notFound')
-                    : errText(detailQuery.error)}
-              </p>
-              <button type="button" onClick={() => void detailQuery.refetch()}>
-                {t('common.retry')}
-              </button>
             </section>
           )}
 
@@ -1341,25 +1342,14 @@ export default function Constructor(): JSX.Element {
                 <Link to={`/teach/${course.id}/students`}>{t('courseStudents.title')}</Link>
               </p>
 
-              {/* T19: правка карточки (T13 PATCH) — доступна в любом статусе:
-                  это метаданные, а не контент курса. */}
+              {/* T19: правка карточки (T13 PATCH) — метаданные, доступна в любом
+                  статусе, кроме архива: T36/T33 — там карточка заморожена
+                  (PATCH отвечает 409), вместо кнопки выводится подсказка.
+                  Удаление курса в архиве остаётся доступным. */}
               <section className="teach-section panel">
                 <h2>{t('teach.courseTitle')}</h2>
-                {!cardEditing ? (
-                  <div className="teach-card-actions">
-                    <button type="button" onClick={startCardEdit}>
-                      Редактировать карточку
-                    </button>
-                    <button
-                      type="button"
-                      className="teach-danger"
-                      onClick={() => onDeleteCourse(course.id)}
-                      disabled={deleteCourseMutation.isPending}
-                    >
-                      {t('common.delete')} курс
-                    </button>
-                  </div>
-                ) : (
+                {cardFrozen && <p className="teach-note">{t('teach.cardArchivedHint')}</p>}
+                {cardEditing && !cardFrozen ? (
                   <form className="form-grid" onSubmit={onCardSubmit} noValidate>
                     <label htmlFor="card-title">{t('teach.courseTitle')}</label>
                     <input
@@ -1400,6 +1390,22 @@ export default function Constructor(): JSX.Element {
                       </button>
                     </div>
                   </form>
+                ) : (
+                  <div className="teach-card-actions">
+                    {!cardFrozen && (
+                      <button type="button" onClick={startCardEdit}>
+                        Редактировать карточку
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      className="teach-danger"
+                      onClick={() => onDeleteCourse(course.id)}
+                      disabled={deleteCourseMutation.isPending}
+                    >
+                      {t('common.delete')} курс
+                    </button>
+                  </div>
                 )}
               </section>
 
