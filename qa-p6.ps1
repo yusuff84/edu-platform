@@ -6,10 +6,10 @@
     Дополняет qa-abc.ps1 (базовый сценарий), qa-p3.ps1, qa-p4.ps1 и qa-p5.ps1
     проверкой того, что появилось в волне P6, на живом стенде через API:
 
-      M. Приглашения (T47): создание приглашения -> оно видно в
-         GET /admin/invites (без токена, с tokenPrefix), отзыв -> revoked,
-         повторный отзыв -> 409, чужой id -> 404, не-админ -> 403,
-         учитель регистрируется именно по этому приглашению.
+      M. Приглашения (T47): учитель регистрируется по приглашению -> оно
+         видно в GET /admin/invites (accepted, без токена, с tokenPrefix);
+         второе приглашение остаётся sent и отзывается -> revoked,
+         повторный отзыв -> 409, чужой id -> 404, не-админ -> 403.
       N. Курсы админки (T48): сортировка sort/dir (title asc/desc на двух
          своих курсах), 400 на кривой sort/dir, фильтр teacherEmail,
          период from/to (включительно) и 400 на кривую дату/перевёрнутый
@@ -186,8 +186,10 @@ $studentEmail = "qa-p6-student-$stamp@example.test"
 $password = "password123"
 $titleA = "qa-p6-Aaa-$stamp"
 $titleB = "qa-p6-Bbb-$stamp"
-$today = (Get-Date).ToString("yyyy-MM-dd")
-$tomorrow = (Get-Date).AddDays(1).ToString("yyyy-MM-dd")
+# Даты фильтра from/to — по часам сервера (UTC): на границе суток локальное
+# время может опережать серверное, и выборка «за сегодня» окажется пустой.
+$today = (Get-Date).ToUniversalTime().ToString("yyyy-MM-dd")
+$tomorrow = (Get-Date).ToUniversalTime().AddDays(1).ToString("yyyy-MM-dd")
 
 $adminSession = New-Session
 $teacherSession = New-Session
@@ -227,7 +229,7 @@ $r = Invoke-Auth -Method POST -Path "/api/v1/auth/register" -Session $teacherSes
 Invoke-Check "M3. Регистрация учителя по приглашению -> 201" `
     ($r.Status -eq 201 -and $r.Json.role -eq "teacher") $r.Body
 
-# M4. Список приглашений: запись есть, без токена, с tokenPrefix.
+# M4. Список приглашений: принятое приглашение видно, без токена, с tokenPrefix.
 $r = Invoke-Api -Method GET -Path "/api/v1/admin/invites?limit=100" -Session $adminSession
 $invite = $null
 if ($r.Status -eq 200 -and $r.Json -ne $null) {
@@ -236,33 +238,52 @@ if ($r.Status -eq 200 -and $r.Json -ne $null) {
 $inviteOk = $false
 if ($invite -ne $null) {
     $hasToken = ($invite.PSObject.Properties["token"] -ne $null) -or ($invite.PSObject.Properties["tokenHash"] -ne $null)
-    $inviteOk = ($invite.status -eq "sent") -and ($invite.tokenPrefix -ne $null) -and `
+    # После регистрации учителя (M3) приглашение легально перешло в accepted.
+    $inviteOk = ($invite.status -eq "accepted") -and ($invite.tokenPrefix -ne $null) -and `
                 ($invite.expiresAt -ne $null) -and ($invite.createdAt -ne $null) -and (-not $hasToken)
 }
-Invoke-Check "M4. GET /admin/invites: запись есть, статус sent, без токена" $inviteOk $r.Body
+Invoke-Check "M4. GET /admin/invites: принятое приглашение видно, без токена" $inviteOk $r.Body
 
-# M5. Отзыв приглашения.
+# M5. Второе приглашение — остаётся активным (для проверки отзыва).
+$invite2Email = "qa-p6-invite-$stamp@example.test"
+$r = Invoke-Api -Method POST -Path "/api/v1/admin/invites" -Session $adminSession `
+    -Body @{ email = $invite2Email }
+Invoke-Check "M5. POST /admin/invites (второе, активное) -> 201" `
+    ($r.Status -eq 201 -and $r.Json.token -ne $null) $r.Body
+
+# M6. Второе приглашение в списке — статус sent.
 $inviteId = ""
-if ($invite -ne $null) { $inviteId = [string]$invite.id }
+$invite2 = $null
+$r = Invoke-Api -Method GET -Path "/api/v1/admin/invites?limit=100" -Session $adminSession
+if ($r.Status -eq 200 -and $r.Json -ne $null) {
+    $invite2 = @($r.Json.items) | Where-Object { $_.email -eq $invite2Email } | Select-Object -First 1
+}
+if ($invite2 -ne $null) { $inviteId = [string]$invite2.id }
+Invoke-Check "M6. Второе приглашение — статус sent" `
+    ($invite2 -ne $null -and $invite2.status -eq "sent") $r.Body
+
+# M7. Отзыв активного приглашения.
 if ($inviteId -eq "") {
-    Skip-Check "M5. POST /admin/invites/{id}/revoke -> 200 revoked" "приглашение не найдено (M2/M4)"
+    Skip-Check "M7. POST /admin/invites/{id}/revoke -> 200 revoked" "приглашение не найдено (M5/M6)"
 } else {
     $r = Invoke-Api -Method POST -Path "/api/v1/admin/invites/$inviteId/revoke" -Session $adminSession
-    Invoke-Check "M5. POST /admin/invites/{id}/revoke -> 200 revoked" `
+    Invoke-Check "M7. POST /admin/invites/{id}/revoke -> 200 revoked" `
         ($r.Status -eq 200 -and $r.Json.invite.status -eq "revoked") $r.Body
-
-    # M6. Повторный отзыв -> 409.
-    $r = Invoke-Api -Method POST -Path "/api/v1/admin/invites/$inviteId/revoke" -Session $adminSession
-    Invoke-Check "M6. Повторный отзыв -> 409" ($r.Status -eq 409) $r.Body
-
-    # M7. Несуществующее приглашение -> 404.
-    $r = Invoke-Api -Method POST -Path "/api/v1/admin/invites/$([guid]::NewGuid())/revoke" -Session $adminSession
-    Invoke-Check "M7. Отзыв несуществующего приглашения -> 404" ($r.Status -eq 404) $r.Body
 }
 
-# M8. Учитель на /admin/invites -> 403.
+# M8. Повторный отзыв -> 409.
+if ($inviteId -ne "") {
+    $r = Invoke-Api -Method POST -Path "/api/v1/admin/invites/$inviteId/revoke" -Session $adminSession
+}
+Invoke-Check "M8. Повторный отзыв -> 409" ($r.Status -eq 409) $r.Body
+
+# M9. Несуществующее приглашение -> 404.
+$r = Invoke-Api -Method POST -Path "/api/v1/admin/invites/$([guid]::NewGuid())/revoke" -Session $adminSession
+Invoke-Check "M9. Отзыв несуществующего приглашения -> 404" ($r.Status -eq 404) $r.Body
+
+# M10. Учитель на /admin/invites -> 403.
 $r = Invoke-Api -Method GET -Path "/api/v1/admin/invites" -Session $teacherSession
-Invoke-Check "M8. Учитель на GET /admin/invites -> 403" ($r.Status -eq 403) $r.Body
+Invoke-Check "M10. Учитель на GET /admin/invites -> 403" ($r.Status -eq 403) $r.Body
 
 # =============================================================================
 Write-Host "`n--- N. Курсы админки: сортировка, фильтры, unarchive, очередь (T48) ---" -ForegroundColor Cyan
