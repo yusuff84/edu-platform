@@ -34,6 +34,17 @@ func userResponseOf(u *repo.User) userResponse {
 	return userResponse{ID: u.ID, Email: u.Email, Role: u.Role, DisplayName: u.DisplayName}
 }
 
+// blockedUserMessage — единый русский текст отказа заблокированному
+// пользователю (T24). Все точки входа — парольный вход, /auth/me, callback
+// Яндекса (T32) — отвечают им же: фронтенд показывает пользователю одно и то
+// же сообщение, а по 403 нельзя различить способ входа.
+const blockedUserMessage = "Учётная запись заблокирована"
+
+// writeBlockedUser отвечает 403 с текстом blockedUserMessage (T24, T32).
+func writeBlockedUser(w http.ResponseWriter) {
+	writeErr(w, http.StatusForbidden, blockedUserMessage)
+}
+
 // Register — POST /auth/register. inviteToken повышает роль до teacher.
 func (a *App) Register(w http.ResponseWriter, r *http.Request) {
 	var req registerRequest
@@ -111,7 +122,7 @@ func (a *App) Login(w http.ResponseWriter, r *http.Request) {
 	// нерабочей (requireAuth отвечает 403). Пароль проверен ДО статуса, чтобы
 	// по 403 нельзя было определить существование чужого аккаунта.
 	if u.Status == repo.UserBlocked {
-		writeErr(w, http.StatusForbidden, "Учётная запись заблокирована")
+		writeBlockedUser(w)
 		return
 	}
 	a.startSession(w, r, u.ID)
@@ -137,7 +148,7 @@ func (a *App) Me(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if u.Status == repo.UserBlocked {
-		writeErr(w, http.StatusForbidden, "Учётная запись заблокирована")
+		writeBlockedUser(w)
 		return
 	}
 	writeJSON(w, http.StatusOK, userResponseOf(u))
