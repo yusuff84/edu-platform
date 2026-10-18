@@ -106,9 +106,40 @@ type paymentJournalResponse struct {
 	Totals paymentJournalTotals `json:"totals"`
 }
 
+// parseJournalPeriod разбирает границы периода from/to журнала платежей (T31).
+// Формат — ГГГГ-ММ-ДД (UTC), пустое значение = границы нет. Неверный формат
+// → 400 «Дата в формате ГГГГ-ММ-ДД», from позже to → 400 «Начало периода
+// позже конца»; в обоих случаях ответ уже записан и ok=false.
+func parseJournalPeriod(w http.ResponseWriter, r *http.Request) (from, to time.Time, ok bool) {
+	qv := r.URL.Query()
+	var err error
+	if v := strings.TrimSpace(qv.Get("from")); v != "" {
+		from, err = time.Parse("2006-01-02", v)
+		if err != nil {
+			writeErr(w, http.StatusBadRequest, "Дата в формате ГГГГ-ММ-ДД")
+			return time.Time{}, time.Time{}, false
+		}
+	}
+	if v := strings.TrimSpace(qv.Get("to")); v != "" {
+		to, err = time.Parse("2006-01-02", v)
+		if err != nil {
+			writeErr(w, http.StatusBadRequest, "Дата в формате ГГГГ-ММ-ДД")
+			return time.Time{}, time.Time{}, false
+		}
+	}
+	if !from.IsZero() && !to.IsZero() && from.After(to) {
+		writeErr(w, http.StatusBadRequest, "Начало периода позже конца")
+		return time.Time{}, time.Time{}, false
+	}
+	return from, to, true
+}
+
 // AdminPaymentsJournal — GET /admin/payments: журнал платежей (US6), только admin.
 // Query: page (1-based), limit (20..100), status (pending|succeeded|failed|refunded),
-// courseId. totals считаются по всем записям с учётом фильтров, но без пагинации.
+// courseId, q (T31: подстрока по email или displayName студента, без учёта
+// регистра), from/to (T31: границы периода в формате ГГГГ-ММ-ДД, включительно).
+// totals считаются по тому же отфильтрованному набору, что и total, но без
+// пагинации.
 func (a *App) AdminPaymentsJournal(w http.ResponseWriter, r *http.Request) {
 	if !a.adminOnly(w, r) {
 		return
@@ -132,9 +163,16 @@ func (a *App) AdminPaymentsJournal(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	// T31: поиск по студенту и период. Пустой q — фильтра нет.
+	searchQuery := strings.TrimSpace(r.URL.Query().Get("q"))
+	from, to, ok := parseJournalPeriod(w, r)
+	if !ok {
+		return
+	}
 
 	items, total, totals, err := a.Store.ListPaymentsJournal(repo.PaymentFilter{
 		Page: page, Limit: limit, Status: status, CourseID: courseID,
+		Q: searchQuery, From: from, To: to,
 	})
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, "Не удалось загрузить журнал платежей")

@@ -785,10 +785,13 @@ func (s *Store) SetPaymentStatus(id string, status PaymentStatus) bool {
 }
 
 // ListPaymentsJournal возвращает журнал платежей для админки (US6).
-// Фильтры Status и CourseID комбинируются через AND, сортировка created_at DESC,
-// total — количество до пагинации, totals — суммы по всем отфильтрованным
-// записям (без пагинации). Пагинация 1-based, limit 20..100 (защитный
-// clamp дублирует проверку на уровне handler). Ошибок не бывает — nil.
+// Фильтры Status, CourseID, Q (подстрока по email ИЛИ displayName студента,
+// регистронезависимо) и период From/To комбинируются через AND, сортировка
+// created_at DESC, total — количество до пагинации, totals — суммы по всем
+// отфильтрованным записям (без пагинации). Границы периода включительно:
+// From — с начала суток, To — до конца суток (сравнение со следующими сутками).
+// Пагинация 1-based, limit 20..100 (защитный clamp дублирует проверку на
+// уровне handler). Ошибок не бывает — nil.
 func (s *Store) ListPaymentsJournal(f PaymentFilter) ([]PaymentJournalRow, int, PaymentTotals, error) {
 	limit := f.Limit
 	if limit <= 0 {
@@ -806,11 +809,33 @@ func (s *Store) ListPaymentsJournal(f PaymentFilter) ([]PaymentJournalRow, int, 
 	defer s.mu.RUnlock()
 
 	matched := make([]*Payment, 0, len(s.payments))
+	searchQuery := strings.ToLower(f.Q)
 	for _, p := range s.payments {
 		if f.Status != "" && p.Status != f.Status {
 			continue
 		}
 		if f.CourseID != "" && p.CourseID != f.CourseID {
+			continue
+		}
+		// T31: поиск по студенту — подстрока без учёта регистра по email
+		// ИЛИ displayName. Пользователя может не быть в users (платёж
+		// остаётся в журнале): тогда оба поля пустые и запись не совпадёт.
+		if searchQuery != "" {
+			email, name := "", ""
+			if u, ok := s.users[p.StudentID]; ok {
+				email, name = u.Email, u.DisplayName
+			}
+			if !strings.Contains(strings.ToLower(email), searchQuery) &&
+				!strings.Contains(strings.ToLower(name), searchQuery) {
+				continue
+			}
+		}
+		// T31: период по дате создания, границы включительно. To — «до конца
+		// суток»: отсекаем всё, что не раньше следующих суток после To.
+		if !f.From.IsZero() && p.CreatedAt.Before(f.From) {
+			continue
+		}
+		if !f.To.IsZero() && !p.CreatedAt.Before(f.To.AddDate(0, 0, 1)) {
 			continue
 		}
 		matched = append(matched, p)
