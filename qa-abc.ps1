@@ -314,15 +314,16 @@ if ($SkipAdmin) {
     }
 
     if ($teacherSession -ne $null) {
-        # B4. Создание курса — 201, автосlug course-xxxxxxxx, статус draft.
+        # B4. Создание курса — 201, автослаг из названия (T41: «qa-kurs-<штамп>»),
+        # статус draft.
         $r = Invoke-Api -Method POST -Path "/api/v1/teacher/courses" -Session $teacherSession `
             -Body @{ title = "QA-курс $stamp"; description = "Сквозной сценарий T12"; priceCents = 2500 }
         if ($r.Status -eq 201 -and $r.Json -ne $null) {
             $courseID = [string]$r.Json.id
             $courseSlug = [string]$r.Json.slug
         }
-        Invoke-Check "B4. Создание курса -> 201, draft, slug course-*" `
-            ($r.Status -eq 201 -and $courseSlug.StartsWith("course-") -and $r.Json.status -eq "draft") $r.Body
+        Invoke-Check "B4. Создание курса -> 201, draft, slug из названия (qa-kurs-*)" `
+            ($r.Status -eq 201 -and $courseSlug -eq "qa-kurs-$stamp" -and $r.Json.status -eq "draft") $r.Body
 
         # B5. Submit пустого курса — 400.
         if ($courseID) {
