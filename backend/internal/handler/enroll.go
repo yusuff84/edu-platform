@@ -61,7 +61,21 @@ func (a *App) CreateEnrollment(w http.ResponseWriter, r *http.Request) {
 			ProviderPaymentID: "free-" + u.ID + "-" + c.ID,
 			Status:            repo.PaymentSucceeded,
 		})
-		if err != nil && !errors.Is(err, repo.ErrAlreadyExists) {
+		switch {
+		case err == nil:
+			// Первая покупка: платёж только что создан.
+		case errors.Is(err, repo.ErrAlreadyExists):
+			// T35: providerPaymentId бесплатного платежа детерминирован,
+			// поэтому повторная покупка после возврата средств снова приходит
+			// сюда. CreatePayment возвращает (nil, ErrAlreadyExists) — раньше
+			// это была паника на p.ID → 500. Переиспользуем тот же платёж:
+			// ниже он возвращается в succeeded, доступ открывает EnsureEnrollment.
+			p = freePaymentByCourse(a.Store, u.ID, c.ID)
+			if p == nil {
+				writeErr(w, http.StatusInternalServerError, "Не удалось оформить бесплатный курс")
+				return
+			}
+		default:
 			writeErr(w, http.StatusInternalServerError, "Не удалось оформить бесплатный курс")
 			return
 		}
@@ -114,6 +128,21 @@ func enrollmentResponse(p *repo.Payment, redirectURL string, active bool) map[st
 	}
 }
 
+// freePaymentByCourse ищет уже выданный бесплатный платёж ученика по курсу
+// (T35). Ключ детерминирован — "free-<ученик>-<курс>", поэтому при повторной
+// покупке после возврата средств новый платёж не создаётся, а переиспользуется
+// старый; nil означает расхождение данных (CreatePayment сказал «уже есть»,
+// а платежа не нашлось) — вызывающий отвечает 500.
+func freePaymentByCourse(s repo.StoreAPI, studentID, courseID string) *repo.Payment {
+	want := "free-" + studentID + "-" + courseID
+	for _, p := range s.ListPaymentsByStudent(studentID) {
+		if p.ProviderPaymentID == want {
+			return p
+		}
+	}
+	return nil
+}
+
 // PaymentWebhook — POST /payments/webhook/{provider}: проверка подписи и
 // идемпотентная обработка события. Подпись проверяется ДО разбора тела;
 // повторный webhook по тому же providerPaymentID возвращает duplicate.
@@ -139,6 +168,13 @@ func (a *App) PaymentWebhook(w http.ResponseWriter, r *http.Request) {
 		writeWebhookErr(w, err)
 		return
 	}
+	// P5: проверка статуса платежа и его применение — одна критическая секция
+	// под a.webhookMu. Без замка одновременные доставки одного события обе
+	// видели pending и обе отвечали «processed» (гонка, которую ловит тест T35
+	// TestPaymentsHardeningConcurrentWebhookRace). Чтение — внутри замка,
+	// чтобы не работать со снимком, устаревшим к моменту захвата.
+	a.webhookMu.Lock()
+	defer a.webhookMu.Unlock()
 	p, found := a.Store.GetPaymentByProviderID(event.ProviderPaymentID)
 	if !found {
 		writeErr(w, http.StatusNotFound, "Платёж не найден")

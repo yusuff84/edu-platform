@@ -10,9 +10,16 @@ import (
 
 // UpdateCourse применяет частичное обновление курса динамическим SET
 // (только переданные поля); false — курса нет или БД недоступна.
+//
+// Нумерация плейсхолдеров: $1 — id курса в WHERE, поля SET получают $2, $3…
+// (args заводится с id). Регресс qa-p4: если начинать SET с $1, запрос
+// получает SET title=$1 … WHERE id=$1::uuid, а в Exec уходит на один
+// параметр больше, чем есть в запросе — Postgres отвечает ошибкой bind и
+// PATCH любой карточки курса на Postgres превращается в 500. В in-memory
+// ветке (update.go) баг не проявляется, поэтому ловится только здесь.
 func (s *PostgresStore) UpdateCourse(id string, u CourseUpdate) bool {
 	sets := make([]string, 0, 5)
-	args := make([]any, 0, 5)
+	args := []any{id}
 	add := func(col string, v any) {
 		args = append(args, v)
 		sets = append(sets, col+"=$"+strconv.Itoa(len(args)))
@@ -34,7 +41,7 @@ func (s *PostgresStore) UpdateCourse(id string, u CourseUpdate) bool {
 	defer cancel()
 	tag, err := s.pool.Exec(ctx,
 		"UPDATE courses SET "+strings.Join(sets, ", ")+" WHERE id=$1::uuid",
-		append([]any{id}, args...)...)
+		args...)
 	if err != nil {
 		return false
 	}

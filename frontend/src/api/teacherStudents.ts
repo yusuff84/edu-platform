@@ -69,13 +69,28 @@ export function courseStats(courseId: string): Promise<CourseStats> {
 }
 
 /**
- * GET /teacher/courses/{id} (эндпоинт T13) — название и статус курса для шапки.
- * В api/client.ts функции getTeacherCourse нет (в письме задачи она упомянута,
- * но в этой ветке отсутствует) — объявляем локально, чужой client.ts не правим.
- * Ответ — конверт { course, modules }; странице нужен только course.
+ * Конверт GET /teacher/courses/{id} (T13) — курс и его модули как есть.
+ * T36: под этим конвертом данные лежат в общем кэше конструктора и страницы
+ * «Ученики курса» (ключ ['teach-course', id]) — форма ответа у обеих страниц
+ * должна совпадать, поэтому функция ничего не распаковывает.
+ */
+export type TeacherCourseDetail = {
+  course: Course;
+  modules: Module[];
+};
+
+/** GET /teacher/courses/{id} — конверт { course, modules } без распаковки (T36). */
+export function getTeacherCourseDetail(courseId: string): Promise<TeacherCourseDetail> {
+  return apiFetch<TeacherCourseDetail>(
+    `/teacher/courses/${encodeURIComponent(courseId)}`,
+  );
+}
+
+/**
+ * GET /teacher/courses/{id} (эндпоинт T13) — только название и статус курса
+ * для шапки. Обёртка над getTeacherCourseDetail: странице «Ученики курса»
+ * нужен лишь course. Для данных общего кэша используйте getTeacherCourseDetail.
  */
 export function getTeacherCourse(courseId: string): Promise<Course> {
-  return apiFetch<{ course: Course; modules: Module[] }>(
-    `/teacher/courses/${encodeURIComponent(courseId)}`,
-  ).then((res) => res.course);
+  return getTeacherCourseDetail(courseId).then((res) => res.course);
 }

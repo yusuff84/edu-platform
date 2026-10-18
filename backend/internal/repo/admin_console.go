@@ -54,9 +54,10 @@ type EnrollmentRow struct {
 // из полей платежа (platform_fee_cents/teacher_amount_cents), а не
 // пересчитывается от текущей настройки.
 //
-// UsersBlocked — в MVP нет механизма блокировки пользователей (в users нет
-// соответствующего поля), поэтому всегда 0; поле оставлено в контракте
-// заранее, чтобы форма ответа /admin/stats не менялась при появлении блокировок.
+// UsersBlocked — число пользователей со статусом blocked: блокировка появилась
+// в T24 (поле Status у пользователя, миграция 006_user_status.sql). Счётчик
+// считается и в памяти, и в Postgres; до T34 в обеих реализациях он всегда
+// оставался нулевым.
 type AdminTotals struct {
 	UsersTotal, UsersStudents, UsersTeachers, UsersAdmins, UsersBlocked int
 	UsersNew7                                                          int
@@ -109,8 +110,10 @@ func (s *Store) AdminOverview() AdminTotals {
 		if !u.CreatedAt.Before(cutoff7) {
 			t.UsersNew7++
 		}
+		if u.Status == UserBlocked {
+			t.UsersBlocked++
+		}
 	}
-	// UsersBlocked остаётся нулевым: поля «заблокирован» в модели нет.
 
 	for _, c := range s.courses {
 		t.CoursesTotal++

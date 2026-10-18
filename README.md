@@ -120,6 +120,20 @@ cd runner   && go test ./...     # тесты песочницы
 cd frontend && npm ci && npm run build   # tsc --noEmit + vite build
 ```
 
+### Проверка runner (python3/nodejs)
+
+Тесты `cd runner && go test ./...` пропускают (`SKIP`) реальный запуск python/js,
+если интерпретаторов нет в окружении, а слой сборки `runner/Dockerfile` может
+быть взят из кэша — поэтому песочницу целиком проверяем так (из корня репозитория):
+
+```powershell
+docker run --rm -v "${PWD}\runner:/src" -w /src golang:1.24-bookworm sh -c "apt-get update -qq && apt-get install -y -qq --no-install-recommends python3 nodejs >/dev/null && go vet ./... && go test ./... -count=1 -v"
+```
+
+Ожидаемый итог — `ok runner` без единого `SKIP`/`FAIL`. Если репозиторий Debian
+недоступен из вашей сети, замените `deb.debian.org` на рабочее зеркало
+(например, `mirror.yandex.ru`) в команде `apt-get update`.
+
 Сквозной QA-скрипт (**49 проверок**, код возврата 0/1):
 
 ```bash
@@ -143,6 +157,11 @@ CSRF-защита (T10) вернёт `403`. Лимиты rate-limit на `/auth/
 10/мин на IP; при частых повторных запусках задайте `RATE_LIMIT_AUTH_PER_MIN=0`
 на время прогона ( сами лимиты покрыты контрактными тестами).
 
+Автосид qa-админа: при неудачном входе под `-AdminEmail` `qa-abc.ps1` один раз запускает
+`qa-seed-admin.ps1` — тот заводит учётку через сид-админа (`-SeedAdminEmail`/`-SeedAdminPassword`,
+дефолты `admin@local`/`admin1234` — как в .env) и выдаёт роль admin, затем вход повторяется.
+Отключается switch'ем `-NoAutoSeed`; отдельный запуск — `powershell -File qa-seed-admin.ps1`.
+
 ### Волна P3: `qa-p3.ps1` (**80 проверок**)
 
 Разделы «конструктор курса», «ученики», «супер-админ» проверяет отдельный
@@ -160,6 +179,31 @@ powershell -File qa-p3.ps1 -AdminEmail admin@local -AdminPassword admin1234
 и т. д.), поэтому повторный прогон на той же базе тоже даёт 80/80. Требуется
 поднятый `web` — но только для проверки `P0`; без него она уходит в `SKIP`
 (`-SkipWeb`, чтобы не проверять вовсе).
+
+### Интеграционные тесты Postgres (`backend/tests/postgres`)
+
+Методы волны P3 и счётчики сводки проверяются не только сквозным QA, но и на
+**живом Postgres**: пакет `backend/tests/postgres` включается при заданном
+`TEST_DATABASE_URL`, а без него каждый тест делает `t.Skip` — обычный
+`go test ./...` остаётся зелёным и без базы. Тесты создают свои сущности
+с уникальными email/slug и не трогают чужие данные, поэтому запускать их можно
+и рядом со стендом.
+
+```powershell
+# 1. Временный Postgres: отдельный контейнер и порт, стенд не трогаем
+docker run -d --rm --name edu-pgtest -e POSTGRES_USER=edu -e POSTGRES_PASSWORD=edu -e POSTGRES_DB=edu_test -p 55432:5432 postgres:16-alpine
+
+# 2. Прогон из контейнера с Go; миграции применяет сам тест
+docker run --rm --network host -v "$PWD\backend:/src" -v gomodcache:/go/pkg/mod -w /src -e GOFLAGS=-mod=mod -e TEST_DATABASE_URL="postgres://edu:edu@127.0.0.1:55432/edu_test?sslmode=disable" golang:1.24-alpine sh -c "go test ./tests/postgres/... -count=1 -v"
+
+# 3. Убрать за собой
+docker stop edu-pgtest
+```
+
+Покрыто: пользователи (фильтры, блокировка/разблокировка, зависимости при
+удалении), сводка админки (в том числе `users.blocked` — до T34 счётчик
+на Postgres всегда показывал 0), журнал платежей (фильтры, тоталы, пагинация),
+ученики курса и их прогресс, кабинет ученика (записи, платежи, `nextLessonId`).
 
 ## Документация API
 

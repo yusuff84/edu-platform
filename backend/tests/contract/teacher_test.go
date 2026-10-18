@@ -6,7 +6,6 @@ package contract_test
 
 import (
 	"net/http"
-	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -106,7 +105,8 @@ func TestTeacherCourseLifecycle(t *testing.T) {
 		t.Fatal("не удалось выдать роль teacher")
 	}
 
-	// Создание курса: 201, автосlug course-xxxxxxxx.
+	// Создание курса: 201, автоslug из названия (T41: кириллица
+	// транслитерируется) — «Тестовый курс» → testovyy-kurs.
 	rec = doRequest(t, router, http.MethodPost, "/api/v1/teacher/courses", map[string]any{
 		"title": "Тестовый курс", "description": "Описание", "priceCents": 5000,
 	}, teacherCookies)
@@ -117,8 +117,8 @@ func TestTeacherCourseLifecycle(t *testing.T) {
 	decodeBody(t, rec, &course)
 	courseID, _ := course["id"].(string)
 	slug, _ := course["slug"].(string)
-	if !regexp.MustCompile(`^course-[0-9a-f]{8}$`).MatchString(slug) {
-		t.Fatalf("автосlug не вида course-xxxxxxxx: %q", slug)
+	if slug != "testovyy-kurs" {
+		t.Fatalf("автосlug не из названия курса: %q, ждали testovyy-kurs", slug)
 	}
 	if course["status"] != "draft" {
 		t.Fatalf("новый курс должен быть draft: %v", course["status"])
@@ -220,6 +220,10 @@ func TestTeacherCourseLifecycle(t *testing.T) {
 
 // Endpoints редактирования от T13: GET/PATCH /teacher/courses/{id},
 // PATCH .../modules/{moduleID}. Студент — 403.
+// T33: PATCH карточки разрешён в draft|review|published (курс здесь уже
+// опубликован — это осознанное исключение, карточка не проходит модерацию
+// заново), а в архиве — 409. Полная статусная матрица — в
+// teacher_card_status_test.go.
 func TestTeacherEditEndpoints(t *testing.T) {
 	app, router := newTestApp()
 	teacherCookies, courseID, _ := seedPublishedCourse(t, app, router, 0)
@@ -283,6 +287,19 @@ func TestTeacherEditEndpoints(t *testing.T) {
 		if rec.Code != http.StatusForbidden {
 			t.Fatalf("%s %s для студента: status=%d", req.method, req.path, rec.Code)
 		}
+	}
+
+	// T33: в архиве карточка заморожена — 409. Проверка идёт последней,
+	// чтобы архивация не влияла на предыдущие шаги.
+	rec = doRequest(t, router, http.MethodPost, "/api/v1/teacher/courses/"+courseID+"/archive", nil, teacherCookies)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("archive: status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	rec = doRequest(t, router, http.MethodPatch, "/api/v1/teacher/courses/"+courseID, map[string]any{
+		"title": "Правка архива",
+	}, teacherCookies)
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("patch карточки в архиве: status=%d body=%s, ждали 409", rec.Code, rec.Body.String())
 	}
 }
 

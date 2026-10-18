@@ -910,9 +910,13 @@ func (s *PostgresStore) SetPaymentStatus(id string, status PaymentStatus) bool {
 
 // ListPaymentsJournal возвращает журнал платежей для админки (US6).
 // В отличие от большинства методов файла ошибки БД НЕ глотаются, а
-// пробрасываются вызывающему (handler отвечает 500). Фильтры status/courseId
-// комбинируются через AND, сортировка created_at DESC; total — количество до
-// пагинации, totals — SUM по всем отфильтрованным записям без пагинации.
+// пробрасываются вызывающему (handler отвечает 500). Фильтры status,
+// courseId и T31-поиск/период (q — подстрока по email/displayName студента,
+// from/to — границы даты создания включительно) комбинируются через AND,
+// сортировка created_at DESC; total — количество до пагинации, totals — SUM
+// по всем отфильтрованным записям без пагинации. Все новые условия идут
+// через тот же динамический WHERE и общий список args, поэтому нумерация
+// $N не сбивается, а агрегат и страница строк видят одинаковый набор.
 func (s *PostgresStore) ListPaymentsJournal(f PaymentFilter) ([]PaymentJournalRow, int, PaymentTotals, error) {
 	limit := f.Limit
 	if limit <= 0 {
@@ -928,8 +932,10 @@ func (s *PostgresStore) ListPaymentsJournal(f PaymentFilter) ([]PaymentJournalRo
 
 	// Динамический WHERE: значения идут параметрами через $N (без конкатенации
 	// пользовательского ввода в SQL), LIMIT/OFFSET — клампнутые int.
+	// Условия по периоду: from — «с начала суток», to — «до конца суток»
+	// (created_at < следующих суток после to), поэтому границы включительно.
 	where := ""
-	args := make([]any, 0, 2)
+	args := make([]any, 0, 5)
 	if f.Status != "" {
 		args = append(args, string(f.Status))
 		where += fmt.Sprintf(" AND p.status=$%d", len(args))
@@ -938,17 +944,35 @@ func (s *PostgresStore) ListPaymentsJournal(f PaymentFilter) ([]PaymentJournalRo
 		args = append(args, f.CourseID)
 		where += fmt.Sprintf(" AND p.course_id=$%d::uuid", len(args))
 	}
+	if f.Q != "" {
+		// Один и тот же плейсхолдер в обоих LIKE: параметр — одна подстрока
+		// в нижнем регистре (email хранится как есть, поэтому lower(email)).
+		args = append(args, "%"+strings.ToLower(f.Q)+"%")
+		where += fmt.Sprintf(" AND (lower(u.email) LIKE $%d OR lower(coalesce(u.display_name,'')) LIKE $%d)",
+			len(args), len(args))
+	}
+	if !f.From.IsZero() {
+		args = append(args, f.From)
+		where += fmt.Sprintf(" AND p.created_at >= $%d", len(args))
+	}
+	if !f.To.IsZero() {
+		args = append(args, f.To.AddDate(0, 0, 1))
+		where += fmt.Sprintf(" AND p.created_at < $%d", len(args))
+	}
 
 	ctx, cancel := s.ctx()
 	defer cancel()
 
 	// Итоги и count — одним агрегатом по всем записям с учётом фильтров.
+	// LEFT JOIN users нужен для условий по q (u.email/u.display_name):
+	// строки от него не размножаются (u.id — первичный ключ), а набор для
+	// агрегата совпадает с набором страницы строк ниже.
 	var totals PaymentTotals
 	var total int
 	if err := s.pool.QueryRow(ctx,
 		`SELECT COUNT(*), COALESCE(SUM(p.amount_cents),0),
 		 COALESCE(SUM(p.platform_fee_cents),0), COALESCE(SUM(p.teacher_amount_cents),0)
-		 FROM payments p WHERE 1=1`+where, args...).
+		 FROM payments p LEFT JOIN users u ON u.id = p.student_id WHERE 1=1`+where, args...).
 		Scan(&total, &totals.AmountCents, &totals.PlatformFeeCents, &totals.TeacherAmountCents); err != nil {
 		return nil, 0, PaymentTotals{}, err
 	}

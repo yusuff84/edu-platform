@@ -92,6 +92,41 @@ main.admin {
   margin-top: 0;
 }
 
+/* Поиск: поле + кнопка «Найти» в одну строку */
+.admin-filters form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.75rem;
+  margin: 0;
+}
+
+.admin-filters input {
+  margin-top: 0.25rem;
+}
+
+/* Группа «Период»: подпись сверху, поля «С даты»/«По дату» рядом */
+.admin-filter-period {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.admin-filter-period__title {
+  font-weight: 600;
+}
+
+.admin-filter-period__fields {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.75rem;
+}
+
+.admin-filter-period__fields label {
+  margin: 0;
+}
+
 /* ---------- Итоги по выборке ---------- */
 
 .admin-totals {

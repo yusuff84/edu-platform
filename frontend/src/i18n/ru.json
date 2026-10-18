@@ -417,5 +417,27 @@
   "adminCourses.confirmUnpublish": "Снять с публикации",
 
   "my.progressRevoked": "Запись на курс отозвана",
-  "my.progressFailed": "Не удалось загрузить прогресс"
+  "my.progressFailed": "Не удалось загрузить прогресс",
+
+  "teach.courseLoading": "Загружаем курс:",
+  "teach.courseNotFound": "Курс не найден",
+  "teach.courseLoadFailed": "Не удалось загрузить курс",
+  "teach.cardArchivedHint": "Карточка заморожена: пока курс в архиве, менять её нельзя",
+
+  "admin.searchStudent": "Email или имя студента",
+  "admin.period": "Период",
+  "admin.periodFrom": "С даты",
+  "admin.periodTo": "По дату",
+  "admin.periodInvalid": "Даты в формате ГГГГ-ММ-ДД, начало не позже конца",
+  "admin.exportCsv": "Выгрузить CSV",
+  "admin.exportCsvHint": "Выгрузить текущую выборку в CSV-файл",
+  "admin.exported": "Файл выгружен",
+  "admin.exportEmpty": "Выгружать нечего: список пуст",
+  "admin.exportTruncated": "Выгружены первые 5000 строк — предел одного файла. Сузьте фильтры, чтобы охватить всю выборку.",
+
+  "learn.courseFinished": "Курс пройден",
+  "learn.finishedHint": "Все уроки курса пройдены. Оставьте отзыв — это поможет другим ученикам.",
+  "learn.leaveReview": "Оставить отзыв",
+  "learn.toCoursePage": "К странице курса",
+  "learn.reviewExists": "Вы уже оставили отзыв по этому курсу"
 }

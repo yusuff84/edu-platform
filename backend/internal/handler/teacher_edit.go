@@ -68,9 +68,25 @@ type updateCourseRequest struct {
 // TeacherUpdateCourse — PATCH /teacher/courses/{id}: частичное обновление
 // карточки. Пустые строки, отрицательная цена и занятый slug — 400.
 // Статус курса этим эндпоинтом не меняется (модерация — через submit).
+//
+// T33: правка разрешена в draft | review | published — это осознанное
+// исключение из правила «менять можно только черновик» (см.
+// Task/00-api-contract.md, раздел «Правка карточки курса (T33)»): карточка
+// не проходит модерацию заново, поэтому правка опубликованного курса не
+// сбрасывает его в черновик. Не заменять проверку ниже на requireDraft:
+// в review и published PATCH обязан работать.
+//
+// В archived карточка заморожена: 409 «Курс в архиве: карточка заморожена».
+// Состояние ресурса важнее валидации тела, поэтому guard стоит до decodeJSON —
+// даже пустое тело по архивному курсу отвечает 409, а не 400. Сначала курс
+// возвращают из архива (POST /teacher/courses/{id}/unarchive).
 func (a *App) TeacherUpdateCourse(w http.ResponseWriter, r *http.Request) {
 	_, c, ok := a.ownCourse(w, r)
 	if !ok {
+		return
+	}
+	if c.Status == repo.CourseArchived {
+		writeErr(w, http.StatusConflict, "Курс в архиве: карточка заморожена")
 		return
 	}
 	var req updateCourseRequest
@@ -102,7 +118,8 @@ func (a *App) TeacherUpdateCourse(w http.ResponseWriter, r *http.Request) {
 		upd.PriceCents = req.PriceCents
 	}
 	if req.Slug != nil {
-		s := strings.ToLower(strings.TrimSpace(*req.Slug))
+		// T41: кириллица транслитерируется в латиницу (как в POST-создании).
+		s := translitSlug(*req.Slug)
 		if !slugRe.MatchString(s) {
 			writeErr(w, http.StatusBadRequest, "Некорректный slug (латиница, цифры, дефис, 3–120 символов)")
 			return

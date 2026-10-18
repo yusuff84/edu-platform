@@ -12,6 +12,7 @@ import type { AdminUserPage, AdminUserRow, UserStatus } from '../api/adminUsers'
 import type { Role } from '../api/types';
 import { t } from '../i18n/t';
 import type { RuKey } from '../i18n/t';
+import CsvExportButton, { csvDateStamp, exportTruncated } from '../components/CsvExportButton';
 import '../styles/adminUsers.css';
 
 // ---------- Константы ----------
@@ -21,6 +22,12 @@ const SEARCH_DEBOUNCE_MS = 300;
 
 /** Размер страницы (контракт T24: limit=20). */
 const PAGE_LIMIT = 20;
+
+/** Размер страницы выгрузки CSV (T40): 100 строк за запрос. */
+const EXPORT_PAGE_LIMIT = 100;
+
+/** Потолок выгрузки CSV: не более 50 страниц (5000 строк) за один клик. */
+const EXPORT_MAX_PAGES = 50;
 
 /** Префикс ключа кэша списка: по нему инвалидируются все страницы с фильтрами. */
 const LIST_KEY = ['admin-users'] as const;
@@ -203,6 +210,53 @@ export default function AdminUsers(): JSX.Element {
   const statusPendingId = statusMutation.isPending ? statusMutation.variables?.id : undefined;
   const removePendingId = removeMutation.isPending ? removeMutation.variables : undefined;
 
+  // ---- Выгрузка CSV: вся выборка по текущим фильтрам ----
+  // Идём постранично (limit=100) до total, но не более 50 страниц: один клик
+  // выгружает не больше 5000 строк, чтобы не подвесить браузер и стенд.
+  // Если total первой страницы больше загруженного — выборка усечена (T43).
+  async function loadExportRows(): Promise<{
+    rows: Array<Array<string | number | null>>;
+    truncated: boolean;
+  }> {
+    const rows: Array<Array<string | number | null>> = [];
+    let total = 0;
+    for (let pageNumber = 1; pageNumber <= EXPORT_MAX_PAGES; pageNumber += 1) {
+      const res = await listUsers({
+        q: q || undefined,
+        role: role || undefined,
+        status: status || undefined,
+        page: pageNumber,
+        limit: EXPORT_PAGE_LIMIT,
+      });
+      if (pageNumber === 1) total = res.total;
+      for (const u of res.items) {
+        rows.push([
+          u.email,
+          u.displayName,
+          t(ROLE_LABEL[u.role]),
+          t(STATUS_LABEL[u.status]),
+          formatDate(u.createdAt),
+          u.coursesCount,
+          u.enrollmentsCount,
+        ]);
+      }
+      // Неполная страница — данных больше нет.
+      if (res.items.length < EXPORT_PAGE_LIMIT || rows.length >= res.total) break;
+    }
+    return { rows, truncated: exportTruncated(total, rows.length) };
+  }
+
+  // Заголовки CSV — существующие ключи таблицы; «Дата регистрации» — profile.registered.
+  const exportHeaders = [
+    t('adminUsers.colEmail'),
+    t('adminUsers.colName'),
+    t('adminUsers.colRole'),
+    t('adminUsers.colStatus'),
+    t('profile.registered'),
+    t('adminUsers.colCourses'),
+    t('adminUsers.colEnrollments'),
+  ];
+
   // ---- Производные значения списка ----
   const data = users.data;
   const total = data?.total ?? 0;
@@ -274,6 +328,13 @@ export default function AdminUsers(): JSX.Element {
                   ))}
                 </select>
               </label>
+
+              {/* T40: выгрузка всей выборки по текущим фильтрам (q, role, status). */}
+              <CsvExportButton
+                filename={`users-${csvDateStamp()}.csv`}
+                headers={exportHeaders}
+                loadRows={loadExportRows}
+              />
             </div>
 
             {/* ---------- Итог по фильтру и уведомление об успехе ---------- */}

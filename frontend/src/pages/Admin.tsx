@@ -16,11 +16,13 @@ import {
   reviewQueue,
   updateAdminSettings,
 } from '../api/client';
-import type { Invite, ModerationDecision, PaymentStatus } from '../api/client';
+import type { Invite, ModerationDecision, PaymentJournalItem, PaymentStatus } from '../api/client';
 import { t } from '../i18n/t';
 import type { RuKey } from '../i18n/t';
 // Стили страницы изолированы в styles/admin.css — общий styles.css не трогаем.
 import '../styles/admin.css';
+// T43: стиль предупреждения об усечении выгрузки (.ce-msg--warn) — из csvExport.css.
+import '../styles/csvExport.css';
 
 // ---------- Константы и утилиты ----------
 
@@ -45,6 +47,12 @@ const STATUS_LABEL: Record<PaymentStatus, RuKey> = {
 
 /** Значение limit по умолчанию (контракт: 20, максимум 100). */
 const DEFAULT_LIMIT = 20;
+
+/** Размер страницы выгрузки CSV: контракт разрешает limit до 100. */
+const EXPORT_PAGE_SIZE = 100;
+
+/** Предохранитель выгрузки: не больше 50 страниц = 5000 строк (см. отчёт T38). */
+const EXPORT_MAX_PAGES = 50;
 
 function isPaymentStatus(value: string | null): value is PaymentStatus {
   return value !== null && (PAYMENT_STATUSES as readonly string[]).includes(value);
@@ -94,6 +102,65 @@ async function copyToClipboard(value: string): Promise<boolean> {
   }
 }
 
+// ---------- Выгрузка журнала в CSV ----------
+
+/** Сегодняшняя локальная дата как ГГГГ-ММ-ДД — для имени файла выгрузки. */
+function todayIsoDate(): string {
+  const now = new Date();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  return `${now.getFullYear()}-${month}-${day}`;
+}
+
+/** Ячейка CSV: значение всегда в кавычках, внутренние кавычки удваиваются. */
+function csvCell(value: string): string {
+  return `"${value.replace(/"/g, '""')}"`;
+}
+
+/**
+ * CSV выборки журнала: разделитель «;» (русский Excel), заголовки — из словаря,
+ * порядок колонок совпадает с таблицей на странице.
+ */
+function paymentsCsv(rows: PaymentJournalItem[]): string {
+  const header = [
+    t('admin.colDate'),
+    t('admin.colStudent'),
+    t('admin.colCourse'),
+    t('admin.colAmount'),
+    t('admin.colCommission'),
+    t('admin.colTeacher'),
+    t('admin.colProvider'),
+    t('admin.colStatus'),
+    t('admin.colPaymentId'),
+  ];
+  const lines = rows.map((item) => [
+    formatDate(item.createdAt),
+    // Как в таблице: имя → email → короткий id.
+    item.studentName || item.studentEmail || shortId(item.studentId),
+    item.courseTitle,
+    formatMoney(item.amountCents),
+    formatMoney(item.platformFeeCents),
+    formatMoney(item.teacherAmountCents),
+    item.provider,
+    t(STATUS_LABEL[item.status]),
+    item.providerPaymentId,
+  ]);
+  // CRLF — привычный для Excel разделитель строк.
+  return [header, ...lines].map((cells) => cells.map(csvCell).join(';')).join('\r\n');
+}
+
+/** Скачивание текста как файла; CSV собирается вручную через Blob (новых зависимостей нет). */
+function downloadTextFile(fileName: string, content: string, mimeType: string): void {
+  const url = URL.createObjectURL(new Blob([content], { type: mimeType }));
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = fileName;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
 // ---------- Страница ----------
 
 export default function Admin(): JSX.Element {
@@ -111,6 +178,13 @@ export default function Admin(): JSX.Element {
   const statusParam = searchParams.get('status');
   const status: PaymentStatus | undefined = isPaymentStatus(statusParam) ? statusParam : undefined;
   const courseId = searchParams.get('courseId') ?? undefined;
+  // Поиск по студенту и период живут в URL — ссылка шарится, как status/courseId.
+  const q = searchParams.get('q') ?? '';
+  const from = searchParams.get('from') ?? '';
+  const to = searchParams.get('to') ?? '';
+  // Границы формата ГГГГ-ММ-ДД сравниваются лексикографически = хронологически.
+  // Неверный период (начало позже конца): запрос не уходит, показываем admin.periodInvalid.
+  const periodInvalid = from !== '' && to !== '' && from > to;
 
   /** Точечное обновление query-параметров: null — удалить параметр. */
   function setParams(patch: Record<string, string | null>): void {
@@ -122,13 +196,32 @@ export default function Admin(): JSX.Element {
     setSearchParams(next);
   }
 
+  // Поле поиска правится локально, в URL попадает по Enter или кнопке «Найти» —
+  // иначе каждый введённый символ дёргал бы запрос.
+  const [searchInput, setSearchInput] = useState(q);
+  useEffect(() => {
+    // URL — источник истины: сброс фильтров и переходы по истории обновляют поле.
+    setSearchInput(q);
+  }, [q]);
+
+  /** Применение поиска из формы (Enter или кнопка): значение — в URL, страница на первую. */
+  function onSearchSubmit(e: FormEvent<HTMLFormElement>): void {
+    e.preventDefault();
+    setParams({ q: searchInput.trim() || null, page: null });
+  }
+
   // ---- Запросы ----
   // Ключ ['review-queue'] сохранён — его инвалидация после решения по модерации.
   const queue = useQuery({ queryKey: ['review-queue'], queryFn: reviewQueue });
 
   const journal = useQuery({
-    queryKey: ['admin-payments', { page, limit, status: status ?? '', courseId: courseId ?? '' }],
-    queryFn: () => paymentJournal({ page, limit, status, courseId }),
+    queryKey: [
+      'admin-payments',
+      { page, limit, status: status ?? '', courseId: courseId ?? '', q, from, to },
+    ],
+    queryFn: () => paymentJournal({ page, limit, status, courseId, q, from, to }),
+    // Неверный период блокирует запрос: бэкенд ответил бы 400.
+    enabled: !periodInvalid,
     // 4xx — не временный сбой, ретраим только сетевые ошибки.
     retry: (failureCount, error) => !(error instanceof ApiError) && failureCount < 2,
   });
@@ -165,6 +258,61 @@ export default function Admin(): JSX.Element {
     if (courseId && !map[courseId]) map[courseId] = courseId;
     return Object.entries(map).sort((a, b) => a[1].localeCompare(b[1], 'ru'));
   }, [courseOptions, courseId]);
+
+  // ---- Выгрузка всей выборки в CSV (не только открытой страницы) ----
+  const [exporting, setExporting] = useState(false);
+  // Тон сообщения: 'ok' — успех/пусто, 'warn' — выборка усечена (T43),
+  // 'error' — ошибка сети/сервера.
+  const [exportMsg, setExportMsg] = useState<{ tone: 'ok' | 'warn' | 'error'; text: string } | null>(
+    null,
+  );
+
+  async function onExportCsv(): Promise<void> {
+    setExportMsg(null);
+    setExporting(true);
+    try {
+      const rows: PaymentJournalItem[] = [];
+      // total выборки — из ответов пагинации: если больше выгруженного, файл
+      // обрезан потолком EXPORT_MAX_PAGES (T43).
+      let total = 0;
+      // Постранично limit=100 до total, но не больше EXPORT_MAX_PAGES:
+      // защита от неограниченной выгрузки (ограничение описано в отчёте T38).
+      for (let p = 1; p <= EXPORT_MAX_PAGES; p += 1) {
+        const res = await paymentJournal({
+          page: p,
+          limit: EXPORT_PAGE_SIZE,
+          status,
+          courseId,
+          q,
+          from,
+          to,
+        });
+        if (p === 1) total = res.total;
+        rows.push(...res.items);
+        if (rows.length >= res.total || res.items.length === 0) break;
+      }
+      if (rows.length === 0) {
+        // Пустая выборка: сообщаем, файл не создаём.
+        setExportMsg({ tone: 'ok', text: t('admin.exportEmpty') });
+        return;
+      }
+      downloadTextFile(
+        `payments-${todayIsoDate()}.csv`,
+        `\uFEFF${paymentsCsv(rows)}`,
+        'text/csv;charset=utf-8',
+      );
+      if (total > rows.length) {
+        // Файл создан, но выборка усечена потолком выгрузки — честно сообщаем.
+        setExportMsg({ tone: 'warn', text: t('admin.exportTruncated') });
+        return;
+      }
+      setExportMsg({ tone: 'ok', text: t('admin.exported') });
+    } catch (e: unknown) {
+      setExportMsg({ tone: 'error', text: errorText(e) });
+    } finally {
+      setExporting(false);
+    }
+  }
 
   // ---- Приглашения ----
   const [invite, setInvite] = useState<Invite | null>(null);
@@ -389,6 +537,23 @@ export default function Admin(): JSX.Element {
 
         <div className="admin-filters">
           <span className="admin-filters__title">{t('admin.filters')}</span>
+          {/* Поиск применяется по Enter и по кнопке «Найти»; значение живёт в URL (?q=). */}
+          <form className="admin-search" onSubmit={onSearchSubmit}>
+            <label htmlFor="admin-filter-q">
+              {t('admin.searchStudent')}
+              <input
+                id="admin-filter-q"
+                className="input"
+                type="search"
+                value={searchInput}
+                placeholder={t('admin.searchStudent')}
+                onChange={(e) => setSearchInput(e.target.value)}
+              />
+            </label>
+            <button type="submit" className="btn">
+              {t('catalog.searchButton')}
+            </button>
+          </form>
           <label htmlFor="admin-filter-status">
             {t('admin.filterStatus')}
             <select
@@ -421,6 +586,41 @@ export default function Admin(): JSX.Element {
               ))}
             </select>
           </label>
+          {/* Период: границы включительные (контракт T31), значения — в URL. */}
+          <div className="admin-filter-period" role="group" aria-label={t('admin.period')}>
+            <span className="admin-filter-period__title">{t('admin.period')}</span>
+            <div className="admin-filter-period__fields">
+              <label htmlFor="admin-filter-from">
+                {t('admin.periodFrom')}
+                <input
+                  id="admin-filter-from"
+                  className="input"
+                  type="date"
+                  value={from}
+                  onChange={(e) => setParams({ from: e.target.value || null, page: null })}
+                />
+              </label>
+              <label htmlFor="admin-filter-to">
+                {t('admin.periodTo')}
+                <input
+                  id="admin-filter-to"
+                  className="input"
+                  type="date"
+                  value={to}
+                  onChange={(e) => setParams({ to: e.target.value || null, page: null })}
+                />
+              </label>
+            </div>
+          </div>
+          <button
+            type="button"
+            className="btn"
+            title={t('admin.exportCsvHint')}
+            onClick={() => void onExportCsv()}
+            disabled={exporting || periodInvalid}
+          >
+            {exporting ? t('admin.loading') : t('admin.exportCsv')}
+          </button>
           <button
             type="button"
             className="btn"
@@ -430,6 +630,26 @@ export default function Admin(): JSX.Element {
             {t('admin.resetFilters')}
           </button>
         </div>
+
+        {periodInvalid && (
+          <p role="alert" className="error">
+            {t('admin.periodInvalid')}
+          </p>
+        )}
+        {exportMsg && (
+          <p
+            role={exportMsg.tone === 'error' ? 'alert' : 'status'}
+            className={
+              exportMsg.tone === 'warn'
+                ? 'ce-msg ce-msg--warn'
+                : exportMsg.tone === 'error'
+                  ? 'error'
+                  : ''
+            }
+          >
+            {exportMsg.text}
+          </p>
+        )}
 
         {journal.isLoading && <p>{t('admin.loading')}</p>}
         {journal.isError && (

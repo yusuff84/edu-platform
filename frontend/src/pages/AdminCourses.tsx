@@ -23,6 +23,7 @@ import {
 import type { AdminCourseRow, AdminReviewRow } from '../api/adminConsole';
 import { t } from '../i18n/t';
 import type { RuKey } from '../i18n/t';
+import CsvExportButton, { csvDateStamp, exportTruncated } from '../components/CsvExportButton';
 import '../styles/adminConsole.css';
 
 /** Размер страницы: 20, как у остальных списков консоли (контракт T25). */
@@ -30,6 +31,12 @@ const PAGE_LIMIT = 20;
 
 /** Пауза дебаунса поиска: пока пользователь печатает, запросы не уходят. */
 const SEARCH_DEBOUNCE_MS = 300;
+
+/** Размер страницы выгрузки CSV (T40): 100 строк за запрос. */
+const EXPORT_PAGE_LIMIT = 100;
+
+/** Потолок выгрузки CSV: не более 50 страниц (5000 строк) за один клик. */
+const EXPORT_MAX_PAGES = 50;
 
 /** Статусы курса в порядке контракта. */
 const COURSE_STATUSES: CourseStatus[] = ['draft', 'review', 'published', 'archived'];
@@ -233,6 +240,59 @@ export default function AdminCourses(): JSX.Element {
     courseAction.mutate({ id: course.id, action });
   }
 
+  // ---- Выгрузка CSV: вся выборка по текущим фильтрам ----
+  // Идём постранично (limit=100) до total, но не более 50 страниц: один клик
+  // выгружает не больше 5000 строк, чтобы не подвесить браузер и стенд.
+  // Если total первой страницы больше загруженного — выборка усечена (T43).
+  async function loadExportRows(): Promise<{
+    rows: Array<Array<string | number | null>>;
+    truncated: boolean;
+  }> {
+    const rows: Array<Array<string | number | null>> = [];
+    let total = 0;
+    for (let pageNumber = 1; pageNumber <= EXPORT_MAX_PAGES; pageNumber += 1) {
+      const res = await listAdminCourses({
+        q: q || undefined,
+        status: status || undefined,
+        page: pageNumber,
+        limit: EXPORT_PAGE_LIMIT,
+      });
+      if (pageNumber === 1) total = res.total;
+      for (const course of res.items) {
+        rows.push([
+          course.slug,
+          course.title,
+          course.teacherEmail,
+          t(STATUS_LABEL[course.status]),
+          formatPrice(course.priceCents),
+          course.modulesCount,
+          course.lessonsCount,
+          course.studentsCount,
+          formatDate(course.createdAt),
+          formatDate(course.updatedAt),
+        ]);
+      }
+      // Неполная страница — данных больше нет.
+      if (res.items.length < EXPORT_PAGE_LIMIT || rows.length >= res.total) break;
+    }
+    return { rows, truncated: exportTruncated(total, rows.length) };
+  }
+
+  // Заголовки CSV: где есть подходящий ключ — берём его, иначе короткая русская
+  // подпись прямо в CSV («Slug», «Создан» — это данные, а не интерфейс).
+  const exportHeaders = [
+    'Slug',
+    t('adminCourses.colTitle'),
+    t('adminCourses.colTeacher'),
+    t('adminCourses.colStatus'),
+    t('adminCourses.colPrice'),
+    t('course.modulesCount'),
+    t('adminCourses.colLessons'),
+    t('adminCourses.colStudents'),
+    'Создан',
+    t('adminCourses.colUpdated'),
+  ];
+
   // ---- Производные значения пагинации ----
   const data = courses.data;
   const total = data?.total ?? 0;
@@ -281,6 +341,13 @@ export default function AdminCourses(): JSX.Element {
                 ))}
               </select>
             </label>
+
+            {/* T40: выгрузка всей выборки по текущим фильтрам (q, status). */}
+            <CsvExportButton
+              filename={`courses-${csvDateStamp()}.csv`}
+              headers={exportHeaders}
+              loadRows={loadExportRows}
+            />
           </div>
 
           {actionMsg && (

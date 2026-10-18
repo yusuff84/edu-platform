@@ -10,6 +10,12 @@
 // («все уроки до nextLesson пройдены») больше нет.
 //
 // Вердикт определяется полем passed результата CompleteResult.
+//
+// T39: после успеха — кнопка «Следующий урок» (сначала серверный
+// progress.nextLessonId, затем nextLesson из ответа complete, иначе линейный
+// следующий); при percent === 100 — панель «Курс пройден» со ссылкой на отзыв
+// (форма отзыва на странице курса /courses/{slug}). Панель показывается над
+// блоком урока и не скрывает навигацию по урокам.
 
 import { useMemo, useState } from 'react';
 import { Link, NavLink, useParams } from 'react-router-dom';
@@ -156,6 +162,26 @@ export default function Learn(): JSX.Element {
     : null;
   const verdictError =
     errorState && errorState.lessonId === activeLesson?.id ? errorState.message : null;
+
+  // T39: урок для кнопки «Следующий урок» после успешного вердикта.
+  // 1) серверный nextLessonId из course-progress, если такой урок есть в программе;
+  //    сразу после complete прогресс перечитывается, и в ещё старых данных может
+  //    лежать только что пройденный урок — его пропускаем;
+  // 2) nextLesson из ответа complete — тот же серверный расчёт, что и в прогрессе
+  //    (закрывает паузу до перечитывания и прохождение не по порядку, когда
+  //    линейный следующий уже пройден);
+  // 3) линейный следующий по программе — как для случая провала.
+  // В конце курса следующий урок отсутствует — кнопки нет.
+  const passedNextLesson: FlatLesson | undefined = (() => {
+    if (!verdict?.passed) return undefined;
+    const serverIds = [serverNextLessonId, verdict.nextLesson?.lessonId ?? null];
+    for (const id of serverIds) {
+      if (!id || id === activeLesson?.id) continue;
+      const found = flatLessons.find((l) => l.id === id);
+      if (found) return found;
+    }
+    return flatNext;
+  })();
 
   // ---------- Состояния загрузки / ошибки / доступа ----------
 
@@ -305,6 +331,24 @@ export default function Learn(): JSX.Element {
           )}
         </div>
 
+        {/* T39: панель финиша курса — над блоком урока, навигацию не прячет. */}
+        {progress?.percent === 100 && (
+          <section className="panel learn-finished" role="status">
+            <h2>{t('learn.courseFinished')}</h2>
+            <p>{t('learn.finishedHint')}</p>
+            {slug ? (
+              <Link className="btn" to={`/courses/${slug}`}>
+                {t('learn.leaveReview')}
+              </Link>
+            ) : (
+              /* Слага нет — форму отзыва не открыть; ведём в личный кабинет. */
+              <Link className="btn" to="/me">
+                {t('common.back')}
+              </Link>
+            )}
+          </section>
+        )}
+
         <div className="lesson-shell">
           <nav className="side-nav" aria-label={t('course.program')}>
             {modules.map((m) => (
@@ -391,13 +435,14 @@ export default function Learn(): JSX.Element {
                   )}
                 </div>
 
-                {verdict?.passed && verdict.nextLesson && (
+                {/* T39: после успеха — «Следующий урок»; в конце курса кнопки нет. */}
+                {verdict?.passed && passedNextLesson && (
                   <p>
                     <Link
                       className="btn learn-next-link"
-                      to={`/learn/${courseId}/${verdict.nextLesson.lessonId}`}
+                      to={`/learn/${courseId}/${passedNextLesson.id}`}
                     >
-                      {t('lesson.next')}: {verdict.nextLesson.title}
+                      {t('learn.nextLesson')}: {passedNextLesson.title}
                     </Link>
                   </p>
                 )}

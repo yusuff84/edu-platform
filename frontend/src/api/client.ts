@@ -297,6 +297,12 @@ export function paymentJournal(params?: {
   limit?: number;
   status?: PaymentStatus;
   courseId?: string;
+  /** Подстрока по email или имени студента (T31); пустая — без фильтра. */
+  q?: string;
+  /** Нижняя граница периода, ГГГГ-ММ-ДД (включительно); пустая — без фильтра. */
+  from?: string;
+  /** Верхняя граница периода, ГГГГ-ММ-ДД (включительно); пустая — без фильтра. */
+  to?: string;
 }): Promise<PaymentJournalPage> {
   return apiFetch<PaymentJournalPage>(
     `/admin/payments${buildQuery({
@@ -304,6 +310,9 @@ export function paymentJournal(params?: {
       limit: params?.limit,
       status: params?.status,
       courseId: params?.courseId,
+      q: params?.q,
+      from: params?.from,
+      to: params?.to,
     })}`,
   );
 }
