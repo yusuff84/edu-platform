@@ -1,0 +1,329 @@
+/* Стили раздела «Записи на курсы» супер-админки (T49).
+   Импортируются только из pages/AdminEnrollments.tsx; общий styles.css и
+   admin.css не изменяются — здесь только селекторы с префиксом .ae-.
+   Базовые классы (.panel, .muted, .error, .btn, .btn-sm, .input, .progress,
+   .progress-bar, .sr-only) — из styles.css. Вёрстка таблицы повторяет
+   вылеченную таблицу пользователей (T52): длинные email переносятся,
+   названия курсов обрезаются с многоточием, колонка действий не заезжает
+   за край карточки. */
+
+main.ae-admin {
+  max-width: 1200px;
+}
+
+.ae-back {
+  margin: 0 0 0.25rem;
+  font-size: 0.9rem;
+}
+
+/* ---------- Фильтры ---------- */
+
+.ae-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.ae-field {
+  display: grid;
+  gap: 0.25rem;
+  margin: 0;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.ae-field--search {
+  flex: 1 1 16rem;
+}
+
+.ae-field .input {
+  margin-top: 0;
+}
+
+/* Селекты не сжимаются до стрелки: длинное «Возврат»/«Отозвана» целиком. */
+.ae-select {
+  min-width: 9rem;
+  max-width: 16rem;
+}
+
+.ae-filters > .btn {
+  margin-top: 0;
+}
+
+/* ---------- Итог и уведомления ---------- */
+
+.ae-total {
+  margin: 0 0 0.5rem;
+}
+
+.ae-notice {
+  margin: 0 0 0.75rem;
+  padding: 0.4rem 0.75rem;
+  background: #e3f5e6;
+  color: #1e7d32;
+  border-radius: 8px;
+  font-weight: 600;
+}
+
+.ae-error {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+  margin: 0.5rem 0;
+}
+
+.ae-error p {
+  margin: 0;
+}
+
+.ae-error button {
+  margin-top: 0;
+}
+
+/* ---------- Таблица ---------- */
+
+.ae-table-wrap {
+  overflow-x: auto;
+  border: 1px solid #e5e5e5;
+  border-radius: 8px;
+  -webkit-overflow-scrolling: touch;
+}
+
+.ae-table {
+  width: 100%;
+  border-collapse: collapse;
+  /* Минимум, при котором таблица ещё читается целиком; при типовой ширине
+     карточки (~1100 px) все колонки, включая действия, видны без прокрутки. */
+  min-width: 960px;
+}
+
+.ae-table th,
+.ae-table td {
+  padding: 0.5rem 0.6rem;
+  border-bottom: 1px solid #eee;
+  text-align: left;
+  white-space: nowrap;
+  font-size: 0.9rem;
+  vertical-align: top;
+}
+
+.ae-table th {
+  background: #f8f9fa;
+  color: #444;
+}
+
+.ae-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.ae-table tbody tr:hover {
+  background: #fafbfc;
+}
+
+/* Строка в процессе мутации — визуально приглушена, кнопки disabled. */
+.ae-table tbody tr.ae-row--busy {
+  opacity: 0.65;
+}
+
+/* ---------- Ячейки таблицы ---------- */
+
+/* Ученик: имя (обрезается с многоточием) + email (переносится по символам),
+   длинные адреса не растягивают таблицу (как в вылеченной T52 таблице). */
+.ae-td-student {
+  white-space: normal;
+  min-width: 11rem;
+  max-width: 15rem;
+}
+
+.ae-student {
+  display: grid;
+  gap: 0.1rem;
+  min-width: 0;
+}
+
+.ae-student__name {
+  display: block;
+  max-width: 14rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ae-student__email {
+  display: block;
+  max-width: 14rem;
+  color: #666;
+  font-size: 0.85rem;
+  font-weight: 400;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+/* Курс: длинное название переносится, а не растягивает таблицу. */
+.ae-td-course {
+  white-space: normal;
+  min-width: 11rem;
+  max-width: 15rem;
+}
+
+/* Действия: компактная колонка, кнопка целиком, ничего не обрезается. */
+.ae-td-actions {
+  white-space: normal;
+  min-width: 9.5rem;
+}
+
+.ae-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.35rem;
+}
+
+.ae-actions .btn {
+  margin-top: 0;
+}
+
+.ae-btn--danger {
+  background: #b00020;
+  border: 1px solid #b00020;
+  color: #fff;
+}
+
+.ae-btn--danger:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.ae-row-error {
+  margin: 0.35rem 0 0;
+  white-space: normal;
+  font-size: 0.85rem;
+}
+
+/* ---------- Бейджи статуса записи ---------- */
+
+.ae-badge {
+  display: inline-block;
+  padding: 0.1rem 0.5rem;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.ae-badge--active {
+  background: #e3f5e6;
+  color: #1e7d32;
+}
+
+.ae-badge--refunded {
+  background: #e7f0fd;
+  color: #1a4f9c;
+}
+
+.ae-badge--revoked {
+  background: #fde2e2;
+  color: #b00020;
+}
+
+/* ---------- Прогресс: полоса (.progress/.progress-bar) + «N из M · P%» ---------- */
+
+.ae-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  min-width: 9rem;
+  max-width: 14rem;
+}
+
+.ae-progress .progress {
+  height: 8px;
+  min-width: 8rem;
+}
+
+.ae-progress-meta {
+  color: #666;
+  font-size: 0.8rem;
+}
+
+/* ---------- Пагинация ---------- */
+
+.ae-pager {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+
+.ae-pager button {
+  margin-top: 0;
+}
+
+.ae-pager button:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+/* ---------- Узкий экран: строки таблицы превращаются в карточки ---------- */
+
+@media (max-width: 720px) {
+  .ae-table {
+    min-width: 0;
+  }
+
+  .ae-table thead {
+    display: none;
+  }
+
+  .ae-table,
+  .ae-table tbody,
+  .ae-table tr,
+  .ae-table td {
+    display: block;
+    width: 100%;
+  }
+
+  .ae-table tr {
+    padding: 0.35rem 0;
+    border-bottom: 6px solid #f7f7f8;
+  }
+
+  .ae-table tr:last-child {
+    border-bottom: none;
+  }
+
+  .ae-table td {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 0.75rem;
+    white-space: normal;
+    border-bottom: none;
+    padding: 0.3rem 0.6rem;
+  }
+
+  .ae-table td::before {
+    content: attr(data-label);
+    flex: 0 0 auto;
+    font-weight: 600;
+    color: #666;
+  }
+
+  .ae-td-student,
+  .ae-td-course,
+  .ae-td-actions {
+    min-width: 0;
+    max-width: none;
+  }
+
+  .ae-student__name,
+  .ae-student__email {
+    max-width: none;
+    text-align: right;
+  }
+}

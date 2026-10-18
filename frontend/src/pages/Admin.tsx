@@ -449,6 +449,7 @@ export default function Admin(): JSX.Element {
         <Link to="/admin/stats">{t('adminStats.title')}</Link>
         <Link to="/admin/users">{t('adminUsers.title')}</Link>
         <Link to="/admin/courses">{t('adminCourses.title')}</Link>
+        <Link to="/admin/enrollments">{t('adminEnrollments.title')}</Link>
       </nav>
 
       {/* ---------- 1. Очередь модерации ---------- */}
