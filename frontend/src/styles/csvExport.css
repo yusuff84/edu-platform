@@ -1,0 +1,42 @@
+/* Стили кнопки выгрузки CSV (T40).
+   Импортируются только из components/CsvExportButton.tsx; общие styles.css и
+   стили разделов админки не изменяются — здесь только селекторы с префиксом .ce-.
+   Базовые классы (.btn) и переменные цветов — из styles.css. */
+
+/* Колонка «кнопка + сообщение»: в ряду фильтров выравнивается по низу. */
+.ce-export {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.35rem;
+}
+
+/* В ряду фильтров у .btn не должно быть верхнего отступа. */
+.ce-export .btn {
+  margin-top: 0;
+}
+
+.ce-msg {
+  margin: 0;
+  max-width: 26rem;
+  padding: 0.3rem 0.65rem;
+  border-radius: var(--r-sm);
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.ce-msg--ok {
+  background: var(--ok-bg);
+  color: var(--ok);
+}
+
+.ce-msg--error {
+  background: var(--danger-bg);
+  color: var(--danger);
+}
+
+/* «Выгружать нечего» — не ошибка, спокойный нейтральный стиль. */
+.ce-msg--empty {
+  background: var(--warn-bg);
+  color: var(--muted);
+}
