@@ -1,7 +1,8 @@
 // T40: кнопка выгрузки списка админки в CSV (без сторонних библиотек).
 // Преобразование данных в CSV-текст вынесено в чистую экспортируемую функцию
-// toCsv (без DOM) — её смогут покрыть тесты; компонент отвечает только за
-// состояние кнопки и скачивание файла через Blob + временную ссылку.
+// toCsv, проверка усечения выборки — в exportTruncated (без DOM) — их смогут
+// покрыть тесты; компонент отвечает только за состояние кнопки и скачивание
+// файла через Blob + временную ссылку.
 import { useState } from 'react';
 import { ApiError } from '../api/client';
 import { t } from '../i18n/t';
@@ -11,7 +12,7 @@ import '../styles/csvExport.css';
 export type CsvCell = string | number | null;
 
 /** Сообщение под кнопкой: тон (стиль) и текст из словаря. */
-type ExportMessage = { tone: 'ok' | 'error' | 'empty'; text: string };
+type ExportMessage = { tone: 'ok' | 'warn' | 'error' | 'empty'; text: string };
 
 /** Пропсы кнопки выгрузки. */
 type CsvExportButtonProps = {
@@ -20,10 +21,11 @@ type CsvExportButtonProps = {
   /** Заголовки CSV (первая строка файла). */
   headers: string[];
   /**
-   * Загрузка всей выборки по текущим фильтрам. Пустой массив — выгружать
-   * нечего: файл не создаётся, показывается admin.exportEmpty.
+   * Загрузка всей выборки по текущим фильтрам. Пустой набор строк — выгружать
+   * нечего: файл не создаётся, показывается admin.exportEmpty. Флаг truncated
+   * (выборка усечена потолком выгрузки) — показывается admin.exportTruncated.
    */
-  loadRows: () => Promise<Array<Array<CsvCell>>>;
+  loadRows: () => Promise<{ rows: Array<Array<CsvCell>>; truncated: boolean }>;
   /** Внешняя блокировка кнопки (например, список ещё не загружен). */
   disabled?: boolean;
 };
@@ -46,6 +48,16 @@ export function toCsv(headers: string[], rows: Array<Array<CsvCell>>): string {
     lines.push(row.map((cell) => escapeCell(cell)).join(';'));
   }
   return `\uFEFF${lines.join('\r\n')}`;
+}
+
+/**
+ * Выборка усечена потолком выгрузки (T43): загружено меньше, чем всего
+ * подходит под фильтры. Чистая функция без DOM — по образцу toCsv; страницы
+ * передают total первой страницы пагинации и число фактически загруженных
+ * строк.
+ */
+export function exportTruncated(total: number, loaded: number): boolean {
+  return total > loaded;
 }
 
 /** Дата для имени файла: ГГГГ-ММ-ДД (локальная дата пользователя). */
@@ -81,7 +93,7 @@ function errorText(error: unknown): string {
   return t('common.error');
 }
 
-/** Кнопка «Выгрузить CSV» с состояниями «идёт выгрузка / успех / ошибка / пусто». */
+/** Кнопка «Выгрузить CSV»: «идёт выгрузка / успех / предупреждение / ошибка / пусто». */
 export default function CsvExportButton({
   filename,
   headers,
@@ -95,13 +107,18 @@ export default function CsvExportButton({
     setBusy(true);
     setMsg(null);
     try {
-      const rows = await loadRows();
+      const { rows, truncated } = await loadRows();
       if (rows.length === 0) {
         // Файл не создаём: выгружать нечего.
         setMsg({ tone: 'empty', text: t('admin.exportEmpty') });
         return;
       }
       downloadCsv(filename, toCsv(headers, rows));
+      if (truncated) {
+        // Файл создан, но выборка усечена потолком выгрузки — честно сообщаем.
+        setMsg({ tone: 'warn', text: t('admin.exportTruncated') });
+        return;
+      }
       setMsg({ tone: 'ok', text: t('admin.exported') });
     } catch (e: unknown) {
       setMsg({ tone: 'error', text: errorText(e) });

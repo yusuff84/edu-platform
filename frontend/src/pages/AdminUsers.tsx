@@ -12,7 +12,7 @@ import type { AdminUserPage, AdminUserRow, UserStatus } from '../api/adminUsers'
 import type { Role } from '../api/types';
 import { t } from '../i18n/t';
 import type { RuKey } from '../i18n/t';
-import CsvExportButton, { csvDateStamp } from '../components/CsvExportButton';
+import CsvExportButton, { csvDateStamp, exportTruncated } from '../components/CsvExportButton';
 import '../styles/adminUsers.css';
 
 // ---------- Константы ----------
@@ -213,8 +213,13 @@ export default function AdminUsers(): JSX.Element {
   // ---- Выгрузка CSV: вся выборка по текущим фильтрам ----
   // Идём постранично (limit=100) до total, но не более 50 страниц: один клик
   // выгружает не больше 5000 строк, чтобы не подвесить браузер и стенд.
-  async function loadExportRows(): Promise<Array<Array<string | number | null>>> {
+  // Если total первой страницы больше загруженного — выборка усечена (T43).
+  async function loadExportRows(): Promise<{
+    rows: Array<Array<string | number | null>>;
+    truncated: boolean;
+  }> {
     const rows: Array<Array<string | number | null>> = [];
+    let total = 0;
     for (let pageNumber = 1; pageNumber <= EXPORT_MAX_PAGES; pageNumber += 1) {
       const res = await listUsers({
         q: q || undefined,
@@ -223,6 +228,7 @@ export default function AdminUsers(): JSX.Element {
         page: pageNumber,
         limit: EXPORT_PAGE_LIMIT,
       });
+      if (pageNumber === 1) total = res.total;
       for (const u of res.items) {
         rows.push([
           u.email,
@@ -237,7 +243,7 @@ export default function AdminUsers(): JSX.Element {
       // Неполная страница — данных больше нет.
       if (res.items.length < EXPORT_PAGE_LIMIT || rows.length >= res.total) break;
     }
-    return rows;
+    return { rows, truncated: exportTruncated(total, rows.length) };
   }
 
   // Заголовки CSV — существующие ключи таблицы; «Дата регистрации» — profile.registered.
