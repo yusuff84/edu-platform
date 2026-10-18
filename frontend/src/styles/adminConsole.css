@@ -312,7 +312,7 @@
 
 .ac-table th,
 .ac-table td {
-  padding: 0.55rem 0.65rem;
+  padding: 0.5rem 0.55rem;
   border-bottom: 1px solid var(--line-soft);
   text-align: left;
   font-size: 0.9rem;
@@ -334,10 +334,11 @@
   background: #fbfaf8;
 }
 
+/* Колонка названия: сжимаемая, длинный текст обрезается (T50). */
 .ac-td-title {
   white-space: normal;
   min-width: 12rem;
-  max-width: 18rem;
+  max-width: 13rem;
   font-weight: 700;
 }
 
@@ -351,7 +352,7 @@
 
 /* Длинный email преподавателя тоже обрезается с полным значением в title. */
 .ac-td-teacher {
-  max-width: 12rem;
+  max-width: 10rem;
   overflow: hidden;
   text-overflow: ellipsis;
 }
@@ -360,7 +361,7 @@
 .ac-td-actions {
   white-space: normal;
   width: 1%;
-  min-width: 11rem;
+  min-width: 10rem;
 }
 
 .ac-actions {

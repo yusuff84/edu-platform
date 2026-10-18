@@ -390,6 +390,10 @@ export default function Admin(): JSX.Element {
       setTokenCopied(false);
       setTokenCopyError('');
       reset();
+      // Список приглашений должен сразу показать только что созданное
+      // (сортировка на сервере — новые первыми, поэтому поднимаемся на стр. 1).
+      if (invitesPage !== 1) setInvitesPage(1);
+      void qc.invalidateQueries({ queryKey: ['admin-invites'] });
     },
     onError: (e: unknown) => {
       setInvite(null);
