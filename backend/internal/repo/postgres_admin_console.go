@@ -68,21 +68,68 @@ func (s *PostgresStore) AdminOverview() AdminTotals {
 	return t
 }
 
-// ListAllCourses возвращает курсы всех статусов, новые первыми; total — до
-// пагинации. Фильтры status/q идут параметрами ($N) — без конкатенации
-// пользовательского ввода в SQL; q — подстрока по title регистронезависимо.
+// courseColsJoined — courseCols (postgres_store.go) с префиксом c. для
+// запросов с JOIN users (T48: фильтр teacherEmail): без префиксов колонки
+// id/created_at неоднозначны (есть и в users).
+const courseColsJoined = `c.id::text, c.teacher_id::text, c.slug, c.title, c.description,
+	COALESCE(c.cover_path,''), c.price_cents, c.currency::text, c.status,
+	COALESCE(c.avg_rating,0)::float8, c.ratings_count, COALESCE(c.moderation_comment,''),
+	c.created_at, c.updated_at`
+
+// ListAllCourses возвращает курсы всех статусов, total — до пагинации (T25).
+// Фильтры status/q (T25) и T48 (teacherEmail — подстрока по email
+// преподавателя без учёта регистра, from/to — границы createdAt включительно)
+// идут параметрами ($N) — без конкатенации пользовательского ввода в SQL;
+// q — подстрока по title регистронезависимо.
+//
+// T48: сортировка — по Sort/Dir, вторичный ключ — createdAt по убыванию;
+// students — подзапрос по активным записям (как в CourseContentCounts).
+// JOIN users — LEFT: курс без строки преподавателя не должен пропадать
+// (u.id — первичный ключ, набор строк от JOIN не размножается).
 func (s *PostgresStore) ListAllCourses(f CourseFilter) ([]*Course, int) {
 	page, limit := clampPageLimit(f.Page, f.Limit)
 
+	orderBy := "c.created_at"
+	switch normalizeCourseSort(f.Sort) {
+	case "updatedAt":
+		orderBy = "c.updated_at"
+	case "title":
+		orderBy = "lower(c.title)"
+	case "price":
+		orderBy = "c.price_cents"
+	case "students":
+		orderBy = `(SELECT COUNT(*) FROM enrollments e
+		             WHERE e.course_id = c.id AND e.status = 'active')`
+	}
+	dir := "DESC"
+	if normalizeCourseDir(f.Dir) == "asc" {
+		dir = "ASC"
+	}
+
 	where := ""
-	args := make([]any, 0, 2)
+	args := make([]any, 0, 5)
 	if f.Status != "" {
 		args = append(args, string(f.Status))
-		where += fmt.Sprintf(" AND status=$%d", len(args))
+		where += fmt.Sprintf(" AND c.status=$%d", len(args))
 	}
 	if q := strings.TrimSpace(f.Q); q != "" {
 		args = append(args, q)
-		where += fmt.Sprintf(" AND title ILIKE '%%'||$%d||'%%'", len(args))
+		where += fmt.Sprintf(" AND c.title ILIKE '%%'||$%d||'%%'", len(args))
+	}
+	if email := strings.TrimSpace(f.TeacherEmail); email != "" {
+		// Подстрока в нижнем регистре — как в журнале платежей (T31).
+		args = append(args, "%"+strings.ToLower(email)+"%")
+		where += fmt.Sprintf(" AND lower(u.email) LIKE $%d", len(args))
+	}
+	// Границы периода включительно: from — «с начала суток», to — «до конца
+	// суток» (created_at < следующих суток после to), как в ListPaymentsJournal.
+	if !f.From.IsZero() {
+		args = append(args, f.From)
+		where += fmt.Sprintf(" AND c.created_at >= $%d", len(args))
+	}
+	if !f.To.IsZero() {
+		args = append(args, f.To.AddDate(0, 0, 1))
+		where += fmt.Sprintf(" AND c.created_at < $%d", len(args))
 	}
 
 	ctx, cancel := s.ctx()
@@ -90,15 +137,17 @@ func (s *PostgresStore) ListAllCourses(f CourseFilter) ([]*Course, int) {
 
 	var total int
 	if err := s.pool.QueryRow(ctx,
-		`SELECT COUNT(*)::int FROM courses WHERE 1=1`+where, args...).Scan(&total); err != nil {
+		`SELECT COUNT(*)::int FROM courses c LEFT JOIN users u ON u.id = c.teacher_id WHERE 1=1`+where,
+		args...).Scan(&total); err != nil {
 		log.Printf("postgres ListAllCourses count: %v", err)
 		return nil, 0
 	}
 
 	offset := (page - 1) * limit
 	rows, err := s.pool.Query(ctx, fmt.Sprintf(
-		`SELECT %s FROM courses WHERE 1=1%s ORDER BY created_at DESC LIMIT %d OFFSET %d`,
-		courseCols, where, limit, offset), args...)
+		`SELECT %s FROM courses c LEFT JOIN users u ON u.id = c.teacher_id
+		 WHERE 1=1%s ORDER BY %s %s, c.created_at DESC LIMIT %d OFFSET %d`,
+		courseColsJoined, where, orderBy, dir, limit, offset), args...)
 	if err != nil {
 		log.Printf("postgres ListAllCourses: %v", err)
 		return nil, 0
@@ -143,11 +192,16 @@ func (s *PostgresStore) DeleteReview(id string) error {
 // новые первыми; total — до пагинации. Прогресс (пройденные уроки) и размер
 // программы считаются скалярными подзапросами на строку выборки — без N+1
 // на уровне Go и без выгрузки таблиц.
+//
+// T48: Q — подстрока без учёта регистра по email ИЛИ displayName ученика
+// (условие по JOIN users, как в журнале платежей T31), Status — точное
+// совпадение статуса записи. LEFT JOIN users не размножает строки (u.id —
+// первичный ключ), поэтому COUNT и страница видят одинаковый набор.
 func (s *PostgresStore) ListEnrollmentRows(f EnrollmentFilter) ([]EnrollmentRow, int) {
 	page, limit := clampPageLimit(f.Page, f.Limit)
 
 	where := ""
-	args := make([]any, 0, 2)
+	args := make([]any, 0, 4)
 	if f.CourseID != "" {
 		args = append(args, f.CourseID)
 		where += fmt.Sprintf(" AND e.course_id=$%d::uuid", len(args))
@@ -156,13 +210,24 @@ func (s *PostgresStore) ListEnrollmentRows(f EnrollmentFilter) ([]EnrollmentRow,
 		args = append(args, f.StudentID)
 		where += fmt.Sprintf(" AND e.student_id=$%d::uuid", len(args))
 	}
+	if f.Status != "" {
+		args = append(args, string(f.Status))
+		where += fmt.Sprintf(" AND e.status=$%d", len(args))
+	}
+	if q := strings.TrimSpace(f.Q); q != "" {
+		args = append(args, "%"+strings.ToLower(q)+"%")
+		where += fmt.Sprintf(
+			" AND (lower(u.email) LIKE $%d OR lower(COALESCE(u.display_name,'')) LIKE $%d)",
+			len(args), len(args))
+	}
 
 	ctx, cancel := s.ctx()
 	defer cancel()
 
 	var total int
 	if err := s.pool.QueryRow(ctx,
-		`SELECT COUNT(*)::int FROM enrollments e WHERE 1=1`+where, args...).Scan(&total); err != nil {
+		`SELECT COUNT(*)::int FROM enrollments e
+		 LEFT JOIN users u ON u.id = e.student_id WHERE 1=1`+where, args...).Scan(&total); err != nil {
 		log.Printf("postgres ListEnrollmentRows count: %v", err)
 		return nil, 0
 	}

@@ -15,23 +15,38 @@ import (
 	"time"
 )
 
-// CourseFilter — параметры списка курсов для админки (T25): статус, поиск
-// по названию и пагинация. Пагинация 1-based: Limit по умолчанию 20,
-// максимум 100; Page по умолчанию 1. Status "" — любой статус, Q "" — без
-// поиска; фильтры комбинируются через AND.
+// CourseFilter — параметры списка курсов для админки (T25/T48): статус,
+// поиск по названию, сортировка, фильтр по преподавателю и периоду создания,
+// пагинация. Пагинация 1-based: Limit по умолчанию 20, максимум 100; Page
+// по умолчанию 1. Status "" — любой статус, Q "" — без поиска,
+// TeacherEmail "" — без фильтра; фильтры комбинируются через AND.
+//
+// T48: Sort — createdAt|updatedAt|title|price|students ("" = createdAt),
+// Dir — asc|desc ("" = desc); при равенстве первичного ключа порядок —
+// createdAt по убыванию. From/To — границы по дате создания включительно
+// (нулевое значение — границы нет; To — «до конца суток»), как в
+// PaymentFilter (T31).
 type CourseFilter struct {
-	Page, Limit int
-	Status      CourseStatus // "" — любой
-	Q           string       // подстрока по title, регистронезависимо
+	Page, Limit  int
+	Status       CourseStatus // "" — любой
+	Q            string       // подстрока по title, регистронезависимо
+	Sort         string       // createdAt|updatedAt|title|price|students ("" = createdAt)
+	Dir          string       // asc|desc ("" = desc)
+	TeacherEmail string       // подстрока по email преподавателя, регистронезависимо
+	From, To     time.Time    // границы по createdAt включительно; нулевое — без границы
 }
 
-// EnrollmentFilter — параметры списка записей на курсы (T25).
-// CourseID/StringID "" означают «любой»; фильтры комбинируются через AND.
+// EnrollmentFilter — параметры списка записей на курсы (T25/T48).
+// CourseID/StringID "" означают «любой»; Q — подстрока без учёта регистра
+// по email ИЛИ displayName ученика ("" — без фильтра); Status "" — любой,
+// иначе точное совпадение статуса; фильтры комбинируются через AND.
 // Пагинация 1-based: Limit по умолчанию 20, максимум 100.
 type EnrollmentFilter struct {
 	Page, Limit int
-	CourseID    string // "" — любой
-	StudentID   string // "" — любые
+	CourseID    string           // "" — любой
+	StudentID   string           // "" — любые
+	Q           string           // подстрока по email/displayName ученика (T48)
+	Status      EnrollmentStatus // "" — любой (T48)
 }
 
 // EnrollmentRow — строка списка записей на курсы: запись + данные ученика
@@ -84,6 +99,71 @@ func clampPageLimit(page, limit int) (int, int) {
 		limit = 100
 	}
 	return page, limit
+}
+
+// normalizeCourseSort сводит Sort к известному ключу: неизвестное или пустое
+// значение — createdAt (дефолт контракта P6). Хендлер валидирует параметр и
+// отвечает 400 на мусор; нормализация здесь — страховка для прямых вызовов
+// хранилища.
+func normalizeCourseSort(s string) string {
+	switch s {
+	case "updatedAt", "title", "price", "students":
+		return s
+	default:
+		return "createdAt"
+	}
+}
+
+// normalizeCourseDir сводит Dir к asc|desc: всё, кроме asc, — desc (дефолт).
+func normalizeCourseDir(d string) string {
+	if d == "asc" {
+		return "asc"
+	}
+	return "desc"
+}
+
+// cmpTime сравнивает моменты времени трёхзначным результатом: -1 — a раньше
+// b, 0 — равны, 1 — позже.
+func cmpTime(a, b time.Time) int {
+	switch {
+	case a.Before(b):
+		return -1
+	case a.After(b):
+		return 1
+	}
+	return 0
+}
+
+// courseSortCmp сравнивает курсы по первичному ключу сортировки (T48):
+// <0 — a раньше b при возрастании, 0 — значения равны. counts — снимок
+// CourseContentCounts для ключа students (число активных учеников).
+func courseSortCmp(a, b *Course, sortKey string, counts map[string]ContentCounts) int {
+	switch sortKey {
+	case "updatedAt":
+		return cmpTime(a.UpdatedAt, b.UpdatedAt)
+	case "title":
+		// Без учёта регистра — контракт P6.
+		return strings.Compare(strings.ToLower(a.Title), strings.ToLower(b.Title))
+	case "price":
+		switch {
+		case a.PriceCents < b.PriceCents:
+			return -1
+		case a.PriceCents > b.PriceCents:
+			return 1
+		}
+		return 0
+	case "students":
+		as, bs := counts[a.ID].Students, counts[b.ID].Students
+		switch {
+		case as < bs:
+			return -1
+		case as > bs:
+			return 1
+		}
+		return 0
+	default: // createdAt
+		return cmpTime(a.CreatedAt, b.CreatedAt)
+	}
 }
 
 // AdminOverview собирает все агрегаты сводки одним проходом по картам
@@ -162,12 +242,22 @@ func (s *Store) AdminOverview() AdminTotals {
 	return t
 }
 
-// ListAllCourses возвращает курсы всех статусов для админки (T25), новые
-// первыми; total — до пагинации. Курсы копируются: наружу уходит снимок,
-// а не живой указатель на карту хранилища.
+// ListAllCourses возвращает курсы всех статусов для админки (T25/T48),
+// total — до пагинации. Фильтры комбинируются через AND; сортировка — по
+// Sort/Dir, вторичный ключ — createdAt по убыванию. Курсы копируются:
+// наружу уходит снимок, а не живой указатель на карту хранилища.
+//
+// T48: счётчики учеников берутся снимком CourseContentCounts ДО основного
+// RLock (вызов под локом взял бы RLock повторно), email преподавателя и
+// границы периода проверяются прямо по картам под тем же локом — по той же
+// причине (GetUserByID тоже взял бы лок повторно).
 func (s *Store) ListAllCourses(f CourseFilter) ([]*Course, int) {
 	page, limit := clampPageLimit(f.Page, f.Limit)
 	q := strings.ToLower(strings.TrimSpace(f.Q))
+	emailQ := strings.ToLower(strings.TrimSpace(f.TeacherEmail))
+	sortKey := normalizeCourseSort(f.Sort)
+	asc := normalizeCourseDir(f.Dir) == "asc"
+	studentCounts := s.CourseContentCounts()
 
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -180,9 +270,35 @@ func (s *Store) ListAllCourses(f CourseFilter) ([]*Course, int) {
 		if q != "" && !strings.Contains(strings.ToLower(c.Title), q) {
 			continue
 		}
+		// T48: подстрока по email преподавателя без учёта регистра;
+		// курс без найденного автора под фильтр не попадает.
+		if emailQ != "" {
+			u, ok := s.users[c.TeacherID]
+			if !ok || !strings.Contains(strings.ToLower(u.Email), emailQ) {
+				continue
+			}
+		}
+		// T48: период по createdAt включительно; To — «до конца суток»
+		// (та же семантика, что у ListPaymentsJournal).
+		if !f.From.IsZero() && c.CreatedAt.Before(f.From) {
+			continue
+		}
+		if !f.To.IsZero() && !c.CreatedAt.Before(f.To.AddDate(0, 0, 1)) {
+			continue
+		}
 		matched = append(matched, c)
 	}
-	sort.Slice(matched, func(i, j int) bool { return matched[i].CreatedAt.After(matched[j].CreatedAt) })
+	sort.Slice(matched, func(i, j int) bool {
+		cmp := courseSortCmp(matched[i], matched[j], sortKey, studentCounts)
+		if cmp == 0 {
+			// Вторичный ключ — createdAt по убыванию (контракт P6).
+			return matched[i].CreatedAt.After(matched[j].CreatedAt)
+		}
+		if asc {
+			return cmp < 0
+		}
+		return cmp > 0
+	})
 
 	total := len(matched)
 	start := (page - 1) * limit
@@ -234,12 +350,15 @@ func (s *Store) DeleteReview(id string) error {
 }
 
 // ListEnrollmentRows возвращает все записи на курсы с данными ученика и
-// курса (T25), новые первыми; total — до пагинации. Completed — число
-// пройденных уроков курса (completed_at заполнен), TotalLessons — всего
-// уроков курса. Прогресс считается прямо по картам под одним RLock:
-// вложенные вызовы методов Store взяли бы лок повторно.
+// курса (T25/T48), новые первыми; total — до пагинации. T48: Q — подстрока
+// без учёта регистра по email ИЛИ displayName ученика, Status — точное
+// совпадение статуса записи. Completed — число пройденных уроков курса
+// (completed_at заполнен), TotalLessons — всего уроков курса. Данные ученика
+// и прогресс считаются прямо по картам под одним RLock: вложенные вызовы
+// методов Store взяли бы лок повторно.
 func (s *Store) ListEnrollmentRows(f EnrollmentFilter) ([]EnrollmentRow, int) {
 	page, limit := clampPageLimit(f.Page, f.Limit)
+	q := strings.ToLower(strings.TrimSpace(f.Q))
 
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -251,6 +370,22 @@ func (s *Store) ListEnrollmentRows(f EnrollmentFilter) ([]EnrollmentRow, int) {
 		}
 		if f.StudentID != "" && e.StudentID != f.StudentID {
 			continue
+		}
+		if f.Status != "" && e.Status != f.Status {
+			continue
+		}
+		// T48: поиск по ученику — подстрока по email ИЛИ displayName.
+		// Ученика может не быть в users: тогда оба поля пустые и запись
+		// не совпадёт (как в журнале платежей, T31).
+		if q != "" {
+			email, name := "", ""
+			if u, ok := s.users[e.StudentID]; ok {
+				email, name = u.Email, u.DisplayName
+			}
+			if !strings.Contains(strings.ToLower(email), q) &&
+				!strings.Contains(strings.ToLower(name), q) {
+				continue
+			}
 		}
 		matched = append(matched, e)
 	}

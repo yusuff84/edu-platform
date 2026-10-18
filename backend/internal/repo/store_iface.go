@@ -150,13 +150,16 @@ type StoreAPI interface {
 	// AdminOverview — агрегаты для сводки супер-админа одним вызовом (T25).
 	AdminOverview() AdminTotals
 	// ListAllCourses — курсы всех статусов с фильтрами для админки (T25),
-	// новые первыми; total — до пагинации.
+	// новые первыми; total — до пагинации. T48: сортировка (Sort/Dir),
+	// фильтр по email преподавателя (TeacherEmail) и период по createdAt
+	// (From/To) — в CourseFilter.
 	ListAllCourses(f CourseFilter) (items []*Course, total int)
 	// DeleteReview удаляет отзыв и пересчитывает рейтинг курса (T25).
 	// ErrNotFound — отзыва нет.
 	DeleteReview(id string) error
 	// ListEnrollmentRows — все записи на курсы с данными ученика и курса (T25),
-	// новые первыми; total — до пагинации.
+	// новые первыми; total — до пагинации. T48: поиск по ученику (Q) и статус
+	// записи (Status) — в EnrollmentFilter.
 	ListEnrollmentRows(f EnrollmentFilter) (items []EnrollmentRow, total int)
 	// CourseContentCounts — курсы → (модули, уроки, ученики) одним вызовом
 	// (T25, без N+1 в списке курсов).
