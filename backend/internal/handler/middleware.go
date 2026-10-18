@@ -124,6 +124,10 @@ func NewRouter(app *App) http.Handler {
 			// T19: CRUD конструктора (правка урока, удаление, порядок, счётчики
 			// в списке) — та же точка монтирования, что у RegisterTeacherEditRoutes.
 			app.RegisterTeacherCRUDRoutes(r)
+			// T21: жизненный цикл курса (копирование, архив, отзыв с модерации,
+			// перенос урока). T22: ученики курса и статистика для учителя.
+			app.RegisterTeacherLifecycleRoutes(r)
+			app.RegisterTeacherStudentsRoutes(r)
 		})
 
 		r.Route("/admin", func(r chi.Router) {
@@ -131,6 +135,8 @@ func NewRouter(app *App) http.Handler {
 			r.Post("/invites", app.AdminCreateInvite)
 			r.Get("/courses/review", app.AdminReviewQueue)
 			r.Post("/courses/{id}/moderate", app.AdminModerateCourse)
+			app.RegisterAdminUsersRoutes(r) // T24: /admin/users — управление пользователями
+			app.RegisterAdminConsoleRoutes(r)
 			// T07 (журнал платежей и настройки) сюда НЕ подключать: метод
 			// RegisterAdminPaymentsRoutes регистрирует АБСОЛЮТНЫЕ пути
 			// /admin/payments и /admin/settings (см. handler/admin_payments.go),
@@ -154,6 +160,7 @@ func NewRouter(app *App) http.Handler {
 
 		r.With(app.requireAuth).Get("/me/courses", app.MyCourses)
 		r.With(app.requireAuth).Post("/me/courses/{id}/lessons/{lessonId}/complete", app.CompleteLesson)
+		app.RegisterMeExtraRoutes(r)
 	})
 	return r
 }
@@ -297,6 +304,11 @@ func (a *App) requireAuth(next http.Handler) http.Handler {
 		u, ok := a.Store.GetUserByID(sess.UserID)
 		if !ok {
 			writeErr(w, http.StatusUnauthorized, "Пользователь не найден")
+			return
+		}
+		// T24: заблокированный пользователь теряет доступ даже с живой сессией.
+		if u.Status == repo.UserBlocked {
+			writeErr(w, http.StatusForbidden, "Учётная запись заблокирована")
 			return
 		}
 		ctx := context.WithValue(r.Context(), userCtxKey, u)

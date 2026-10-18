@@ -15,6 +15,16 @@ const (
 	RoleAdmin   Role = "admin"
 )
 
+// UserStatus — состояние учётной записи (T24): active — обычный доступ,
+// blocked — вход запрещён, ранее выданные сессии не работают.
+// Пустая строка у старых объектов in-memory трактуется как active.
+type UserStatus string
+
+const (
+	UserActive  UserStatus = "active"
+	UserBlocked UserStatus = "blocked"
+)
+
 type CourseStatus string
 
 const (
@@ -64,6 +74,7 @@ type User struct {
 	Email        string
 	PasswordHash string
 	Role         Role
+	Status       UserStatus
 	DisplayName  string
 	CreatedAt    time.Time
 }

@@ -24,6 +24,21 @@ type StoreAPI interface {
 	// поддельных bcrypt-хешей из миграции 002_seed.sql (см. ensureAccount
 	// в cmd/api/main.go). false — пользователь не найден.
 	SetUserPasswordHash(id, hash string) bool
+	// ListUsers — фильтрованный список пользователей для админки (T24).
+	// Q — подстрока по email/displayName (регистронезависимо), Role/Status —
+	// точное совпадение, "" — любой. Новые первыми (CreatedAt desc).
+	ListUsers(f UserFilter) []*User
+	// SetUserStatus активен/заблокирован; false — пользователя нет (T24).
+	SetUserStatus(id string, status UserStatus) bool
+	// DeleteUser удаляет пользователя; ErrNotFound — нет такого (T24).
+	// Каскад по сессиям/отзывам/прогрессу; курсы и платежи НЕ удаляются —
+	// handler обязан отказать (409), если они есть (см. UserDependencies).
+	DeleteUser(id string) error
+	// UserDependencies — счётчики связей пользователя для защиты от удаления (T24).
+	UserDependencies(id string) UserDeps
+	// CountUsersByRole — сколько пользователей с ролью (защита последнего
+	// администратора, T24).
+	CountUsersByRole(role Role) int
 	// Sessions
 	CreateSession(userID string, ttl time.Duration) *Session
 	GetSession(id string) (*Session, bool)
@@ -52,6 +67,10 @@ type StoreAPI interface {
 	// CountContentByCourses — счётчики «модули/уроки» по курсам преподавателя
 	// одним запросом (T19: убирает N+1 в GET /teacher/courses).
 	CountContentByCourses(teacherID string) map[string]ContentCounts
+	// CloneCourse — глубокая копия курса с модулями и уроками (T21).
+	// Копия создаётся черновиком, slug подбирается по свободному (<slug>-copy-N).
+	// ErrNotFound — исходного курса нет.
+	CloneCourse(courseID string) (*Course, error)
 	// Modules
 	CreateModule(courseID, title string) *Module
 	GetModule(id string) (*Module, bool)
@@ -80,11 +99,18 @@ type StoreAPI interface {
 	// ReorderLessons применяет полный список позиций уроков курса одной
 	// транзакцией (T19; позиция — порядковый номер урока внутри модуля).
 	ReorderLessons(courseID string, items []PositionItem) error
+	// MoveLessonToModule переносит урок в конец другого модуля (T21).
+	// ErrNotFound — урока или модуля нет.
+	MoveLessonToModule(lessonID, moduleID string) error
 	// Enrollments
 	GetEnrollment(studentID, courseID string) (*Enrollment, bool)
 	EnsureEnrollment(studentID, courseID string) (*Enrollment, bool)
 	SetEnrollmentStatus(studentID, courseID string, status EnrollmentStatus) error
 	ListEnrollmentsByStudent(studentID string) []*Enrollment
+	// ListEnrollmentsByCourse — все записи на курс, новые первыми (T22).
+	// Записи во всех статусах: учитель видит и отчисления (refunded, revoked),
+	// статус отдаётся наружу полем.
+	ListEnrollmentsByCourse(courseID string) []*Enrollment
 	// Progress
 	CompleteLesson(studentID, lessonID string) (*LessonProgress, bool)
 	BumpAttempt(studentID, lessonID string) int
@@ -92,12 +118,22 @@ type StoreAPI interface {
 	// CountCompletedLessons реализован, но не вызывается ни одним хендлером:
 	// API для будущего (прогресс-бар «M из N уроков»). См. отчёт T13.
 	CountCompletedLessons(studentID, courseID string) int
+	// StudentProgress — карта studentID → прогресс по курсу одним запросом (T22).
+	// Ключи — только ученики, у которых есть записи на курс.
+	StudentProgress(courseID string) map[string]StudentProgress
+	// ListCompletedLessonIDs — id пройденных уроков курса в порядке программы (T23).
+	// Никогда не nil (пустой слайс — если ничего не пройдено).
+	ListCompletedLessonIDs(studentID, courseID string) []string
 	// Payments
 	CreatePayment(p *Payment) (*Payment, error)
 	GetPaymentByProviderID(id string) (*Payment, bool)
 	FindPendingPayment(studentID, courseID string) (*Payment, bool)
 	SetPaymentStatus(id string, status PaymentStatus) bool
 	ListPaymentsJournal(f PaymentFilter) (items []PaymentJournalRow, total int, totals PaymentTotals, err error)
+	// ListPaymentsByCourse — платежи по курсу; фильтрацию по статусу делает handler (T22).
+	ListPaymentsByCourse(courseID string) []*Payment
+	// ListPaymentsByStudent — платежи ученика, новые первыми (T23).
+	ListPaymentsByStudent(studentID string) []*Payment
 	// Reviews
 	CreateReview(studentID, courseID string, rating int, body string) (*Review, error)
 	ListReviewsByCourse(courseID string) []*Review
@@ -108,6 +144,23 @@ type StoreAPI interface {
 	// (T16, п.4): раньше Postgres глотал её, API отвечал 200, а в базу ничего
 	// не попадало. Кэш в памяти обновляется ТОЛЬКО после успешной записи.
 	SetCommissionPct(n int) error
+
+	// ---- T25: админ-консоль (сводка, курсы, отзывы, записи) ----
+
+	// AdminOverview — агрегаты для сводки супер-админа одним вызовом (T25).
+	AdminOverview() AdminTotals
+	// ListAllCourses — курсы всех статусов с фильтрами для админки (T25),
+	// новые первыми; total — до пагинации.
+	ListAllCourses(f CourseFilter) (items []*Course, total int)
+	// DeleteReview удаляет отзыв и пересчитывает рейтинг курса (T25).
+	// ErrNotFound — отзыва нет.
+	DeleteReview(id string) error
+	// ListEnrollmentRows — все записи на курсы с данными ученика и курса (T25),
+	// новые первыми; total — до пагинации.
+	ListEnrollmentRows(f EnrollmentFilter) (items []EnrollmentRow, total int)
+	// CourseContentCounts — курсы → (модули, уроки, ученики) одним вызовом
+	// (T25, без N+1 в списке курсов).
+	CourseContentCounts() map[string]ContentCounts
 }
 
 // PaymentFilter — параметры журнала платежей для админки (US6).
@@ -145,9 +198,39 @@ type PositionItem struct {
 }
 
 // ContentCounts — счётчики программы курса в списке «мои курсы» (T19).
+// T25 добавил Students: studentsCount в списке курсов админки
+// (CourseContentCounts). CountContentByCourses (T19) новое поле не
+// заполняет — в «моих курсах» преподавателя оно остаётся нулевым, и
+// форма ответа /teacher/courses не меняется.
 type ContentCounts struct {
 	Modules int
 	Lessons int
+	// Students — число АКТИВНЫХ учеников курса (revoked/refunded доступ
+	// отозван и в счёт не идёт).
+	Students int
+}
+
+// StudentProgress — агрегат по одному ученику курса (T22).
+type StudentProgress struct {
+	Completed    int       // пройдено уроков
+	LastActivity time.Time // максимум CompletedAt; нулевое — не начинал
+}
+
+// UserFilter — фильтры списка пользователей в админке (T24).
+// Пустые значения означают «любой»; Q ищет подстроку по email и displayName
+// без учёта регистра.
+type UserFilter struct {
+	Q      string
+	Role   Role
+	Status UserStatus
+}
+
+// UserDeps — счётчики связей пользователя (T24): удаление запрещено, если
+// есть курсы (пользователь — преподаватель) или платежи (история оплат).
+type UserDeps struct {
+	Courses     int
+	Payments    int
+	Enrollments int
 }
 
 // Проверка, что in-memory Store реализует интерфейс.

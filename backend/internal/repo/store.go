@@ -78,6 +78,7 @@ func (s *Store) CreateUser(email, passwordHash string, role Role) (*User, error)
 		Email:        email,
 		PasswordHash: passwordHash,
 		Role:         role,
+		Status:       UserActive, // T24: явный дефолт (пустая строка = active только у старых объектов)
 		CreatedAt:    time.Now().UTC(),
 	}
 	s.users[u.ID] = u

@@ -5,6 +5,10 @@
 // myCourses(), найденного по course.id; если курса нет в «моих» — не ходим в
 // getCourse() с UUID, а показываем «нет доступа».
 //
+// T30: прогресс и список пройденных уроков — ТОЛЬКО с сервера
+// (GET /me/courses/{id}/progress, api/meExtra.ts). Локальных эвристик
+// («все уроки до nextLesson пройдены») больше нет.
+//
 // Вердикт определяется полем passed результата CompleteResult.
 
 import { useMemo, useState } from 'react';
@@ -12,9 +16,11 @@ import { Link, NavLink, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ApiError, completeLesson, getCourse, myCourses } from '../api/client';
 import type { CompleteLessonInput, CompleteResult, Lesson } from '../api/client';
+import { courseProgress } from '../api/meExtra';
 import LessonView from '../components/LessonView';
 import { t } from '../i18n/t';
 import '../styles/learn.css';
+import '../styles/profile.css';
 
 /** Урок с названием модуля — для плоского списка и подсветки. */
 type FlatLesson = Lesson & { moduleTitle: string };
@@ -47,8 +53,6 @@ export default function Learn(): JSX.Element {
 
   const [verdictState, setVerdictState] = useState<VerdictState | null>(null);
   const [errorState, setErrorState] = useState<ErrorState | null>(null);
-  // Уроки, завершённые в этой сессии (сервер не отдаёт список завершённых).
-  const [completedNow, setCompletedNow] = useState<ReadonlySet<string>>(new Set());
 
   // Шарим кеш списка «моих курсов» с MyCourses.tsx (ключ в репозитории — 'my-courses').
   const myQuery = useQuery({ queryKey: ['my-courses'], queryFn: myCourses });
@@ -64,6 +68,17 @@ export default function Learn(): JSX.Element {
     enabled: myQuery.isSuccess && Boolean(courseId) && Boolean(slug),
     retry: false,
   });
+
+  // Честный прогресс с сервера (T23): completedLessonIds, percent, nextLessonId.
+  // Ключ ['course-progress', courseId] совпадает с MyCourses.tsx — кеш общий,
+  // после complete урок инвалидирует его, и обе страницы перечитывают прогресс.
+  const progressQuery = useQuery({
+    queryKey: ['course-progress', courseId],
+    queryFn: () => courseProgress(courseId),
+    enabled: myQuery.isSuccess && Boolean(courseId) && Boolean(meCourse),
+    retry: false,
+  });
+  const progress = progressQuery.data;
 
   const modules = useMemo(() => {
     const mods = courseQuery.data?.modules ?? [];
@@ -81,30 +96,18 @@ export default function Learn(): JSX.Element {
     [modules],
   );
 
-  // Актуальный прогресс: серверный percent из последнего завершения, иначе из «моих курсов».
-  const percent = verdictState?.result.percent ?? meCourse?.percent ?? 0;
+  // Прогресс — только из ответа сервера; пока не загружен, показываем «—»
+  // и нейтральную полосу (см. рендер ниже), а не «0 %».
+  const percent = progress?.percent ?? 0;
 
-  // Следующий урок: после успешного завершения — из ответа сервера, иначе из «моих курсов».
-  const serverNextLessonId = verdictState?.result.passed
-    ? (verdictState.result.nextLesson?.lessonId ?? null)
-    : (meCourse?.nextLesson?.lessonId ?? null);
+  // Следующий урок — из серверного прогресса (первый непройденный).
+  const serverNextLessonId = progress?.nextLessonId ?? null;
 
-  // Отметка завершённых уроков. Контракт не отдаёт список завершённых уроков,
-  // поэтому считаем завершёнными все уроки до nextLesson в порядке курса
-  // (backend возвращает первым именно первый незавершённый) плюс те,
-  // что завершены в этой сессии.
-  const completedIds = useMemo(() => {
-    const ids = new Set(completedNow);
-    if (percent >= 100) {
-      flatLessons.forEach((l) => ids.add(l.id));
-      return ids;
-    }
-    if (serverNextLessonId) {
-      const idx = flatLessons.findIndex((l) => l.id === serverNextLessonId);
-      for (let i = 0; i < idx; i++) ids.add(flatLessons[i].id);
-    }
-    return ids;
-  }, [flatLessons, completedNow, percent, serverNextLessonId]);
+  // Отметка завершённых уроков — ровно по completedLessonIds с сервера.
+  const completedIds = useMemo(
+    () => new Set(progress?.completedLessonIds ?? []),
+    [progress],
+  );
 
   // Активный урок: из URL, иначе «следующий», иначе первый.
   const lessonFromUrl = lessonId ? flatLessons.find((l) => l.id === lessonId) : undefined;
@@ -132,11 +135,11 @@ export default function Learn(): JSX.Element {
       if (!activeLesson) return;
       setVerdictState({ lessonId: activeLesson.id, result: res });
       setErrorState(null);
-      if (res.completed) {
-        setCompletedNow((prev) => new Set(prev).add(activeLesson.id));
-      }
-      // Инвалидируем оба варианта ключа списка «моих курсов»: в этой волне
-      // страница использует 'my-courses', при переименовании — 'me-courses'.
+      // Прогресс перечитываем с сервера: список уроков и полоса обновятся
+      // по completedLessonIds/percent (та же query, что и в MyCourses.tsx).
+      void qc.invalidateQueries({ queryKey: ['course-progress', courseId] });
+      // Инвалидируем список «моих курсов»: состав записей и порядок могли измениться.
+      // Второй ключ ('me-courses') — запасной вариант переименования из T03.
       void qc.invalidateQueries({ queryKey: ['my-courses'] });
       void qc.invalidateQueries({ queryKey: ['me-courses'] });
     },
@@ -276,18 +279,30 @@ export default function Learn(): JSX.Element {
         <h1>{title}</h1>
         <div style={{ margin: '14px 0 20px' }}>
           <span className="muted">
-            {t('learn.progress')}: {percent}%
+            {t('learn.progress')}: {progress ? `${percent}%` : '—'}
           </span>
-          <div
-            className="progress"
-            role="progressbar"
-            aria-valuemin={0}
-            aria-valuemax={100}
-            aria-valuenow={percent}
-            aria-label={`${t('learn.progress')}: ${percent}%`}
-          >
-            <div className="progress-bar" style={{ width: `${percent}%` }} />
-          </div>
+          {progress ? (
+            <div
+              className="progress"
+              role="progressbar"
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-valuenow={percent}
+              aria-label={`${t('learn.progress')}: ${percent}%`}
+            >
+              <div className="progress-bar" style={{ width: `${percent}%` }} />
+            </div>
+          ) : (
+            /* Пока прогресс не загружен (или недоступен) — нейтральная полоса
+               без процентов: выдуманный «0 %» не показываем. */
+            <div
+              className={progressQuery.isError ? 'progress' : 'progress pf-progress-pending'}
+              role="progressbar"
+              aria-busy={!progressQuery.isError}
+              aria-valuetext={progressQuery.isError ? '—' : t('common.loading')}
+              aria-label={t('learn.progress')}
+            />
+          )}
         </div>
 
         <div className="lesson-shell">

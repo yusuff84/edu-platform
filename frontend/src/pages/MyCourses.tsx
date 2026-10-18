@@ -1,17 +1,35 @@
+// «Мои курсы» студента (первая страница после входа).
+// T30: честный прогресс — ТОЛЬКО с сервера: GET /me/courses/{id}/progress
+// (api/meExtra.ts) для каждой записи одним массивом useQueries. Поля
+// percent/nextLesson из GET /me/courses в интерфейсе не используются:
+// раньше картину «дорисовывал» клиент, и она расходилась с сервером.
+//
+// Форма данных записи — строго по контракту GET /me/courses:
+// MyCourse = { course: CourseItem, percent, nextLesson: NextLesson | null }.
+// Плоских courseId/slug/title/nextLessonId в ответе НЕТ.
+
 import { Link } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
-import { myCourses } from '../api/client';
+import { useQueries, useQuery } from '@tanstack/react-query';
+import { ApiError, myCourses } from '../api/client';
+import { courseProgress } from '../api/meExtra';
 import { coverFor } from '../components/CourseCard';
 import { t } from '../i18n/t';
+import '../styles/profile.css';
 
-/**
- * «Мои курсы» студента (первая страница после входа).
- * Форма данных — строго по контракту GET /me/courses:
- * MyCourse = { course: CourseItem, percent, nextLesson: NextLesson | null }.
- * Плоских courseId/slug/title/nextLessonId в ответе НЕТ.
- */
 export default function MyCourses(): JSX.Element {
   const query = useQuery({ queryKey: ['my-courses'], queryFn: myCourses });
+  const items = query.data ?? [];
+
+  // По одному запросу прогресса на курс — useQueries вместо хуков в цикле.
+  // Ключ ['course-progress', id] совпадает с Learn.tsx: после complete урок
+  // инвалидирует его, и карточки здесь получают свежие данные из кеша.
+  const progressQueries = useQueries({
+    queries: items.map((m) => ({
+      queryKey: ['course-progress', m.course.id],
+      queryFn: () => courseProgress(m.course.id),
+      retry: false, // 403/404 — не временный сбой, повтор не поможет
+    })),
+  });
 
   // Загрузка
   if (query.isLoading) {
@@ -44,8 +62,6 @@ export default function MyCourses(): JSX.Element {
     );
   }
 
-  const items = query.data ?? [];
-
   // Пустой список
   if (items.length === 0) {
     return (
@@ -65,10 +81,15 @@ export default function MyCourses(): JSX.Element {
     );
   }
 
+  // Сводка — по уже загруженным прогрессам; пока ничего не загружено, средний
+  // прогресс показываем как «—», а не выдуманный ноль.
+  const loaded = progressQueries.flatMap((p) => (p.data ? [p.data] : []));
   const total = items.length;
+  const done = loaded.filter((p) => p.completed).length;
   const avg =
-    total > 0 ? Math.round(items.reduce((sum, m) => sum + (m.percent ?? 0), 0) / total) : 0;
-  const done = items.filter((m) => m.percent >= 100).length;
+    loaded.length > 0
+      ? Math.round(loaded.reduce((sum, p) => sum + p.percent, 0) / loaded.length)
+      : null;
 
   return (
     <div className="wrap">
@@ -80,7 +101,7 @@ export default function MyCourses(): JSX.Element {
             <span>Курсов</span>
           </div>
           <div>
-            <b>{avg}%</b>
+            <b>{avg === null ? '—' : `${avg}%`}</b>
             <span>Средний прогресс</span>
           </div>
           <div>
@@ -89,13 +110,26 @@ export default function MyCourses(): JSX.Element {
           </div>
         </div>
         <div className="enrolled-grid">
-          {items.map((item) => {
+          {items.map((item, i) => {
             const course = item.course;
-            // nextLesson — объект {lessonId, title, kind} | null (контракт, п.17)
-            const nextLessonId = item.nextLesson?.lessonId;
+            const progress = progressQueries[i];
+            const data = progress.data;
+            const errStatus =
+              progress.error instanceof ApiError ? progress.error.status : undefined;
+            // 403 — активной записи нет (refunded/revoked): показываем статус
+            // записи, а не выдуманные проценты. 404 — курс удалён.
+            const revoked = errStatus === 403;
+            const statusText = revoked
+              ? t('my.progressRevoked')
+              : t('my.progressFailed');
+
+            // «Продолжить»: серверный nextLessonId, иначе — страница курса
+            // (/learn/{id} сам выберет первый урок); при completed — тоже она.
+            const nextLessonId = data?.nextLessonId ?? null;
             const href = nextLessonId
               ? `/learn/${course.id}/${nextLessonId}`
               : `/learn/${course.id}`;
+
             return (
               <div key={course.id} className="panel">
                 <div
@@ -107,19 +141,62 @@ export default function MyCourses(): JSX.Element {
                 <h3>
                   <Link to={href}>{course.title}</Link>
                 </h3>
-                <div className="progress" aria-label={`${t('my.progress')}: ${item.percent}%`}>
-                  <div className="progress-bar" style={{ width: `${item.percent}%` }} />
-                </div>
-                <div className="progress-meta">
-                  <span>
-                    {t('my.progress')}: {item.percent}%
-                  </span>
-                  <span>{item.nextLesson?.title ?? ''}</span>
-                </div>
+
+                {data ? (
+                  <>
+                    <div
+                      className="progress"
+                      role="progressbar"
+                      aria-valuemin={0}
+                      aria-valuemax={100}
+                      aria-valuenow={data.percent}
+                      aria-label={`${t('my.progress')}: ${data.percent}%`}
+                    >
+                      <div className="progress-bar" style={{ width: `${data.percent}%` }} />
+                    </div>
+                    <div className="progress-meta">
+                      <span>
+                        {t('my.progress')}: {data.percent}%
+                      </span>
+                      {data.completed ? (
+                        <span className="pf-course-done">{t('profile.courseDone')}</span>
+                      ) : (
+                        <span>
+                          {t('profile.lessonsDone')}: {data.completedLessons} / {data.totalLessons}
+                        </span>
+                      )}
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    {/* Прогресс ещё грузится или недоступен: нейтральная полоса
+                        без «0 %» — выдуманные проценты не показываем. */}
+                    <div
+                      className={progress.isError ? 'progress' : 'progress pf-progress-pending'}
+                      role="progressbar"
+                      aria-busy={!progress.isError}
+                      aria-valuetext={progress.isError ? statusText : t('common.loading')}
+                      aria-label={t('my.progress')}
+                    />
+                    <div className="progress-meta">
+                      <span className="pf-enroll-status">
+                        {progress.isError ? statusText : t('common.loading')}
+                      </span>
+                    </div>
+                  </>
+                )}
+
                 <div className="btn-row">
-                  <Link className="btn btn-primary" to={href}>
-                    {t('my.continue')}
-                  </Link>
+                  {!revoked && (
+                    <Link className="btn btn-primary" to={href}>
+                      {t('my.continue')}
+                    </Link>
+                  )}
+                  {progress.isError && !revoked && (
+                    <button type="button" className="btn" onClick={() => void progress.refetch()}>
+                      {t('common.retry')}
+                    </button>
+                  )}
                 </div>
               </div>
             );

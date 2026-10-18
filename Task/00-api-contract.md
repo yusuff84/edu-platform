@@ -412,6 +412,69 @@ Query: `q` (поиск), `page`, `limit`.
 
 ---
 
+## Эндпоинты волны P3 (T21–T25)
+
+Все пути ниже — от `/api/v1`. Конверты пагинации те же: `{items,total,page,limit}`.
+Владение курсом проверяет общий `ownCourse`: `403` — чужой курс, `404` — курса нет;
+админу разрешены все курсы.
+
+### Конструктор курса (T21)
+
+| Метод | Путь | Ответ | Коды |
+|---|---|---|---|
+| POST | `/teacher/courses/{id}/duplicate` | `201 {"course":{…}}` — копия-черновик вызывающего | `403`, `404` |
+| POST | `/teacher/courses/{id}/archive` | `200 {"course":{…}}`, статус `archived` | `409` уже в архиве |
+| POST | `/teacher/courses/{id}/unarchive` | `200 {"course":{…}}`, статус `draft` | `409` не в архиве |
+| POST | `/teacher/courses/{id}/withdraw` | `200 {"course":{…}}`, `review → draft`, комментарий модерации очищается | `409` не на модерации |
+| POST | `/teacher/courses/{id}/lessons/{lessonId}/move` | `200 {"lesson":{…}}` — урок в конце другого модуля, тело `{"moduleId":"uuid"}` | `400` пустой или чужой `moduleId`, `404` урока нет в курсе, `409` курс не черновик |
+
+Копия курса копирует программу глубоко (модули и уроки с новыми `id`), но не
+записи, платежи, отзывы и прогресс. Повторный перенос в тот же модуль —
+идемпотентный `200`.
+
+### Ученики курса (T22)
+
+`GET /teacher/courses/{id}/students?q=&page=&limit=` → `200 {items,total,page,limit}`,
+элемент: `studentId,email,displayName,enrolledAt,status,completedLessons,totalLessons,percent,lastActivityAt`.
+`q` ищет по email и имени; `lastActivityAt` = `null`, пока ученик ничего не проходил.
+
+`GET /teacher/courses/{id}/stats` → `200`
+`{studentsTotal,studentsActive,studentsCompleted,avgPercent,revenueCents,modulesTotal,lessonsTotal,reviewsCount,avgRating}`.
+
+### Кабинет ученика (T23)
+
+| Метод | Путь | Ответ | Коды |
+|---|---|---|---|
+| GET | `/me/courses/{id}/progress` | `200 {courseId,completedLessonIds,completedLessons,totalLessons,percent,nextLessonId,completed}`; `completedLessonIds` — всегда массив, `nextLessonId` = `null` при полном прохождении | `403` нет активной записи, `404` курса нет |
+| GET | `/me/profile` | `200 {id,email,role,displayName,createdAt}` | `401` |
+| PATCH | `/me/profile` | `200 {id,email,role,displayName,createdAt}`, тело `{"displayName":"…"}` | `400` имя короче 2 или длиннее 60 символов |
+| GET | `/me/payments?page=&limit=` | `200 {items,total,page,limit}`, элемент: `id,courseId,courseTitle,amountCents,status,createdAt,processedAt` | `401` |
+
+### Супер-админ (T24/T25) — только роль `admin`
+
+| Метод | Путь | Ответ | Коды |
+|---|---|---|---|
+| GET | `/admin/users?q=&role=&status=&page=&limit=` | `200 {items,total,page,limit}`, элемент: `id,email,role,displayName,status,createdAt,coursesCount,enrollmentsCount` | `400` мусорные `role`/`status` |
+| PATCH | `/admin/users/{id}/role` | `200 {"user":{…}}`, тело `{"role":"student\|teacher\|admin"}` | `400` мусорная роль, `409` себе, `409` последний админ, `404` |
+| PATCH | `/admin/users/{id}/status` | `200 {"user":{…}}`, тело `{"status":"active\|blocked"}` | `409` себе, `409` последний админ |
+| DELETE | `/admin/users/{id}` | `204` | `409` себе / последний админ / есть курсы / есть платежи |
+| GET | `/admin/stats` | `200 {users,courses,payments,enrollments,reviews}`: `users{total,students,teachers,admins,blocked,newLast7}`, `courses{total,draft,review,published,archived}`, `payments{count,succeededCents,platformFeeCents,teacherCents,last30Cents}`, `enrollments{total,active}`, `reviews{total,avgRating}` | `403` |
+| GET | `/admin/courses?q=&status=&page=&limit=` | `200 {items,total,page,limit}`, элемент: `id,slug,title,teacherId,teacherEmail,status,priceCents,createdAt,updatedAt,modulesCount,lessonsCount,studentsCount` | `400` мусорный `status` |
+| POST | `/admin/courses/{id}/unpublish` | `200 {"course":{…}}`, `published → draft` | `409` не опубликован |
+| POST | `/admin/courses/{id}/archive` | `200 {"course":{…}}`, статус `archived` | `409` уже в архиве |
+| GET | `/admin/courses/{id}/reviews` | `200 {items,total}`: `id,studentId,studentEmail,rating,body,createdAt` | |
+| DELETE | `/admin/reviews/{id}` | `204` | `404` |
+| GET | `/admin/enrollments?courseId=&page=&limit=` | `200 {items,total,page,limit}`: `id,studentId,studentEmail,studentName,courseId,courseTitle,status,createdAt,completedLessons,totalLessons,percent` | |
+
+Заблокированный пользователь (`status: "blocked"`) получает `403` и на входе,
+и по уже выданной cookie-сессии; разблокировка возвращает доступ без повторного
+входа. Маршрут `GET /admin/courses/review` (T07) сохраняется: он зарегистрирован
+раньше `GET /admin/courses` и не перехватывается.
+
+Сквозная проверка этих эндпоинтов — `qa-p3.ps1` (80 проверок).
+
+---
+
 ## Отступления (осознанные и разрешённые)
 
 | Отступление | Кто | Почему |
