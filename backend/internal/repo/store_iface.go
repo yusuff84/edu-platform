@@ -47,6 +47,12 @@ type StoreAPI interface {
 	CreateInvite(email, tokenHash, prefix, createdBy string, expiresAt time.Time) *TeacherInvite
 	GetInviteByTokenHash(hash string) (*TeacherInvite, bool)
 	AcceptInvite(inv *TeacherInvite)
+	// ListInvites — список приглашений для админки (T47): createdAt DESC,
+	// пагинация 1-based (limit 1..100, по умолчанию 20); total — до пагинации.
+	ListInvites(page, limit int) ([]*TeacherInvite, int)
+	// RevokeInvite отзывает приглашение из статуса sent (T47).
+	// ErrNotFound — приглашения нет; ErrConflict — статус не sent.
+	RevokeInvite(id string) (*TeacherInvite, error)
 	// Courses
 	CreateCourse(c *Course) *Course
 	GetCourseByID(id string) (*Course, bool)
@@ -127,6 +133,8 @@ type StoreAPI interface {
 	// Payments
 	CreatePayment(p *Payment) (*Payment, error)
 	GetPaymentByProviderID(id string) (*Payment, bool)
+	// GetPaymentByID — платёж по внутреннему id (T47: возврат средств).
+	GetPaymentByID(id string) (*Payment, bool)
 	FindPendingPayment(studentID, courseID string) (*Payment, bool)
 	SetPaymentStatus(id string, status PaymentStatus) bool
 	ListPaymentsJournal(f PaymentFilter) (items []PaymentJournalRow, total int, totals PaymentTotals, err error)
@@ -150,13 +158,16 @@ type StoreAPI interface {
 	// AdminOverview — агрегаты для сводки супер-админа одним вызовом (T25).
 	AdminOverview() AdminTotals
 	// ListAllCourses — курсы всех статусов с фильтрами для админки (T25),
-	// новые первыми; total — до пагинации.
+	// новые первыми; total — до пагинации. T48: сортировка (Sort/Dir),
+	// фильтр по email преподавателя (TeacherEmail) и период по createdAt
+	// (From/To) — в CourseFilter.
 	ListAllCourses(f CourseFilter) (items []*Course, total int)
 	// DeleteReview удаляет отзыв и пересчитывает рейтинг курса (T25).
 	// ErrNotFound — отзыва нет.
 	DeleteReview(id string) error
 	// ListEnrollmentRows — все записи на курсы с данными ученика и курса (T25),
-	// новые первыми; total — до пагинации.
+	// новые первыми; total — до пагинации. T48: поиск по ученику (Q) и статус
+	// записи (Status) — в EnrollmentFilter.
 	ListEnrollmentRows(f EnrollmentFilter) (items []EnrollmentRow, total int)
 	// CourseContentCounts — курсы → (модули, уроки, ученики) одним вызовом
 	// (T25, без N+1 в списке курсов).

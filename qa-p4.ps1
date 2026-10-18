@@ -177,9 +177,11 @@ $studentEmail = "p4-student-$stamp@example.test"
 $dummyEmail   = "p4-dummy-$stamp@example.test"
 $studentName  = "P4name-$stamp"
 $password     = "password123"
-$today     = (Get-Date).ToString("yyyy-MM-dd")
-$tomorrow  = (Get-Date).AddDays(1).ToString("yyyy-MM-dd")
-$yesterday = (Get-Date).AddDays(-1).ToString("yyyy-MM-dd")
+# Даты — по часам сервера (UTC): на границе суток локальное время может
+# опережать серверное, и проверки from/to «сегодня/вчера» дадут ложные падения.
+$today     = (Get-Date).ToUniversalTime().ToString("yyyy-MM-dd")
+$tomorrow  = (Get-Date).ToUniversalTime().AddDays(1).ToString("yyyy-MM-dd")
+$yesterday = (Get-Date).ToUniversalTime().AddDays(-1).ToString("yyyy-MM-dd")
 $qStudent  = [uri]::EscapeDataString($studentEmail)
 $qUpper    = [uri]::EscapeDataString($studentEmail.ToUpperInvariant())
 $qName     = [uri]::EscapeDataString($studentName.ToLowerInvariant())
