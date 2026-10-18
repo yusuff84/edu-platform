@@ -224,24 +224,108 @@ func (s *PostgresStore) CreateInvite(email, tokenHash, prefix, createdBy string,
 	return inv
 }
 
-func (s *PostgresStore) GetInviteByTokenHash(hash string) (*TeacherInvite, bool) {
-	ctx, cancel := s.ctx()
-	defer cancel()
+// scanInvite собирает приглашение из строки выборки teacher_invites:
+// порядок колонок — inviteCols (T47).
+func scanInvite(scan func(dest ...any) error) (*TeacherInvite, error) {
 	inv := &TeacherInvite{}
 	var prefix string
 	var createdBy *string
-	err := s.pool.QueryRow(ctx,
-		`SELECT id::text, email, token_hash, COALESCE(token_prefix,''), status, expires_at,
-		        created_by::text, created_at
-		 FROM teacher_invites WHERE token_hash=$1 LIMIT 1`, hash).
-		Scan(&inv.ID, &inv.Email, &inv.TokenHash, &prefix, &inv.Status,
-			&inv.ExpiresAt, &createdBy, &inv.CreatedAt)
-	if err != nil {
-		return nil, false
+	if err := scan(&inv.ID, &inv.Email, &inv.TokenHash, &prefix, &inv.Status,
+		&inv.ExpiresAt, &createdBy, &inv.CreatedAt); err != nil {
+		return nil, err
 	}
 	inv.TokenPrefix = prefix
 	inv.CreatedBy = strOrEmpty(createdBy)
+	return inv, nil
+}
+
+// inviteCols — колонки teacher_invites для scanInvite (без token по смыслу:
+// сырой токен в БД не хранится, только хеш и префикс).
+const inviteCols = `id::text, email, token_hash, COALESCE(token_prefix,''), status,
+	expires_at, created_by::text, created_at`
+
+func (s *PostgresStore) GetInviteByTokenHash(hash string) (*TeacherInvite, bool) {
+	ctx, cancel := s.ctx()
+	defer cancel()
+	row := s.pool.QueryRow(ctx,
+		`SELECT `+inviteCols+` FROM teacher_invites WHERE token_hash=$1 LIMIT 1`, hash)
+	inv, err := scanInvite(row.Scan)
+	if err != nil {
+		return nil, false
+	}
 	return inv, true
+}
+
+// ListInvites возвращает приглашения новыми первыми с пагинацией (T47):
+// COUNT(*) — total до пагинации, страница — LIMIT/OFFSET. Ошибки БД
+// логируются и отдают пустой результат — как у остальных list-методов.
+func (s *PostgresStore) ListInvites(page, limit int) ([]*TeacherInvite, int) {
+	page, limit = clampPageLimit(page, limit)
+
+	ctx, cancel := s.ctx()
+	defer cancel()
+
+	var total int
+	if err := s.pool.QueryRow(ctx,
+		`SELECT COUNT(*)::int FROM teacher_invites`).Scan(&total); err != nil {
+		log.Printf("postgres ListInvites count: %v", err)
+		return nil, 0
+	}
+
+	offset := (page - 1) * limit
+	rows, err := s.pool.Query(ctx,
+		`SELECT `+inviteCols+` FROM teacher_invites ORDER BY created_at DESC LIMIT $1 OFFSET $2`,
+		limit, offset)
+	if err != nil {
+		log.Printf("postgres ListInvites: %v", err)
+		return nil, 0
+	}
+	defer rows.Close()
+
+	items := make([]*TeacherInvite, 0, limit)
+	for rows.Next() {
+		if inv, err := scanInvite(rows.Scan); err == nil {
+			items = append(items, inv)
+		}
+	}
+	return items, total
+}
+
+// RevokeInvite отзывает приглашение из статуса sent (T47). UPDATE с условием
+// status='sent' атомарен — отзыв ровно один; RETURNING отдаёт обновлённую
+// запись. Если строк не обновлено, различаем 404/409 отдельным SELECT:
+// строк нет — ErrNotFound, статус был не sent — ErrConflict. Мусорный id
+// (не UUID) трактуется как «не найдено» — как в GetCourseByID.
+func (s *PostgresStore) RevokeInvite(id string) (*TeacherInvite, error) {
+	if _, err := uuid.Parse(strings.TrimSpace(id)); err != nil {
+		return nil, ErrNotFound
+	}
+	ctx, cancel := s.ctx()
+	defer cancel()
+
+	row := s.pool.QueryRow(ctx,
+		`UPDATE teacher_invites SET status='revoked'
+		 WHERE id=$1::uuid AND status='sent'
+		 RETURNING `+inviteCols, id)
+	inv, err := scanInvite(row.Scan)
+	if err == nil {
+		return inv, nil
+	}
+	if !errors.Is(err, pgx.ErrNoRows) {
+		return nil, fmt.Errorf("не удалось отозвать приглашение: %w", err)
+	}
+
+	// Строк не обновлено: либо приглашения нет, либо статус не sent.
+	var status string
+	err = s.pool.QueryRow(ctx,
+		`SELECT status FROM teacher_invites WHERE id=$1::uuid`, id).Scan(&status)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("не удалось проверить статус приглашения: %w", err)
+	}
+	return nil, ErrConflict
 }
 
 func (s *PostgresStore) AcceptInvite(inv *TeacherInvite) {
@@ -881,6 +965,21 @@ func (s *PostgresStore) GetPaymentByProviderID(id string) (*Payment, bool) {
 	return p, true
 }
 
+// GetPaymentByID ищет платёж по внутреннему id (T47: админский возврат
+// средств принимает внутренний UUID платежа). Мусорный id (не UUID) даёт
+// ошибку парсинга и трактуется как «не найдено» — как в GetCourseByID.
+func (s *PostgresStore) GetPaymentByID(id string) (*Payment, bool) {
+	ctx, cancel := s.ctx()
+	defer cancel()
+	row := s.pool.QueryRow(ctx,
+		`SELECT `+paymentCols+` FROM payments WHERE id=$1::uuid`, id)
+	p, err := scanPayment(row.Scan)
+	if err != nil {
+		return nil, false
+	}
+	return p, true
+}
+
 func (s *PostgresStore) FindPendingPayment(studentID, courseID string) (*Payment, bool) {
 	ctx, cancel := s.ctx()
 	defer cancel()
@@ -898,9 +997,12 @@ func (s *PostgresStore) FindPendingPayment(studentID, courseID string) (*Payment
 func (s *PostgresStore) SetPaymentStatus(id string, status PaymentStatus) bool {
 	ctx, cancel := s.ctx()
 	defer cancel()
+	// T47: refunded — тоже терминальный статус, processed_at фиксирует
+	// момент возврата (контракт требует заполненный processedAt в ответе
+	// POST /admin/payments/{id}/refund).
 	tag, err := s.pool.Exec(ctx,
 		`UPDATE payments SET status=$2,
-		 processed_at=CASE WHEN $2 IN ('succeeded','failed') THEN now() ELSE processed_at END
+		 processed_at=CASE WHEN $2 IN ('succeeded','failed','refunded') THEN now() ELSE processed_at END
 		 WHERE id=$1::uuid`, id, string(status))
 	if err != nil {
 		return false

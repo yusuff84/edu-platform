@@ -143,6 +143,10 @@ func NewRouter(app *App) http.Handler {
 		r.Route("/admin", func(r chi.Router) {
 			r.Use(app.requireAuth, app.requireRole(repo.RoleAdmin))
 			r.Post("/invites", app.AdminCreateInvite)
+			// T47: список приглашений и отзыв (handler/admin_invites.go).
+			// requireAuth/requireRole(admin) уже навешены на группу.
+			r.Get("/invites", app.AdminListInvites)
+			r.Post("/invites/{id}/revoke", app.AdminRevokeInvite)
 			r.Get("/courses/review", app.AdminReviewQueue)
 			r.Post("/courses/{id}/moderate", app.AdminModerateCourse)
 			app.RegisterAdminUsersRoutes(r) // T24: /admin/users — управление пользователями

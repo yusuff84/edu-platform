@@ -9,6 +9,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
+	"edu-platform/backend/internal/payments"
 	"edu-platform/backend/internal/repo"
 )
 
@@ -24,6 +25,9 @@ func (a *App) RegisterAdminPaymentsRoutes(r chi.Router) {
 		Get("/admin/settings", a.AdminGetSettings)
 	r.With(a.requireAuth, a.requireRole(repo.RoleAdmin)).
 		Put("/admin/settings", a.AdminUpdateSettings)
+	// T47: возврат средств — id внутреннего UUID платежа (не providerPaymentId).
+	r.With(a.requireAuth, a.requireRole(repo.RoleAdmin)).
+		Post("/admin/payments/{id}/refund", a.AdminRefundPayment)
 }
 
 // adminOnly — страховка к requireRole: проверяет, что запрос пришёл от админа,
@@ -106,6 +110,41 @@ type paymentJournalResponse struct {
 	Totals paymentJournalTotals `json:"totals"`
 }
 
+// toJournalItem переносит строку журнала в форму контракта US6.
+// Вынесено из AdminPaymentsJournal, чтобы ответ возврата средств (T47)
+// переиспользовал ровно ту же форму элемента (включая обязательные
+// studentEmail/studentName).
+func toJournalItem(it repo.PaymentJournalRow) paymentJournalItem {
+	return paymentJournalItem{
+		ID: it.ID, StudentID: it.StudentID,
+		// T16 (п.3, расхождение №6): email и имя студента — иначе в админке
+		// в колонке «Студент» светился обрезанный UUID. studentName может
+		// быть пустым — тогда фронт показывает studentEmail.
+		StudentEmail: it.StudentEmail, StudentName: it.StudentDisplayName,
+		CourseID: it.CourseID, CourseTitle: it.CourseTitle,
+		AmountCents: it.AmountCents, PlatformFeeCents: it.PlatformFeeCents,
+		TeacherAmountCents: it.TeacherAmountCents,
+		Currency:           it.Currency, Provider: it.Provider,
+		ProviderPaymentID: it.ProviderPaymentID, Status: it.Status,
+		CreatedAt: it.CreatedAt, ProcessedAt: it.ProcessedAt,
+	}
+}
+
+// journalRowFor собирает строку журнала по одному платежу: название курса,
+// email и имя студента — как в списке GET /admin/payments. Нужно ответу
+// возврата средств (T47), где studentEmail/studentName обязательны.
+func (a *App) journalRowFor(p *repo.Payment) repo.PaymentJournalRow {
+	row := repo.PaymentJournalRow{Payment: *p}
+	if c, ok := a.Store.GetCourseByID(p.CourseID); ok {
+		row.CourseTitle = c.Title
+	}
+	if u, ok := a.Store.GetUserByID(p.StudentID); ok {
+		row.StudentEmail = u.Email
+		row.StudentDisplayName = u.DisplayName
+	}
+	return row
+}
+
 // parseJournalPeriod разбирает границы периода from/to журнала платежей (T31).
 // Формат — ГГГГ-ММ-ДД (UTC), пустое значение = границы нет. Неверный формат
 // → 400 «Дата в формате ГГГГ-ММ-ДД», from позже to → 400 «Начало периода
@@ -180,19 +219,7 @@ func (a *App) AdminPaymentsJournal(w http.ResponseWriter, r *http.Request) {
 	}
 	out := make([]paymentJournalItem, 0, len(items))
 	for _, it := range items {
-		out = append(out, paymentJournalItem{
-			ID: it.ID, StudentID: it.StudentID,
-			// T16 (п.3, расхождение №6): email и имя студента — иначе в админке
-			// в колонке «Студент» светился обрезанный UUID. studentName может
-			// быть пустым — тогда фронт показывает studentEmail.
-			StudentEmail: it.StudentEmail, StudentName: it.StudentDisplayName,
-			CourseID: it.CourseID, CourseTitle: it.CourseTitle,
-			AmountCents: it.AmountCents, PlatformFeeCents: it.PlatformFeeCents,
-			TeacherAmountCents: it.TeacherAmountCents,
-			Currency:           it.Currency, Provider: it.Provider,
-			ProviderPaymentID: it.ProviderPaymentID, Status: it.Status,
-			CreatedAt: it.CreatedAt, ProcessedAt: it.ProcessedAt,
-		})
+		out = append(out, toJournalItem(it))
 	}
 	writeJSON(w, http.StatusOK, paymentJournalResponse{
 		Items: out, Total: total, Page: page, Limit: limit,
@@ -247,4 +274,76 @@ func (a *App) AdminUpdateSettings(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, settingsResponse{CommissionPct: *req.CommissionPct})
+}
+
+// refundResponse — ответ возврата средств: {"payment": <строка журнала>}.
+type refundResponse struct {
+	Payment paymentJournalItem `json:"payment"`
+}
+
+// AdminRefundPayment — POST /admin/payments/{id}/refund: возврат средств (T47),
+// только admin. id — внутренний UUID платежа (не providerPaymentId); провайдер
+// берётся из поля provider самого платежа. Возврат возможен только из статуса
+// succeeded (иначе 409), неизвестный платёж — 404. Ошибка вызова провайдера
+// (включая ErrNotConfigured) — 502.
+//
+// Применение результата — под a.webhookMu, тем же замком, что и вебхук
+// (P5, коммит b9a84df): статус перечитывается и меняется в одной критической
+// секции, поэтому два параллельных возврата одного платежа дают ровно один
+// 200, второй — 409. Сам вызов провайдера — ВНЕ замка: он может быть сетевым
+// и долгим (stripe/yookassa), а гонку сериализует повторная проверка ниже.
+func (a *App) AdminRefundPayment(w http.ResponseWriter, r *http.Request) {
+	if !a.adminOnly(w, r) {
+		return
+	}
+	id := strings.TrimSpace(chi.URLParam(r, "id"))
+	p, found := a.Store.GetPaymentByID(id)
+	if !found {
+		writeErr(w, http.StatusNotFound, "Платёж не найден")
+		return
+	}
+	if p.Status != repo.PaymentSucceeded {
+		writeErr(w, http.StatusConflict, "Возврат возможен только для успешного платежа")
+		return
+	}
+
+	prov, err := payments.NewProvider(p.Provider)
+	if err != nil {
+		writeErr(w, http.StatusBadGateway, "Не удалось выполнить возврат у провайдера")
+		return
+	}
+	if err := prov.Refund(r.Context(), p.ProviderPaymentID); err != nil {
+		writeErr(w, http.StatusBadGateway, "Не удалось выполнить возврат у провайдера")
+		return
+	}
+
+	a.webhookMu.Lock()
+	defer a.webhookMu.Unlock()
+
+	// Свежее чтение внутри замка: пока шёл вызов провайдера, статус мог
+	// измениться (параллельный возврат или вебхук) — тогда 409.
+	fresh, found := a.Store.GetPaymentByID(p.ID)
+	if !found {
+		writeErr(w, http.StatusNotFound, "Платёж не найден")
+		return
+	}
+	if fresh.Status != repo.PaymentSucceeded {
+		writeErr(w, http.StatusConflict, "Возврат возможен только для успешного платежа")
+		return
+	}
+	a.Store.SetPaymentStatus(fresh.ID, repo.PaymentRefunded)
+	// Возврат средств отменяет доступ: запись на курс становится refunded
+	// (та же семантика, что у ветки refunded в PaymentWebhook, enroll.go).
+	// Ошибка намеренно игнорируется: повторный возврат вернёт 409 и не дойдёт
+	// сюда; отсутствие записи (ErrNotFound) — не повод ронять возврат денег.
+	_ = a.Store.SetEnrollmentStatus(fresh.StudentID, fresh.CourseID, repo.EnrollmentRefunded)
+	// Свежие значения ПОСЛЕ записи: в ответе — актуальный статус refunded
+	// и processedAt (момент возврата; в Postgres снимок нужно перечитать).
+	updated, ok := a.Store.GetPaymentByID(fresh.ID)
+	if !ok || updated == nil {
+		updated = fresh
+	}
+	writeJSON(w, http.StatusOK, refundResponse{
+		Payment: toJournalItem(a.journalRowFor(updated)),
+	})
 }
