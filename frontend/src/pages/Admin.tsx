@@ -21,6 +21,8 @@ import { t } from '../i18n/t';
 import type { RuKey } from '../i18n/t';
 // Стили страницы изолированы в styles/admin.css — общий styles.css не трогаем.
 import '../styles/admin.css';
+// T43: стиль предупреждения об усечении выгрузки (.ce-msg--warn) — из csvExport.css.
+import '../styles/csvExport.css';
 
 // ---------- Константы и утилиты ----------
 
@@ -259,13 +261,20 @@ export default function Admin(): JSX.Element {
 
   // ---- Выгрузка всей выборки в CSV (не только открытой страницы) ----
   const [exporting, setExporting] = useState(false);
-  const [exportMsg, setExportMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  // Тон сообщения: 'ok' — успех/пусто, 'warn' — выборка усечена (T43),
+  // 'error' — ошибка сети/сервера.
+  const [exportMsg, setExportMsg] = useState<{ tone: 'ok' | 'warn' | 'error'; text: string } | null>(
+    null,
+  );
 
   async function onExportCsv(): Promise<void> {
     setExportMsg(null);
     setExporting(true);
     try {
       const rows: PaymentJournalItem[] = [];
+      // total выборки — из ответов пагинации: если больше выгруженного, файл
+      // обрезан потолком EXPORT_MAX_PAGES (T43).
+      let total = 0;
       // Постранично limit=100 до total, но не больше EXPORT_MAX_PAGES:
       // защита от неограниченной выгрузки (ограничение описано в отчёте T38).
       for (let p = 1; p <= EXPORT_MAX_PAGES; p += 1) {
@@ -278,12 +287,13 @@ export default function Admin(): JSX.Element {
           from,
           to,
         });
+        if (p === 1) total = res.total;
         rows.push(...res.items);
         if (rows.length >= res.total || res.items.length === 0) break;
       }
       if (rows.length === 0) {
         // Пустая выборка: сообщаем, файл не создаём.
-        setExportMsg({ ok: true, text: t('admin.exportEmpty') });
+        setExportMsg({ tone: 'ok', text: t('admin.exportEmpty') });
         return;
       }
       downloadTextFile(
@@ -291,9 +301,14 @@ export default function Admin(): JSX.Element {
         `\uFEFF${paymentsCsv(rows)}`,
         'text/csv;charset=utf-8',
       );
-      setExportMsg({ ok: true, text: t('admin.exported') });
+      if (total > rows.length) {
+        // Файл создан, но выборка усечена потолком выгрузки — честно сообщаем.
+        setExportMsg({ tone: 'warn', text: t('admin.exportTruncated') });
+        return;
+      }
+      setExportMsg({ tone: 'ok', text: t('admin.exported') });
     } catch (e: unknown) {
-      setExportMsg({ ok: false, text: errorText(e) });
+      setExportMsg({ tone: 'error', text: errorText(e) });
     } finally {
       setExporting(false);
     }
@@ -622,7 +637,16 @@ export default function Admin(): JSX.Element {
           </p>
         )}
         {exportMsg && (
-          <p role={exportMsg.ok ? 'status' : 'alert'} className={exportMsg.ok ? '' : 'error'}>
+          <p
+            role={exportMsg.tone === 'error' ? 'alert' : 'status'}
+            className={
+              exportMsg.tone === 'warn'
+                ? 'ce-msg ce-msg--warn'
+                : exportMsg.tone === 'error'
+                  ? 'error'
+                  : ''
+            }
+          >
             {exportMsg.text}
           </p>
         )}

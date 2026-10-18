@@ -35,6 +35,13 @@
   color: var(--danger);
 }
 
+/* Выборка усечена потолком выгрузки (T43): жёлтый стиль предупреждений
+   проекта (образец — .st-wait в styles.css). */
+.ce-msg--warn {
+  background: var(--warn-bg);
+  color: #8a5e14;
+}
+
 /* «Выгружать нечего» — не ошибка, спокойный нейтральный стиль. */
 .ce-msg--empty {
   background: var(--warn-bg);
