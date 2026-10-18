@@ -203,6 +203,26 @@
   margin-top: 0.5rem;
 }
 
+/* ---------- Финиш курса (T39) ---------- */
+
+/* Панель «Курс пройден»: над блоком урока, отдельный «успешный» акцент.
+   Селектор .panel.learn-finished перебивает общий .panel из styles.css
+   независимо от порядка подключения стилей. */
+.panel.learn-finished {
+  margin: 0 0 1.25rem;
+  border-color: #bfe3c9;
+  background: linear-gradient(180deg, #f3faf4 0%, #ffffff 100%);
+}
+
+.panel.learn-finished h2 {
+  margin-top: 0;
+  color: #14663a;
+}
+
+.panel.learn-finished p {
+  margin: 0.25rem 0 0.75rem;
+}
+
 /* ---------- Адаптив ---------- */
 
 @media (max-width: 768px) {
