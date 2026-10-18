@@ -41,6 +41,13 @@ type App struct {
 	limitersMu   sync.Mutex
 	limitersOnce sync.Once
 	limiters     map[string]*rateLimiter
+
+	// webhookMu сериализует применение вебхуков оплаты (находка приёмки P5):
+	// проверка «статус уже терминальный → duplicate» и запись нового статуса
+	// должны быть одной критической секцией, иначе одновременные доставки
+	// одного события обе отвечают processed (тест T35 под нагрузкой видел
+	// processed=2). Вебхуки редки — общий замок на приложение достаточен.
+	webhookMu sync.Mutex
 }
 
 type ctxKey string

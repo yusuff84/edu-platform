@@ -225,9 +225,9 @@ func TestPaymentsHardeningWebhookDuplicateDelivery(t *testing.T) {
 
 // 3. Гонка (T35, п.3): 8 одновременных доставок одного успешного вебхука →
 // ровно один платёж и ровно одна запись на курс, ровно один ответ processed,
-// остальные — duplicate. До правки T35 (мьютекс применения события в
-// handler/enroll.go) несколько горутин видели статус pending и все отвечали
-// processed, а -race фиксировал гонку чтения Payment.Status с записью в store.
+// остальные — duplicate. Гонка «несколько горутин видят pending и все
+// отвечают processed» закрыта в P5: применение события в handler/enroll.go
+// выполняется под a.webhookMu (проверка статуса и запись — одна секция).
 func TestPaymentsHardeningConcurrentWebhookRace(t *testing.T) {
 	app, router := newTestApp()
 	_, courseID, _ := seedPublishedCourse(t, app, router, 10000)

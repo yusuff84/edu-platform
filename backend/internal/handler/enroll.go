@@ -168,6 +168,13 @@ func (a *App) PaymentWebhook(w http.ResponseWriter, r *http.Request) {
 		writeWebhookErr(w, err)
 		return
 	}
+	// P5: проверка статуса платежа и его применение — одна критическая секция
+	// под a.webhookMu. Без замка одновременные доставки одного события обе
+	// видели pending и обе отвечали «processed» (гонка, которую ловит тест T35
+	// TestPaymentsHardeningConcurrentWebhookRace). Чтение — внутри замка,
+	// чтобы не работать со снимком, устаревшим к моменту захвата.
+	a.webhookMu.Lock()
+	defer a.webhookMu.Unlock()
 	p, found := a.Store.GetPaymentByProviderID(event.ProviderPaymentID)
 	if !found {
 		writeErr(w, http.StatusNotFound, "Платёж не найден")
