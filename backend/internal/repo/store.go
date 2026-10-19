@@ -1007,7 +1007,10 @@ func (s *Store) ListReviewsByCourse(courseID string) []*Review {
 	var out []*Review
 	for _, r := range s.reviews {
 		if r.CourseID == courseID {
-			out = append(out, r)
+			// T69: отзыв теперь изменяемый (ответ преподавателя), поэтому
+			// наружу уходит снимок — чтение после снятия лока не гоняется с PUT.
+			snapshot := *r
+			out = append(out, &snapshot)
 		}
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].CreatedAt.After(out[j].CreatedAt) })
@@ -1035,6 +1038,52 @@ func (s *Store) RecalcCourseRating(courseID string) {
 		return
 	}
 	c.AvgRating = math.Round(float64(sum)/float64(n)*10) / 10
+}
+
+// SetReviewReply устанавливает/заменяет ответ преподавателя на отзыв (T69).
+// ErrNotFound — отзыва с таким id в этом курсе нет (в том числе отзыв,
+// принадлежащий другому курсу). Наружу отдаётся снимок: живой указатель
+// после снятия лока читать нельзя.
+func (s *Store) SetReviewReply(courseID, reviewID, body string) (*Review, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	r, ok := s.reviews[reviewID]
+	if !ok || r.CourseID != courseID {
+		return nil, ErrNotFound
+	}
+	now := time.Now().UTC()
+	r.TeacherReply = body
+	r.TeacherReplyAt = &now
+	snapshot := *r
+	return &snapshot, nil
+}
+
+// ClearReviewReply очищает ответ преподавателя (T69); отсутствие ответа —
+// не ошибка (идемпотентно), ErrNotFound — только если отзыва нет в курсе.
+func (s *Store) ClearReviewReply(courseID, reviewID string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	r, ok := s.reviews[reviewID]
+	if !ok || r.CourseID != courseID {
+		return ErrNotFound
+	}
+	r.TeacherReply = ""
+	r.TeacherReplyAt = nil
+	return nil
+}
+
+// ReviewRatingBreakdown — число отзывов курса по каждой оценке (T69).
+// Ключи 1..5 присутствуют всегда, чтобы handler отдавал стабильную форму.
+func (s *Store) ReviewRatingBreakdown(courseID string) map[int]int {
+	out := map[int]int{1: 0, 2: 0, 3: 0, 4: 0, 5: 0}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	for _, r := range s.reviews {
+		if r.CourseID == courseID && r.Rating >= 1 && r.Rating <= 5 {
+			out[r.Rating]++
+		}
+	}
+	return out
 }
 
 // ---- Settings ----

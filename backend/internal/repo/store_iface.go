@@ -185,6 +185,23 @@ type StoreAPI interface {
 	// уроки каждого модуля по position — только метаданные) и статистика
 	// (все записи, активные, отзывы, успешные платежи). false — курса нет.
 	AdminCourseDetail(courseID string) (*AdminCourseDetailData, bool)
+
+	// ---- T69: ответы преподавателя на отзывы и разбивка оценок ----
+
+	// SetReviewReply устанавливает или заменяет публичный ответ
+	// преподавателя на отзыв (T69): текст без trim-обработки — её делает
+	// handler, — и время установки teacherReplyAt = now (обновляется при
+	// каждом вызове). Возвращает снимок отзыва после записи.
+	// ErrNotFound — отзыва с таким id в этом курсе нет (в том числе отзыв
+	// другого курса). Владение курсом проверяет handler.
+	SetReviewReply(courseID, reviewID, body string) (*Review, error)
+	// ClearReviewReply очищает ответ преподавателя: teacherReply = "",
+	// teacherReplyAt = NULL (T69). Повторная очистка уже очищенного отзыва —
+	// успех. ErrNotFound — отзыва с таким id в этом курсе нет.
+	ClearReviewReply(courseID, reviewID string) error
+	// ReviewRatingBreakdown — число отзывов курса по каждой оценке (T69).
+	// В карте всегда присутствуют ключи 1..5 (нет отзывов — нули).
+	ReviewRatingBreakdown(courseID string) map[int]int
 }
 
 // PaymentFilter — параметры журнала платежей для админки (US6, T31).

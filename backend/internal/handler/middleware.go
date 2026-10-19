@@ -146,6 +146,9 @@ func NewRouter(app *App) http.Handler {
 			// перенос урока). T22: ученики курса и статистика для учителя.
 			app.RegisterTeacherLifecycleRoutes(r)
 			app.RegisterTeacherStudentsRoutes(r)
+			// T69: ответ преподавателя на отзыв —
+			// PUT/DELETE /courses/{id}/reviews/{reviewId}/reply.
+			app.RegisterTeacherReviewReplyRoutes(r)
 			// T54: обложка курса — POST/DELETE /courses/{id}/cover (multipart).
 			// Лимит тела 1 МБ из decodeJSON multipart не задевает (он действует
 			// только на JSON-декодер); у хендлеров обложки свой лимит ≥6 МБ

@@ -542,7 +542,14 @@ func TestAdminConsoleReviewsModeration(t *testing.T) {
 	foundA, foundB := false, false
 	for _, raw := range items {
 		row := raw.(map[string]any)
-		wantKeys(t, row, "id", "studentId", "studentEmail", "rating", "body", "createdAt")
+		// T69: teacherReply/teacherReplyAt добавлены аддитивно во все виды
+		// отзывов (контракт волны P8), поэтому ключей теперь 8.
+		wantKeys(t, row, "id", "studentId", "studentEmail", "rating", "body", "createdAt",
+			"teacherReply", "teacherReplyAt")
+		if row["teacherReply"] != "" || row["teacherReplyAt"] != nil {
+			t.Fatalf("без ответа teacherReply=%v teacherReplyAt=%v: ждали пусто/null",
+				row["teacherReply"], row["teacherReplyAt"])
+		}
 		switch row["studentId"] {
 		case studentAID:
 			foundA = true

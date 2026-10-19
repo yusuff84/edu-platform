@@ -300,6 +300,9 @@ type adminReviewItem struct {
 	Rating       int       `json:"rating"`
 	Body         string    `json:"body"`
 	CreatedAt    time.Time `json:"createdAt"`
+	// T69: аддитивные поля ответа преподавателя (пустая строка/null — нет).
+	TeacherReply   string     `json:"teacherReply"`
+	TeacherReplyAt *time.Time `json:"teacherReplyAt"`
 }
 
 type adminReviewListResponse struct {
@@ -327,6 +330,7 @@ func (a *App) AdminCourseReviews(w http.ResponseWriter, r *http.Request) {
 		items = append(items, adminReviewItem{
 			ID: rv.ID, StudentID: rv.StudentID, StudentEmail: email,
 			Rating: rv.Rating, Body: rv.Body, CreatedAt: rv.CreatedAt,
+			TeacherReply: rv.TeacherReply, TeacherReplyAt: rv.TeacherReplyAt,
 		})
 	}
 	writeJSON(w, http.StatusOK, adminReviewListResponse{Items: items})

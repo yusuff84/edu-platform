@@ -48,7 +48,7 @@
 |---|---|---|---|
 | GET | `/api/v1/courses?q=&page=&limit=` | публичный | → `200` конверт `{items:[CourseItem],total,page,limit}` |
 | GET | `/api/v1/courses/{slug}` | публичный* | → `200` `{course, modules:[ModuleView]}`; *`draft` виден автору и админу, остальным 404 |
-| GET | `/api/v1/courses/{id}/reviews` | публичный | `{id}` — UUID или slug → `200` `{items:[Review],total,avgRating,ratingsCount}` |
+| GET | `/api/v1/courses/{id}/reviews?rating=1..5` | публичный | `{id}` — UUID или slug; `rating` необязателен и фильтрует `items`/`total` → `200` `{items:[Review],total,avgRating,ratingsCount,breakdown:{"1".."5"}}`; `avgRating`/`ratingsCount`/`breakdown` — по всем отзывам курса; иной `rating` → `400 «Оценка должна быть числом от 1 до 5»` |
 | POST | `/api/v1/courses/{id}/reviews` | студент с активной записью | `{rating:1..5, body}` → `201` `Review` |
 
 ### Прогресс обучения (`me`)
@@ -87,6 +87,17 @@
 > PNG или WebP не больше 5 МБ». Поле `coverPath` (string|null) добавлено во
 > все виды курса: каталог `GET /courses`, страница `GET /courses/{slug}`,
 > списки учителя и админа.
+
+> Волна P8 (T69): ответ преподавателя на отзыв —
+> `PUT /api/v1/teacher/courses/{id}/reviews/{reviewId}/reply`
+> (`{"body":"…"}` после trim 3..2000 символов → `200 {"review":<Review>}`;
+> повторный PUT заменяет текст и обновляет `teacherReplyAt`) и
+> `DELETE …/reply` → `204` (ответа не было — тоже `204`). Ошибки: `403` —
+> чужой курс, `404 «Отзыв не найден»` (в т.ч. отзыв другого курса),
+> `400 «Ответ: от 3 до 2000 символов»`. В `Review` добавлены аддитивные
+> `teacherReply` (string, пустая — ответа нет) и `teacherReplyAt`
+> (string|null); они есть во всех видах отзывов (страница курса,
+> админ-список отзывов).
 
 > В бэклоге T13: `GET/PATCH/DELETE /teacher/courses[...]`, PATCH модулей/уроков,
 > reorder — в `Task/T13-integration-wiring.md`.
