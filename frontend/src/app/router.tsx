@@ -24,6 +24,8 @@ const Admin = lazy(() => import('../pages/Admin'));
 const AdminUsers = lazy(() => import('../pages/AdminUsers'));
 const AdminCourses = lazy(() => import('../pages/AdminCourses'));
 const AdminStats = lazy(() => import('../pages/AdminStats'));
+// T58: страница «Детали курса» — отдельный чанк подраздела «Курсы».
+const AdminCourseDetail = lazy(() => import('../pages/AdminCourseDetail'));
 // T49: экран «Записи на курсы» — отдельная страница подраздела.
 const AdminEnrollments = lazy(() => import('../pages/AdminEnrollments'));
 const CourseStudents = lazy(() => import('../pages/CourseStudents'));
@@ -215,6 +217,9 @@ export const router = createBrowserRouter([
       // (каждая со своим владельцем-задачей).
       { path: '/admin/users', element: <RequireRole roles={['admin']}><AdminUsers /></RequireRole> },
       { path: '/admin/courses', element: <RequireRole roles={['admin']}><AdminCourses /></RequireRole> },
+      // T58: детали курса — строго ПОСЛЕ /admin/courses (react-router сам
+      // разрулит конфликт с /admin/courses/review: статичным путём владеет T07).
+      { path: '/admin/courses/:id', element: <RequireRole roles={['admin']}><AdminCourseDetail /></RequireRole> },
       { path: '/admin/stats', element: <RequireRole roles={['admin']}><AdminStats /></RequireRole> },
       { path: '/admin/enrollments', element: <RequireRole roles={['admin']}><AdminEnrollments /></RequireRole> },
       // Ученики конкретного курса — автору курса и админу.

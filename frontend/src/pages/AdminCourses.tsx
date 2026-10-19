@@ -829,6 +829,15 @@ export default function AdminCourses(): JSX.Element {
                             className="ac-td-actions"
                           >
                             <div className="ac-actions">
+                              {/* T58: страница деталей курса (/admin/courses/:id).
+                                  Ключа «Детали» в словаре нет (заморозка ru.json) —
+                                  существующий adminCourses.open («Открыть»). */}
+                              <Link
+                                className="btn btn-sm"
+                                to={`/admin/courses/${encodeURIComponent(course.id)}`}
+                              >
+                                {t('adminCourses.open')}
+                              </Link>
                               <button
                                 type="button"
                                 className="btn btn-sm"

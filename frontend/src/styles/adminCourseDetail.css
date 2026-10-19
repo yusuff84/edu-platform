@@ -1,0 +1,510 @@
+/* Стили админ-страницы «Детали курса» (/admin/courses/:id) — волна P7 (T58).
+   Импортируются только из pages/AdminCourseDetail.tsx; styles.css и общие
+   админ-стили (adminConsole.css/admin.css) не изменяются — здесь только
+   селекторы с префиксом .acd-. Базовые классы (.wrap, .page, .panel, .btn,
+   .btn-sm, .btn-primary, .muted, .error, .sr-only, .progress, .progress-bar)
+   берутся из styles.css.
+
+   Требование ТЗ: таблицы и бейджи вписываются в карточку, max-width 100%,
+   горизонтального скролла нет — ячейки переносятся, длинные тексты режутся
+   overflow-wrap'ом, минимальных ширин-потолков (min-width: 960px как у ac-/ae-
+   таблиц) намеренно нет. */
+
+main.acd-page {
+  max-width: 1200px;
+}
+
+/* ---------- Шапка страницы ---------- */
+
+.acd-back {
+  margin: 0 0 0.25rem;
+  font-size: 0.9rem;
+}
+
+.acd-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem 1rem;
+  margin-bottom: 1rem;
+}
+
+.acd-head h1 {
+  margin: 0;
+}
+
+/* Левая часть шапки: обложка (если есть) + колонка с названием и метаданными. */
+.acd-head__main {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  min-width: 0;
+}
+
+.acd-head__title {
+  margin: 0 0 0.35rem;
+  font-size: 22px;
+  overflow-wrap: anywhere;
+}
+
+.acd-head__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem 0.85rem;
+  font-size: 0.92rem;
+  color: var(--muted);
+  min-width: 0;
+}
+
+.acd-head__meta b {
+  color: var(--fg);
+  overflow-wrap: anywhere;
+}
+
+.acd-head__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.acd-head__actions .btn {
+  margin-top: 0;
+  white-space: nowrap;
+}
+
+/* Обложка (T54): маленький прямоугольник рядом с шапкой, не ломает поток. */
+.acd-cover {
+  width: 5.5rem;
+  height: 3.5rem;
+  object-fit: cover;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm, 8px);
+  background: #f3f1ec;
+}
+
+/* ---------- Бейджи статуса курса (как ac-badge--* в T48/AdminCourses) ---------- */
+
+.acd-badge {
+  display: inline-block;
+  padding: 0.12rem 0.55rem;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.acd-badge--draft {
+  background: #efece6;
+  color: #57534a;
+}
+
+.acd-badge--review {
+  background: var(--warn-bg);
+  color: #8a6100;
+}
+
+.acd-badge--published {
+  background: var(--ok-bg);
+  color: var(--ok);
+}
+
+.acd-badge--archived {
+  background: #e9edf7;
+  color: #3d4f7c;
+}
+
+/* ---------- Показатели: карточки-числа ---------- */
+
+.acd-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.acd-stat {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  padding: 0.75rem 0.9rem;
+  box-shadow: var(--shadow-sm);
+  min-width: 0;
+}
+
+.acd-stat__label {
+  display: block;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.acd-stat__value {
+  display: block;
+  margin-top: 0.3rem;
+  font-size: 1.25rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+/* ---------- Раздел «Программа» и прочие блоки ---------- */
+
+.acd-block {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  padding: 1rem 1.1rem;
+  box-shadow: var(--shadow-sm);
+  min-width: 0;
+  margin-bottom: 1rem;
+}
+
+.acd-block__title {
+  margin: 0 0 0.65rem;
+  font-size: 18px;
+}
+
+/* Блок «Программа»: модули списком, уроки — строки с меткой kind. */
+
+.acd-modules {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.6rem;
+}
+
+.acd-module {
+  border: 1px solid var(--line-soft);
+  border-radius: var(--r-sm, 8px);
+  padding: 0.6rem 0.75rem;
+  min-width: 0;
+}
+
+.acd-module__head {
+  display: flex;
+  align-items: baseline;
+  gap: 0.45rem;
+  flex-wrap: wrap;
+}
+
+.acd-module__pos {
+  color: var(--muted);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  flex: 0 0 auto;
+}
+
+.acd-module__title {
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.acd-lessons {
+  list-style: none;
+  margin: 0.45rem 0 0;
+  padding: 0;
+  display: grid;
+  gap: 0.35rem;
+}
+
+.acd-lesson {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  padding: 0.3rem 0.5rem;
+  background: #faf9f6;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  min-width: 0;
+}
+
+.acd-lesson__pos {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  flex: 0 0 auto;
+}
+
+.acd-lesson__title {
+  overflow-wrap: anywhere;
+}
+
+/* Метка типа урока — компактный чип (аккуратнее .pill из каталога). */
+.acd-kind {
+  padding: 0.05rem 0.45rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  color: #57534a;
+  font-size: 0.75rem;
+  font-weight: 700;
+  white-space: nowrap;
+  flex: 0 0 auto;
+}
+
+/* ---------- Компактные таблицы (ученики) ---------- */
+
+.acd-table {
+  width: 100%;
+  max-width: 100%;
+  border-collapse: collapse;
+}
+
+.acd-table th,
+.acd-table td {
+  padding: 0.45rem 0.5rem;
+  border-bottom: 1px solid var(--line-soft);
+  text-align: left;
+  font-size: 0.9rem;
+  vertical-align: top;
+  white-space: normal; /* без nowrap — таблица не выезжает из карточки */
+  overflow-wrap: anywhere;
+}
+
+.acd-table th {
+  background: #f8f7f4;
+  color: #55524c;
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.acd-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.acd-table tbody tr:hover {
+  background: #fbfaf8;
+}
+
+/* Ученик: имя (полужирно) + email второй строкой, переносится целиком. */
+.acd-student {
+  display: grid;
+  gap: 0.1rem;
+  min-width: 0;
+}
+
+.acd-student__name {
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.acd-student__email {
+  color: #666;
+  font-size: 0.85rem;
+  overflow-wrap: anywhere;
+}
+
+/* ---------- Бейджи статуса записи ---------- */
+
+.acd-ebadge {
+  display: inline-block;
+  padding: 0.1rem 0.5rem;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.acd-ebadge--active {
+  background: #e3f5e6;
+  color: #1e7d32;
+}
+
+.acd-ebadge--refunded {
+  background: #e7f0fd;
+  color: #1a4f9c;
+}
+
+.acd-ebadge--revoked {
+  background: #fde2e2;
+  color: #b00020;
+}
+
+/* Прогресс: узкая полоса (.progress/.progress-bar из styles.css) + percent. */
+.acd-progress {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  min-width: 8rem;
+  max-width: 100%;
+}
+
+.acd-progress .progress {
+  width: 5rem;
+  height: 8px;
+  flex: 0 0 5rem;
+}
+
+.acd-progress__num {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* ---------- Отзывы ---------- */
+
+.acd-reviews {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.6rem;
+}
+
+.acd-review {
+  border: 1px solid var(--line-soft);
+  border-radius: var(--r-sm, 8px);
+  padding: 0.6rem 0.75rem;
+  min-width: 0;
+}
+
+.acd-review__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem 0.85rem;
+  min-width: 0;
+}
+
+.acd-review__author {
+  overflow-wrap: anywhere;
+}
+
+.acd-review__head .btn {
+  margin-top: 0;
+  margin-left: auto;
+}
+
+/* Inline-подтверждение удаления (НЕ alert()): вопрос + две кнопки в строке. */
+.acd-confirm {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-left: auto;
+}
+
+.acd-confirm__q {
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.acd-confirm .btn {
+  margin-top: 0;
+  white-space: nowrap;
+}
+
+/* Красная кнопка действия — как ac-btn--danger в консоли. */
+.btn.acd-btn--danger {
+  background: var(--danger);
+  border-color: var(--danger);
+  color: #fff;
+}
+
+.btn.acd-btn--danger:hover {
+  background: #b52e21;
+  border-color: #b52e21;
+}
+
+.btn.acd-btn--danger:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.acd-review__body {
+  margin: 0.45rem 0 0;
+}
+
+.acd-stars {
+  color: #d98a00;
+  letter-spacing: 0.08em;
+  font-size: 1rem;
+  flex: 0 0 auto;
+}
+
+/* ---------- Сообщения и состояния ---------- */
+
+.acd-msg {
+  margin: 0 0 0.75rem;
+  padding: 0.55rem 0.8rem;
+  border-radius: var(--r-sm);
+  font-weight: 600;
+}
+
+.acd-msg--ok {
+  background: var(--ok-bg);
+  color: var(--ok);
+}
+
+.acd-msg--error {
+  background: var(--danger-bg);
+  color: var(--danger);
+}
+
+.acd-error {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+  margin: 0.5rem 0;
+}
+
+.acd-error p {
+  margin: 0;
+}
+
+.acd-error .btn {
+  margin-top: 0;
+}
+
+/* Экран «Курс не найден»: крупная надпись + кнопка возврата к списку. */
+.acd-notfound {
+  display: grid;
+  justify-items: start;
+  gap: 0.75rem;
+}
+
+.acd-notfound h2 {
+  margin: 0;
+}
+
+.acd-notfound .btn {
+  margin-top: 0;
+}
+
+/* «Все записи» рядом с заголовком блока учеников (T49-страница). */
+.acd-block__link {
+  font-size: 0.9rem;
+  margin: 0 0 0.5rem;
+}
+
+/* ---------- Узкий экран ---------- */
+
+@media (max-width: 720px) {
+  .acd-stats {
+    grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+  }
+
+  .acd-head__actions .btn {
+    width: 100%;
+  }
+
+  .acd-table th,
+  .acd-table td {
+    padding: 0.4rem 0.35rem;
+    font-size: 0.85rem;
+  }
+
+  .acd-progress .progress {
+    width: 3.5rem;
+    flex-basis: 3.5rem;
+  }
+
+  .acd-confirm {
+    margin-left: 0;
+  }
+}
