@@ -1727,7 +1727,8 @@ export default function Constructor(): JSX.Element {
                             onChange={(e) => setLessonField('template', e.target.value)}
                           />
 
-                          <div id="code-tests" className="teach-focusable" tabIndex={-1}>
+                          {/* T62: класс для типографики заголовка «Тесты» (ce-tests-box). */}
+                          <div id="code-tests" className="teach-focusable ce-tests-box" tabIndex={-1}>
                             <h3>Тесты</h3>
                             {lesson.tests.map((x, ti) => (
                               <div key={ti} className="teach-test-box">

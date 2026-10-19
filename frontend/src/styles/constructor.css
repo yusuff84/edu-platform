@@ -1,4 +1,4 @@
-/* Стили конструктора курса (T06).
+/* Стили конструктора курса (T06; T62 — ритм панелей и единый размер кнопок).
    Импортируются только из Constructor.tsx; общий styles.css не изменяется.
    Базовые классы (.card, .muted, .error, .sr-only) берутся из styles.css. */
 
@@ -20,7 +20,7 @@
   background: #fff8e6;
   border-radius: 8px;
   padding: 0.75rem 1rem;
-  margin: 1rem 0;
+  margin: 1.25rem 0; /* T62: тот же ритм, что у .teach-section */
 }
 
 .teach-banner h2 {
@@ -68,12 +68,115 @@
 
 /* ---------- Секции редактора ---------- */
 
+/* T62: страницы конструктора — единый ритм панелей: одинаковые отступы
+   между блоками, воздух внутри рамки; заголовки — размер .panel h2 (21px)
+   с одинаковым отступом до контента. */
 .teach-section {
   background: #fff;
   border: 1px solid #e5e5e5;
   border-radius: 8px;
-  padding: 1rem;
-  margin: 1rem 0;
+  padding: 1.25rem 1.5rem;
+  margin: 1.25rem 0;
+}
+
+.teach-section > h2 {
+  margin: 0 0 12px;
+  font-size: 21px;
+}
+
+/* T62: содержимое сразу после заголовка не добавляет свой верхний отступ
+   (у <p>/<ol> браузерные ~1em сверху): «Название курса» (подсказка/форма),
+   «Программа курса» (список модулей) и формы модулей/уроков начинаются
+   на одном расстоянии от заголовка панели. */
+.teach-section > h2 + form,
+.teach-section > h2 + p,
+.teach-section > h2 + ol,
+.teach-section > h2 + .teach-card-actions,
+.teach-section > h2 + .teach-note {
+  margin-top: 0;
+}
+
+/* T62: низ панели определяется паддингом секции, а не нижним margin
+   последнего блока, — высота воздуха одинакова у всех панелей
+   (замер координатора: «высота панелей сомнительна»). */
+.teach-section > :last-child {
+  margin-bottom: 0;
+}
+
+/* T62: подсказка прямо под заголовком панели («карточка заморожена», пустая
+   программа) — это подпись: минимальный отступ до следующего блока. */
+.teach-section > h2 + p.teach-note,
+.teach-section > h2 + p.muted {
+  margin: 0 0 0.25rem;
+}
+
+/* Подписи полей форм конструктора — единая типографика (мелкие, приглушённые). */
+.teach-section .form-grid > label {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--muted);
+  margin: 4px 0 0;
+}
+
+/* ---------- Кнопки: единый размер (T62) ---------- */
+
+/* T62: «вверх/вниз», «удалить», «перейти», «отменить» и прочие кнопки без
+   .btn — раньше это были голые нативные кнопки разной высоты и ширины.
+   Первичные .btn ниже приведены к той же геометрии (высота/радиус),
+   чтобы в одном ряду не смешивались разные «миры» кнопок. */
+.teach-section button:not(.btn) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 40px;
+  padding: 8px 16px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--fg);
+  font-family: var(--font);
+  font-size: 13.5px;
+  font-weight: 700;
+  cursor: pointer;
+  margin-top: 0;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+
+.teach-section button:not(.btn):hover:not(:disabled):not(.teach-danger) {
+  background: #f7f5f0;
+  border-color: #d9d4c9;
+}
+
+.teach-section button:not(.btn):disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+/* T62: ряды, где стоят и .btn («Сохранить/Добавить»), и обычные кнопки
+   («Отмена»): одна высота и радиус, чтобы панель не «резалась». */
+
+.teach-card-actions button {
+  min-height: 40px;
+  padding: 8px 16px;
+  border-radius: 12px;
+  margin-top: 0;
+}
+
+/* T62: первичные кнопки (.btn) на страницах конструктора — та же геометрия
+   (40px, радиус 12), что и у вторичных кнопок в том же ряду; иерархию несёт
+   цвет (btn-primary), а не размер. */
+.teach-section .btn {
+  min-height: 40px;
+  padding: 8px 16px;
+  font-size: 13.5px;
+  border-radius: 12px;
+}
+
+/* Строка переименования модуля: «Сохранить» (.btn) и «Отмена» — одной высоты. */
+.teach-rename-row button {
+  min-height: 40px;
+  padding: 8px 16px;
+  border-radius: 12px;
 }
 
 /* ---------- Список моих курсов ---------- */
@@ -110,18 +213,19 @@
   margin-top: 0.5rem;
 }
 
-.teach-card-actions button {
-  margin-top: 0;
-}
-
 .teach-link-btn {
-  display: inline-block;
-  padding: 0.5rem 1rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 40px; /* T62: та же высота, что и соседние кнопки в карточке */
+  padding: 8px 16px;
   border: 1px solid #1a1a1a;
-  border-radius: 6px;
+  border-radius: 12px;
   text-decoration: none;
   color: #1a1a1a;
   background: #fff;
+  font-size: 13.5px;
+  font-weight: 700;
 }
 
 /* ---------- Программа курса (только чтение) ---------- */
@@ -182,7 +286,9 @@
   flex-wrap: wrap;
 }
 
-/* T19: дestructive-действия (удаление) — визуально отличаем. */
+/* T19: destructive-действия (удаление) — визуально отличаем. Базовый
+   селектор оставлен для контекстов вне .teach-section; внутри секций
+   усилен соседним правилом (см. ниже). */
 .teach-danger {
   color: #b00020;
   border-color: #b00020;
@@ -193,12 +299,31 @@
   color: #fff;
 }
 
+/* T62: внутри секций усиленный селектор перекрывал базовые цвета —
+   повторяем красный контур с той же специфичностью, что у нового базового
+   стиля кнопки, красный залипающий hover и приглушённый disabled. */
+.teach-section button.teach-danger {
+  color: #b00020;
+  border-color: #b00020;
+}
+
+.teach-section button.teach-danger:hover:not(:disabled) {
+  background: #b00020;
+  border-color: #b00020;
+  color: #fff;
+}
+
+.teach-section button.teach-danger:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
 .teach-lesson-list {
   list-style: none;
   padding: 0;
-  margin: 0;
+  margin: 0.25rem 0 0;
   display: grid;
-  gap: 0.25rem;
+  gap: 0.4rem;
 }
 
 .teach-lesson-kind {

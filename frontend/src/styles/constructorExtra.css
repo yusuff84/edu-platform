@@ -1,7 +1,7 @@
-/* Дополнение к конструктору курса (T28): предпросмотр урока, сводка структуры
-   и кнопки жизненного цикла. Подключается из Constructor.tsx и
-   LessonPreview.tsx; общий styles.css и constructor.css не изменяются.
-   Все классы — с префиксом .ce- . */
+/* Дополнение к конструктору курса (T28; T62 — геометрия кнопок жизненного
+   цикла и выравнивание заголовка редактора урока). Подключается из
+   Constructor.tsx и LessonPreview.tsx; общий styles.css и constructor.css
+   не изменяются. Все классы — с префиксом .ce- . */
 
 /* ---------- Шапка курса: сводка структуры ---------- */
 
@@ -20,15 +20,52 @@
   margin: 0.5rem 0 0;
 }
 
-/* Ссылка «Публичная страница» — визуально кнопка, как .teach-link-btn. */
+/* T62: кнопки жизненного цикла — та же геометрия, что у кнопок секций
+   (constructor.css), чтобы ряд «архив/копия/публичная страница» не был
+   набором разновысоких нативных кнопок. */
+.ce-lifecycle button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 40px;
+  padding: 8px 16px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--fg);
+  font-family: var(--font);
+  font-size: 13.5px;
+  font-weight: 700;
+  cursor: pointer;
+  margin-top: 0;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+
+.ce-lifecycle button:hover:not(:disabled) {
+  background: #f7f5f0;
+  border-color: #d9d4c9;
+}
+
+.ce-lifecycle button:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+/* Ссылка «Публичная страница» — визуально кнопка, соседствует с кнопками
+   жизненного цикла: одинаковая высота, радиус и шрифт. */
 .ce-public-link {
-  display: inline-block;
-  padding: 0.5rem 1rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 40px;
+  padding: 8px 16px;
   border: 1px solid #1a1a1a;
-  border-radius: 6px;
+  border-radius: 12px;
   text-decoration: none;
   color: #1a1a1a;
   background: #fff;
+  font-size: 13.5px;
+  font-weight: 700;
 }
 
 .ce-public-link:hover {
@@ -43,6 +80,10 @@
   justify-content: space-between;
   gap: 0.5rem;
   flex-wrap: wrap;
+  /* T62: у заголовка урока отступ внутри flex-строки нулевой (ради
+     центрирования с кнопкой «Предпросмотр»), поэтому единый зазор
+     «заголовок → контент» (12px, как в других панелях) держит шапка. */
+  margin: 0 0 12px;
 }
 
 .ce-editor-head h2 {
@@ -234,6 +275,14 @@
 .ce-tests th {
   background: #f5f5f5;
   font-weight: 600;
+}
+
+/* T62: заголовок блока «Тесты» в код-задаче — та же типографика, что у
+   заголовков вопросов (.teach-q-box h3 в constructor.css). Класс ce-tests-box
+   добавлен в разметке Constructor.tsx (только className, без логики). */
+.ce-tests-box h3 {
+  margin: 0 0 0.5rem;
+  font-size: 0.95rem;
 }
 
 .ce-test-io {
