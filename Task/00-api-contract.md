@@ -788,6 +788,215 @@ Query: `q` (поиск), `page`, `limit`.
 
 ---
 
+## Эндпоинты волны P8 (T63–T70) — ЗАМОРОЖЕНО до запуска агентов
+
+Все пути ниже — от `/api/v1`. Коды те же: `400` — валидация (включая занятость
+уникальных значений — правило T20), `403` — нет прав, `404` — нет сущности,
+`409` — конфликт с целевым состоянием ресурса. Волна: промокоды (T63/T64),
+категории и фильтры каталога (T65/T66), сертификаты (T67/T68), ответы
+преподавателя на отзывы (T69/T70). Все поля в существующих ответах — только
+аддитивные.
+
+### T63 — промокоды: создание и применение
+
+#### Модель PromoCode
+
+```json
+{ "id": "uuid", "courseId": "uuid", "code": "SALE20", "discountPct": 20,
+  "maxUses": 100, "usedCount": 0, "expiresAt": "2026-12-31T23:59:59Z" | null,
+  "active": true, "createdAt": "2026-10-19T12:00:00Z" }
+```
+
+`code` хранится и сравнивается в верхнем регистре (ввод нормализуется),
+`maxUses = 0` — без ограничения. Миграция `008_promo_codes.sql`: таблица
+`promo_codes` (id uuid PK, course_id FK → courses ON DELETE CASCADE,
+code text, discount_pct int, max_uses int, used_count int, expires_at
+timestamptz null, active bool, created_at timestamptz; UNIQUE (course_id, code)).
+
+#### `POST /teacher/courses/{id}/promo-codes` (владелец/admin)
+
+Тело: `{"code":"sale20","discountPct":20,"maxUses":100,"expiresAt":"2026-12-31T23:59:59Z"}`
+— `maxUses` и `expiresAt` необязательны (по умолчанию 0 и null). Ответ `201`:
+`{"promoCode": <PromoCode>}` (код в ответе — в верхнем регистре).
+
+Валидация: `code` после trim+upper — `^[A-Z0-9_-]{3,32}$`, иначе
+`400 «Код: 3–32 символа — латиница, цифры, дефис или подчёркивание»`;
+`discountPct` — целое 1..90, иначе `400 «Скидка должна быть целым числом от 1
+до 90»`; `maxUses` ≥ 0, иначе `400 «Лимит использований не может быть
+отрицательным»`; `expiresAt` (если передан) — корректный RFC3339 в будущем,
+иначе `400 «Срок действия должен быть в будущем»`.
+
+Ошибки: `401`; `403` — чужой курс; `404` — «Курс не найден»;
+`400 «Такой промокод уже существует на этом курсе»` (дубликат — правило
+уникальности значений); `409 «Курс в архиве: промокоды недоступны»`.
+
+#### `GET /teacher/courses/{id}/promo-codes` (владелец/admin)
+
+`200`: `{"items":[<PromoCode>]}` — по `createdAt` убыванию. Права — как выше.
+
+#### `DELETE /teacher/courses/{id}/promo-codes/{promoId}` (владелец/admin)
+
+Деактивация: `active=false`, запись сохраняется (история). Ответ `204`;
+повторный вызов — тоже `204` (идемпотентно). Ошибки: `403`;
+`404 «Промокод не найден»`.
+
+#### `POST /courses/{id}/promo/validate` (любой вошедший)
+
+Тело: `{"code":"SALE20"}`. Ответ `200`:
+
+```json
+{ "code": "SALE20", "discountPct": 20, "priceCents": 10000, "finalPriceCents": 8000 }
+```
+
+`finalPriceCents = priceCents − ⌊priceCents·discountPct/100⌋` (к целым копейкам
+вниз, в пользу студента). Ошибки: пустой `code` → `400 «Укажите промокод»`;
+`404` — «Курс не найден»; `400 «Промокод не найден»` (нет такого на курсе);
+`400 «Промокод отключён»`; `400 «Промокод истёк»`;
+`400 «Лимит использований промокода исчерпан»`;
+`400 «Курс бесплатный — промокод не нужен»`.
+
+#### Расширение `POST /enrollments` (T63)
+
+Необязательное поле `"promoCode": "SALE20"`. Если передано непустым — те же
+проверки и тексты ошибок (`400`); `amountCents` = `finalPriceCents`; платёж
+получает аддитивные поля `promoCode` (string) и `discountCents` (int, разница
+с полной ценой). Сплит комиссии — от фактической суммы, как сейчас. Бесплатный
+курс + `promoCode` → `400 «Курс бесплатный — промокод не нужен»`.
+
+`usedCount` увеличивается ровно один раз — при первом переходе платежа в
+`succeeded` (идемпотентность — существующая, по `provider_payment_id`).
+При возврате `usedCount` не уменьшается.
+
+#### Журнал платежей админа — аддитивные поля
+
+`paymentJournalItem` получает `"promoCode": "string"` (пустая строка, если не
+было) и `"discountCents": 0`. Форма строки не меняется.
+
+### T65 — категории и фильтры каталога
+
+#### Категории — фиксированный список
+
+Слаги: `programming`, `design`, `data`, `marketing`, `ai`, `other`. Миграция
+`009_course_category.sql`: `ALTER TABLE courses ADD COLUMN category TEXT NOT NULL
+DEFAULT 'other';` (идемпотентно, как 007).
+
+Поле `category` (string) аддитивно во ВСЕХ видах курса: `GET /courses`,
+`GET /courses/{slug}`, teacher-списки, admin-списки.
+`POST /teacher/courses` и `PATCH /teacher/courses/{id}` принимают необязательный
+`category`; неизвестный слага → `400 «Неизвестная категория курса»`; без поля
+при создании — `other`.
+
+#### `GET /categories` (публичный)
+
+`200`: `{"items":[{"slug":"programming","coursesCount":3}, …]}` — все шесть
+слагов в фиксированном порядке (programming, design, data, marketing, ai,
+other), `coursesCount` — число `published` курсов (может быть 0).
+
+#### `GET /courses` — новые параметры
+
+Дополнительно к `q/page/limit` (форма ответа не меняется):
+
+- `category` — один из слагов выше; иное → `400 «Неизвестная категория»`;
+- `price` — `free | paid`; иное → `400 «Недопустимый фильтр цены»`;
+- `minRating` — `3.5 | 4 | 4.5` (принимаются `3.5`, `4`, `4.5`); иное →
+  `400 «Недопустимый фильтр рейтинга»`; курсы с `ratingsCount = 0` в выдачу
+  не попадают;
+- `sort` — `popular | new | rating | price_asc | price_desc`, по умолчанию
+  `popular`; иное → `400 «Недопустимая сортировка»`.
+
+Семантика: `popular` — число `active`-записей по убыванию; `new` — `createdAt`
+по убыванию; `rating` — `avgRating` по убыванию; `price_asc/price_desc` —
+`priceCents`. Вторичный ключ всех сортировок — `createdAt` по убыванию. Выдача —
+только `published` (как сейчас).
+
+### T67 — сертификаты
+
+Миграция `010_certificates.sql`: таблица `certificates` (id uuid PK,
+user_id FK → users ON DELETE CASCADE, course_id FK → courses ON DELETE CASCADE,
+number text UNIQUE, issued_at timestamptz; UNIQUE (user_id, course_id)).
+
+`number` — `EDU-<ГГГГ>-<8 hex ВЕРХНИМ регистром>` (пример `EDU-2026-1A2B3C4D`).
+
+Выдача: автоматически, когда прогресс ученика впервые достигает 100% (все
+уроки курса завершены; у курса ≥ 1 урока). Идемпотентно — повторный вызов
+и повторное достижение 100% второй сертификат не создают.
+
+#### `GET /me/certificates` (вошедший)
+
+`200`: `{"items":[{"number":"EDU-2026-1A2B3C4D","issuedAt":"…","courseId":"uuid","courseTitle":"…","courseSlug":"…"}]}`
+— новые первыми.
+
+#### Расширение `GET /me/courses` (T67)
+
+В каждом элементе — аддитивное `"certificateNumber": "string"` (пустая строка,
+если сертификата нет).
+
+#### `GET /certificates/{number}` — публичный (без авторизации)
+
+`200`:
+
+```json
+{ "number": "EDU-2026-1A2B3C4D", "issuedAt": "…", "studentName": "…",
+  "courseTitle": "…", "courseSlug": "…" }
+```
+
+`studentName` — displayName студента (пустая строка, если не задан; e-mail
+не отдаётся). Ошибки: `404 «Сертификат не найден»`.
+
+### T69 — ответы преподавателя на отзывы + разбивка оценок
+
+Миграция `011_review_reply.sql`: `reviews.teacher_reply TEXT NOT NULL DEFAULT ''`,
+`reviews.teacher_reply_at TIMESTAMPTZ NULL` (идемпотентно).
+
+Review во всех видах ответов получает аддитивные `"teacherReply": "string"`
+(пустая строка, если нет) и `"teacherReplyAt": "string" | null`.
+
+#### `PUT /teacher/courses/{id}/reviews/{reviewId}/reply` (владелец/admin)
+
+Тело: `{"body":"Спасибо за отзыв!"}`. Ответ `200`: `{"review": <Review>}`.
+Повторный PUT заменяет текст и обновляет `teacherReplyAt`. Валидация: после
+trim 3..2000 символов, иначе `400 «Ответ: от 3 до 2000 символов»`.
+Ошибки: `403` — чужой курс; `404 «Отзыв не найден»` (в том числе отзыв,
+принадлежащий другому курсу).
+
+#### `DELETE /teacher/courses/{id}/reviews/{reviewId}/reply` (владелец/admin)
+
+`204` (ответа не было — тоже `204`). Ошибки: `403`, `404`.
+
+#### `GET /courses/{id}/reviews` — расширение
+
+Новый параметр `rating` (1..5); иное → `400 «Оценка должна быть числом
+от 1 до 5»`. `items`/`total` — по фильтру; `avgRating`/`ratingsCount` — по
+всем отзывам курса (не зависят от фильтра); аддитивно:
+
+```json
+"breakdown": { "1": 0, "2": 1, "3": 2, "4": 5, "5": 10 }
+```
+
+Ключи — строки `"1"`..`"5"`, значения — число отзывов с этой оценкой.
+
+### Новые ключи i18n (ru.json) — заморозка P8
+
+Словарь дополняется ТОЛЬКО этими ключами (тексты уже добавлены координатором;
+фронтенд-агенты словарь не правят — не хватает ключа, «писать в отчёт»):
+
+- `p8.promo.*`: title, hint, code, discount, maxUses, maxUsesHint, expiresAt,
+  expiresHint, create, empty, active, inactive, expired, used, noLimit,
+  turnOff, turnOffConfirm, turnedOff, created, codeInvalid, discountInvalid,
+  maxUsesInvalid, expiresInvalid;
+- `p8.checkout.*`: promoToggle, promoLabel, apply, applied, remove, buyFor;
+- `p8.catalog.*`: filters, category, allCategories, price, priceAny, priceFree,
+  pricePaid, rating, ratingAny, rating35, rating40, rating45, sort,
+  sortPopular, sortNew, sortRating, sortPriceAsc, sortPriceDesc, reset, found,
+  nothingFound, nothingFoundHint, filtersShow, filtersHide;
+- `p8.cat.*`: programming, design, data, marketing, ai, other;
+- `p8.cert.*`: pageTitle, awarded, student, course, issuedAt, number, copyLink,
+  copied, notFound, notFoundHint, open, badge, done, toCourse;
+- `p8.reviews.*`: ratings, all, reply, editReply, replyFor, replySaved,
+  replyDelete, replyPlaceholder, replySave, replyCancel, teacher, emptyRating.
+
+---
+
 ## Отступления (осознанные и разрешённые)
 
 | Отступление | Кто | Почему |
