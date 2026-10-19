@@ -35,8 +35,9 @@ func (f *fakeCoverStore) SaveLocal(path string, data []byte) (string, error) {
 var (
 	coverJPEG = append([]byte{0xFF, 0xD8, 0xFF, 0xDB}, bytes.Repeat([]byte{0x5A}, 64)...)
 	coverPNG  = append([]byte{0x89, 'P', 'N', 'G', 0x0D, 0x0A, 0x1A, 0x0A}, bytes.Repeat([]byte{0x00}, 32)...)
-	// WebP: «RIFF» + размер + «WEBP» — DetectContentType смотрит offset 8.
-	coverWebP = append([]byte("RIFF\x24\x00\x00\x00WEBP"), bytes.Repeat([]byte{0x00}, 16)...)
+	// WebP: DetectContentType (net/http/sniff.go) распознаёт сигнатуру
+	// «RIFF????WEBPVP»: только «RIFF…WEBP» (без «VP») он считает мусором.
+	coverWebP = append([]byte("RIFF\x24\x00\x00\x00WEBPVP8 "), bytes.Repeat([]byte{0x00}, 16)...)
 )
 
 // postCover отправляет multipart-запрос POST /teacher/courses/{id}/cover.

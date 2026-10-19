@@ -145,7 +145,7 @@ func NewRouter(app *App) http.Handler {
 			app.RegisterTeacherLifecycleRoutes(r)
 			app.RegisterTeacherStudentsRoutes(r)
 			// T54: обложка курса — POST/DELETE /courses/{id}/cover (multipart).
-			// Лимит тела 1 МБ из decodeJSONmultipart не задевает (он действует
+			// Лимит тела 1 МБ из decodeJSON multipart не задевает (он действует
 			// только на JSON-декодер); у хендлеров обложки свой лимит ≥6 МБ
 			// через http.MaxBytesReader — см. teacher_cover.go.
 			app.RegisterTeacherCoverRoutes(r)
@@ -415,9 +415,9 @@ type rlBucket struct {
 type rateLimiter struct {
 	mu       sync.Mutex
 	buckets  map[string]*rlBucket
-	capacity float64        // максимум токенов (= perMin)
-	refill   float64        // токенов в секунду
-	ttl      time.Duration  // неактивность ведра после которой удаляем
+	capacity float64       // максимум токенов (= perMin)
+	refill   float64       // токенов в секунду
+	ttl      time.Duration // неактивность ведра после которой удаляем
 	now      func() time.Time
 }
 

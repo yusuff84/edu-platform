@@ -11,22 +11,22 @@ import (
 )
 
 type courseItem struct {
-	ID          string            `json:"id"`
-	Slug        string            `json:"slug"`
-	Title       string            `json:"title"`
-	Description string            `json:"description"`
-	CoverPath   *string           `json:"coverPath"`
-	PriceCents  int               `json:"priceCents"`
-	Currency    string            `json:"currency"`
-	Status      repo.CourseStatus `json:"status,omitempty"`
-	AvgRating   float64           `json:"avgRating"`
-	RatingsCount int              `json:"ratingsCount"`
+	ID           string            `json:"id"`
+	Slug         string            `json:"slug"`
+	Title        string            `json:"title"`
+	Description  string            `json:"description"`
+	CoverPath    *string           `json:"coverPath"`
+	PriceCents   int               `json:"priceCents"`
+	Currency     string            `json:"currency"`
+	Status       repo.CourseStatus `json:"status,omitempty"`
+	AvgRating    float64           `json:"avgRating"`
+	RatingsCount int               `json:"ratingsCount"`
 }
 
 func toCourseItem(c *repo.Course) courseItem {
 	return courseItem{
 		ID: c.ID, Slug: c.Slug, Title: c.Title, Description: c.Description,
-		CoverPath: c.CoverPath,
+		CoverPath:  c.CoverPath,
 		PriceCents: c.PriceCents, Currency: c.Currency,
 		AvgRating: c.AvgRating, RatingsCount: c.RatingsCount,
 	}
