@@ -26,7 +26,6 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
-	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -105,7 +104,7 @@ type updateLessonRequest struct {
 	VideoURL *string          `json:"videoUrl"`
 	LiveURL  *string          `json:"liveUrl"`
 	StartsAt *string          `json:"startsAt"` // "" — очистить; отсутствует — не менять
-	Quiz     *repo.QuizData   `json:"quiz"`
+	Quiz     *quizRequest     `json:"quiz"`
 	CodeTask *repo.CodeTask   `json:"codeTask"`
 }
 
@@ -163,7 +162,9 @@ func (a *App) TeacherUpdateLesson(w http.ResponseWriter, r *http.Request) {
 		if raw == "" {
 			merged.StartsAt = nil // явная очистка
 		} else {
-			ts, err := time.Parse(time.RFC3339, raw)
+			// Контракт P7: datetime-local (без зоны) тоже принимается, строка
+			// без зоны трактуется как UTC; ответ/ошибки — как было (400).
+			ts, err := parseLessonStartsAt(raw)
 			if err != nil {
 				writeErr(w, http.StatusBadRequest,
 					"Некорректный startsAt: ожидается дата в формате RFC3339 (например 2030-01-01T12:00:00Z)")
@@ -173,7 +174,7 @@ func (a *App) TeacherUpdateLesson(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if req.Quiz != nil {
-		merged.Quiz = req.Quiz
+		merged.Quiz = req.Quiz.toRepo()
 		for i := range merged.Quiz.Questions {
 			if strings.TrimSpace(merged.Quiz.Questions[i].ID) == "" {
 				merged.Quiz.Questions[i].ID = uuid.NewString()
@@ -209,6 +210,8 @@ func (a *App) lessonInCourse(l *repo.Lesson, courseID string) bool {
 // validateLessonContent проверяет содержимое урока по kind. Возвращает пустую
 // строку, если урок валиден, иначе текст ошибки для 400. Копия валидации из
 // TeacherCreateLesson (teacher.go — зона T13/T16, в волне B не меняется).
+// С T53 (P7) quiz проверяет общий validateQuiz из teacher.go (контракт P7):
+// текст вопроса, не менее двух непустых вариантов, правильный ответ в границах.
 func validateLessonContent(l *repo.Lesson) string {
 	switch l.Kind {
 	case repo.LessonVideoText:
@@ -220,17 +223,10 @@ func validateLessonContent(l *repo.Lesson) string {
 			return "Для live-урока нужна ссылка на трансляцию"
 		}
 	case repo.LessonQuiz:
-		if l.Quiz == nil || len(l.Quiz.Questions) == 0 {
-			return "Квиз должен содержать минимум 1 вопрос"
-		}
-		for i := range l.Quiz.Questions {
-			q := &l.Quiz.Questions[i]
-			if strings.TrimSpace(q.Text) == "" || len(q.Options) < 2 {
-				return "Каждый вопрос: текст и минимум 2 варианта ответа"
-			}
-			if q.Correct < 0 || q.Correct >= len(q.Options) {
-				return "Индекс правильного ответа вне диапазона вариантов"
-			}
+		// Контракт P7: тест валидируется и на PATCH, текст ошибки начинается
+		// с «Некорректный тест:» (validateQuiz — общий с POST, T53).
+		if msg := validateQuiz(l.Quiz); msg != "" {
+			return msg
 		}
 	case repo.LessonCode:
 		if l.CodeTask == nil {

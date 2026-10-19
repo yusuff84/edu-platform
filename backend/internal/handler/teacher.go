@@ -95,19 +95,10 @@ func (a *App) TeacherCreateCourse(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, c)
 }
 
-// TeacherListCourses — GET /teacher/courses: свои курсы.
-func (a *App) TeacherListCourses(w http.ResponseWriter, r *http.Request) {
-	u, ok := a.currentUser(r)
-	if !ok {
-		writeErr(w, http.StatusUnauthorized, "Требуется вход в аккаунт")
-		return
-	}
-	list := a.Store.ListCoursesByTeacher(u.ID)
-	if list == nil {
-		list = []*repo.Course{}
-	}
-	writeJSON(w, http.StatusOK, map[string]any{"items": list, "total": len(list)})
-}
+// GET /teacher/courses — живая регистрация одна: в RegisterTeacherCRUDRoutes
+// (teacher_crud.go, T19), список сразу со счётчиками modulesCount/lessonsCount.
+// Мёртвый дубль обработки из teacher.go удалён (T53): его регистрация в
+// /teacher-роуте middleware.go всё равно перекрывалась CRUD-хендлером.
 
 // ownCourse проверяет владение курсом (админу разрешены все).
 func (a *App) ownCourse(w http.ResponseWriter, r *http.Request) (*repo.User, *repo.Course, bool) {
@@ -159,20 +150,95 @@ type createLessonRequest struct {
 	VideoURL string          `json:"videoUrl"`
 	LiveURL  string          `json:"liveUrl"`
 	StartsAt *string         `json:"startsAt"`
-	Quiz     *repo.QuizData  `json:"quiz"`
+	Quiz     *quizRequest    `json:"quiz"`
 	CodeTask *repo.CodeTask  `json:"codeTask"`
 }
 
-// parseLessonStartsAt разбирает дату начала урока: RFC3339, datetime-local
-// без зоны (считаем местным временем) или просто дата (полночь местная).
+// ---- quiz (T53, контракт P7: валидация теста на бэкенде) ----
+
+// quizQuestionRequest — вопрос теста в теле запроса. Индекс правильного
+// ответа принимается под обоими именами: correct (как хранится и отдаётся
+// репозиторием — форма фронтенда) и correctIndex (как названо в контракте
+// P7 и qa-скрипте). Ответ всегда содержит correct.
+type quizQuestionRequest struct {
+	ID           string   `json:"id"`
+	Text         string   `json:"text"`
+	Options      []string `json:"options"`
+	Correct      *int     `json:"correct"`
+	CorrectIndex *int     `json:"correctIndex"`
+	Explanation  string   `json:"explanation,omitempty"`
+}
+
+// quizRequest — тест из вопросов: валидируется через validateQuiz на POST/PATCH.
+type quizRequest struct {
+	Questions []quizQuestionRequest `json:"questions"`
+}
+
+// toRepo переводит запросную форму теста в форму хранилища (repo.QuizData).
+// correct имеет приоритет над correctIndex, оба отсутствуют — 0.
+func (q *quizRequest) toRepo() *repo.QuizData {
+	if q == nil {
+		return nil
+	}
+	out := &repo.QuizData{Questions: make([]repo.QuizQuestion, len(q.Questions))}
+	for i, in := range q.Questions {
+		correct := 0
+		if in.Correct != nil {
+			correct = *in.Correct
+		} else if in.CorrectIndex != nil {
+			correct = *in.CorrectIndex
+		}
+		out.Questions[i] = repo.QuizQuestion{
+			ID:          in.ID,
+			Text:        in.Text,
+			Options:     in.Options,
+			Correct:     correct,
+			Explanation: in.Explanation,
+		}
+	}
+	return out
+}
+
+// validateQuiz проверяет тест по контракту P7 (тексты не заморожены):
+// у каждого вопроса есть непустой текст, не менее двух непустых вариантов
+// и правильный ответ внутри границ списка. Возвращает текст для 400
+// «Некорректный тест: …» или пустую строку, если тест корректен.
+// Старые уроки не рестриктурируются — валидация работает только на POST/PATCH.
+func validateQuiz(qd *repo.QuizData) string {
+	if qd == nil || len(qd.Questions) == 0 {
+		return "Некорректный тест: должен быть хотя бы один вопрос"
+	}
+	for _, q := range qd.Questions {
+		if strings.TrimSpace(q.Text) == "" {
+			return "Некорректный тест: у вопроса нет текста"
+		}
+		if len(q.Options) < 2 {
+			return "Некорректный тест: у вопроса должно быть не менее двух вариантов"
+		}
+		for _, opt := range q.Options {
+			if strings.TrimSpace(opt) == "" {
+				return "Некорректный тест: у вопроса есть пустой вариант ответа"
+			}
+		}
+		if q.Correct < 0 || q.Correct >= len(q.Options) {
+			return "Некорректный тест: индекс правильного ответа вне диапазона вариантов"
+		}
+	}
+	return ""
+}
+
+// parseLessonStartsAt разбирает дату начала урока (контракт P7): RFC3339 или
+// datetime-local «ГГГГ-ММ-ДДТЧЧ:ММ» без зоны — такая строка трактуется как UTC
+// (форма datetime-local не несёт информации о поясе). Оставлена и форма «ГГГГ-ММ-ДД»
+// (полночь UTC) — так раньше разбирались даты, чтобы старые клиенты не сломались.
 func parseLessonStartsAt(raw string) (time.Time, error) {
 	if t, err := time.Parse(time.RFC3339, raw); err == nil {
 		return t, nil
 	}
-	if t, err := time.ParseInLocation("2006-01-02T15:04", raw, time.Local); err == nil {
+	if t, err := time.ParseInLocation("2006-01-02T15:04", raw, time.UTC); err == nil {
 		return t, nil
 	}
-	return time.ParseInLocation("2006-01-02", raw, time.Local)
+	return time.ParseInLocation("2006-01-02", raw, time.UTC)
 }
 
 // TeacherCreateLesson — POST /teacher/courses/{id}/lessons с валидацией по kind.
@@ -197,7 +263,8 @@ func (a *App) TeacherCreateLesson(w http.ResponseWriter, r *http.Request) {
 	// Расхождение №4 (закрыто T16): startsAt раньше принимался, но не копировался
 	// в repo.Lesson — планирование живых эфиров не работало. Разбираем строку
 	// здесь: мусор в поле — ошибка запроса, а не тихо потерянный эфир.
-	// Формат разбирает parseLessonStartsAt: RFC3339, datetime-local или дата.
+	// Формат разбирает parseLessonStartsAt: RFC3339 или datetime-local
+	// (контракт P7: строка без зоны считается UTC).
 	l := &repo.Lesson{
 		ModuleID: mod.ID,
 		Title:    strings.TrimSpace(req.Title),
@@ -205,7 +272,7 @@ func (a *App) TeacherCreateLesson(w http.ResponseWriter, r *http.Request) {
 		BodyMD:   req.BodyMD,
 		VideoURL: strings.TrimSpace(req.VideoURL),
 		LiveURL:  strings.TrimSpace(req.LiveURL),
-		Quiz:     req.Quiz,
+		Quiz:     req.Quiz.toRepo(),
 		CodeTask: req.CodeTask,
 	}
 	if req.StartsAt != nil {
@@ -231,22 +298,15 @@ func (a *App) TeacherCreateLesson(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	case repo.LessonQuiz:
-		if l.Quiz == nil || len(l.Quiz.Questions) == 0 {
-			writeErr(w, http.StatusBadRequest, "Квиз должен содержать минимум 1 вопрос")
+		// Контракт P7: тест валидируется на бэкенде, текст ошибки начинается
+		// с «Некорректный тест:», иначе — по валидации T16.
+		if msg := validateQuiz(l.Quiz); msg != "" {
+			writeErr(w, http.StatusBadRequest, msg)
 			return
 		}
 		for i := range l.Quiz.Questions {
-			q := &l.Quiz.Questions[i]
-			if strings.TrimSpace(q.Text) == "" || len(q.Options) < 2 {
-				writeErr(w, http.StatusBadRequest, "Каждый вопрос: текст и минимум 2 варианта ответа")
-				return
-			}
-			if q.Correct < 0 || q.Correct >= len(q.Options) {
-				writeErr(w, http.StatusBadRequest, "Индекс правильного ответа вне диапазона вариантов")
-				return
-			}
-			if strings.TrimSpace(q.ID) == "" {
-				q.ID = uuid.NewString()
+			if strings.TrimSpace(l.Quiz.Questions[i].ID) == "" {
+				l.Quiz.Questions[i].ID = uuid.NewString()
 			}
 		}
 	case repo.LessonCode:
