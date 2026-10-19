@@ -111,7 +111,7 @@ export function Login(): JSX.Element {
 
   return (
     <div className="wrap">
-      <div className="page">
+      <main className="page">
         <div className="two two-even">
           <div className="panel">
             <h1>{t('auth.loginTitle')}</h1>
@@ -163,7 +163,7 @@ export function Login(): JSX.Element {
             </ul>
           </div>
         </div>
-      </div>
+      </main>
     </div>
   );
 }
@@ -231,7 +231,7 @@ export function Register(): JSX.Element {
 
   return (
     <div className="wrap">
-      <div className="page">
+      <main className="page">
         <div className="two two-even">
           <div className="panel">
             <h1>{t('auth.registerTitle')}</h1>
@@ -297,7 +297,7 @@ export function Register(): JSX.Element {
             </ul>
           </div>
         </div>
-      </div>
+      </main>
     </div>
   );
 }

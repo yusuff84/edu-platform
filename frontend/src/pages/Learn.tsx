@@ -188,11 +188,11 @@ export default function Learn(): JSX.Element {
   if (myQuery.isLoading) {
     return (
       <div className="wrap">
-        <div className="page">
+        <main className="page">
           <div className="panel">
             <p role="status">{t('learn.loading')}</p>
           </div>
-        </div>
+        </main>
       </div>
     );
   }
@@ -200,7 +200,7 @@ export default function Learn(): JSX.Element {
   if (myQuery.isError) {
     return (
       <div className="wrap">
-        <div className="page">
+        <main className="page">
           <div className="panel">
             <h1>{t('learn.title')}</h1>
             <p className="error" role="alert">
@@ -210,7 +210,7 @@ export default function Learn(): JSX.Element {
               {t('common.retry')}
             </button>
           </div>
-        </div>
+        </main>
       </div>
     );
   }
@@ -219,7 +219,7 @@ export default function Learn(): JSX.Element {
     // Курса нет в «моих курсах» — getCourse() с UUID не вызываем (всегда 404).
     return (
       <div className="wrap">
-        <div className="page">
+        <main className="page">
           <div className="panel">
             <h1>{t('learn.title')}</h1>
             <p role="alert">{t('learn.noAccess')}</p>
@@ -227,7 +227,7 @@ export default function Learn(): JSX.Element {
               <Link to="/">{t('my.goCatalog')}</Link>
             </p>
           </div>
-        </div>
+        </main>
       </div>
     );
   }
@@ -235,12 +235,12 @@ export default function Learn(): JSX.Element {
   if (courseQuery.isLoading) {
     return (
       <div className="wrap">
-        <div className="page">
+        <main className="page">
           <div className="panel">
             <h1>{meCourse.course.title}</h1>
             <p role="status">{t('learn.loading')}</p>
           </div>
-        </div>
+        </main>
       </div>
     );
   }
@@ -250,7 +250,7 @@ export default function Learn(): JSX.Element {
       courseQuery.error instanceof ApiError ? courseQuery.error.status : undefined;
     return (
       <div className="wrap">
-        <div className="page">
+        <main className="page">
           <div className="panel">
             <h1>{meCourse.course.title}</h1>
             <p className="error" role="alert">
@@ -266,7 +266,7 @@ export default function Learn(): JSX.Element {
               </button>
             )}
           </div>
-        </div>
+        </main>
       </div>
     );
   }
@@ -274,7 +274,7 @@ export default function Learn(): JSX.Element {
   if (flatLessons.length === 0) {
     return (
       <div className="wrap">
-        <div className="page">
+        <main className="page">
           <div className="crumbs">
             <Link to="/">{t('nav.catalog')}</Link> / <span>{courseQuery.data.title}</span>
           </div>
@@ -283,7 +283,7 @@ export default function Learn(): JSX.Element {
           <p>
             <Link to="/me">{t('common.back')}</Link>
           </p>
-        </div>
+        </main>
       </div>
     );
   }
@@ -298,12 +298,12 @@ export default function Learn(): JSX.Element {
 
   return (
     <div className="wrap">
-      <div className="page">
+      <main className="page">
         <div className="crumbs">
           <Link to="/">{t('nav.catalog')}</Link> / <span>{title}</span>
         </div>
         <h1>{title}</h1>
-        <div style={{ margin: '14px 0 20px' }}>
+        <div className="learn-progress">
           <span className="muted">
             {t('learn.progress')}: {progress ? `${percent}%` : '—'}
           </span>
@@ -460,7 +460,7 @@ export default function Learn(): JSX.Element {
             )}
           </div>
         </div>
-      </div>
+      </main>
     </div>
   );
 }

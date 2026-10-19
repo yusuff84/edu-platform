@@ -67,7 +67,7 @@ export function TeacherCab(): JSX.Element {
   return (
     <RequireRole roles={['teacher', 'admin']}>
       <div className="wrap">
-        <div className="page">
+        <main className="page">
           <h1>{t('cabinet.teacherTitle')}</h1>
           <p>
             <Link className="btn btn-primary" to="/teach/new">
@@ -75,7 +75,7 @@ export function TeacherCab(): JSX.Element {
             </Link>
           </p>
           <TeacherCourses />
-        </div>
+        </main>
       </div>
     </RequireRole>
   );
