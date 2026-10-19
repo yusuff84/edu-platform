@@ -8,6 +8,7 @@
 import type {
   AdminSettings,
   CategoryStat,
+  CertificatePublic,
   CompleteLessonInput,
   CompleteResult,
   Course,
@@ -22,6 +23,7 @@ import type {
   Invite,
   Module,
   Lesson,
+  MyCertificate,
   MyCourse,
   Paged,
   PaymentJournalPage,
@@ -38,6 +40,7 @@ import type {
 export type {
   AdminSettings,
   CategoryStat,
+  CertificatePublic,
   CodeTask,
   CodeTest,
   CompleteLessonInput,
@@ -57,6 +60,7 @@ export type {
   LessonKind,
   Module,
   ModerationDecision,
+  MyCertificate,
   MyCourse,
   NextLesson,
   Paged,
@@ -444,6 +448,22 @@ export function validatePromoCode(
 /** Мои курсы: конверт { items, total } → массив (MyCourse уже плоский). */
 export function myCourses(): Promise<MyCourse[]> {
   return apiFetch<{ items: MyCourse[]; total: number }>('/me/courses').then(
+    (res) => res.items,
+  );
+}
+
+// ---------- Сертификаты ----------
+
+/** Публичный сертификат по номеру (без авторизации). 404 — сертификата нет. */
+export function getCertificate(number: string): Promise<CertificatePublic> {
+  return apiFetch<CertificatePublic>(
+    `/certificates/${encodeURIComponent(number)}`,
+  );
+}
+
+/** Мои сертификаты: конверт { items } → массив, новые первыми. */
+export function myCertificates(): Promise<MyCertificate[]> {
+  return apiFetch<{ items: MyCertificate[] }>('/me/certificates').then(
     (res) => res.items,
   );
 }
