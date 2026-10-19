@@ -83,13 +83,8 @@ func (a *App) AdminCourseDetail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// coverPath: пустое значение (T54 ещё не загрузила обложку / колонка
-	// cover_path пуста) → JSON null; строка — только когда обложка есть.
-	var cover *string
-	if d.Course.CoverPath != "" {
-		coverPath := d.Course.CoverPath
-		cover = &coverPath
-	}
+	// coverPath: nil-указатель (обложки нет) → JSON null; строка — когда
+	// обложка есть (T54). repo.Course уже отдаёт string|null — копия не нужна.
 	course := adminCourseDetailCourse{
 		adminCourseItem: adminCourseItem{
 			ID:           d.Course.ID,
@@ -105,7 +100,7 @@ func (a *App) AdminCourseDetail(w http.ResponseWriter, r *http.Request) {
 			LessonsCount: d.Counts.Lessons,
 			StudentsCount: d.Counts.Students, // активные записи — как в списке T25
 		},
-		CoverPath: cover,
+		CoverPath: d.Course.CoverPath,
 	}
 
 	// Программа: модули уже отсортированы по position хранилищем; слайсы —

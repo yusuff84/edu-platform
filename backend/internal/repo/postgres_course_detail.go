@@ -39,7 +39,8 @@ func (s *PostgresStore) AdminCourseDetail(courseID string) (*AdminCourseDetailDa
 
 	// Запрос 1: колонки courseColsJoined (та же форма, что у scanCourse
 	// postgres_store.go) сканируются вручную, дальше идут дополнительные.
-	var teacherID, cover, currency, status, comment string
+	var teacherID, currency, status, comment string
+	var cover *string
 	var avg float64
 	var ratings int
 	var created, updated time.Time
