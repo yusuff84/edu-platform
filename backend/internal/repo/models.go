@@ -194,6 +194,12 @@ type Review struct {
 	Rating    int       `json:"rating"`
 	Body      string    `json:"body,omitempty"`
 	CreatedAt time.Time `json:"createdAt"`
+	// TeacherReply — публичный ответ преподавателя (T69). Контракт: всегда
+	// строка, пустая — ответа нет (не omitempty).
+	TeacherReply string `json:"teacherReply"`
+	// TeacherReplyAt — время последней установки/замены ответа (T69);
+	// nil — ответа нет (в JSON null). Очистка ответа сбрасывает в nil.
+	TeacherReplyAt *time.Time `json:"teacherReplyAt"`
 }
 
 type Session struct {

@@ -1138,20 +1138,35 @@ func (s *PostgresStore) CreateReview(studentID, courseID string, rating int, bod
 	return r, nil
 }
 
+// reviewCols — колонки Review в форме контракта T69 (teacherReply и
+// teacherReplyAt — аддитивные поля; NULL времени читается как nil → null).
+const reviewCols = `id::text, student_id::text, course_id::text, rating,
+	COALESCE(body,''), created_at, teacher_reply, teacher_reply_at`
+
+// scanReview собирает Review из строки выборки reviewCols.
+func scanReview(scan func(dest ...any) error) (*Review, error) {
+	r := &Review{}
+	var replyAt *time.Time
+	if err := scan(&r.ID, &r.StudentID, &r.CourseID, &r.Rating, &r.Body,
+		&r.CreatedAt, &r.TeacherReply, &replyAt); err != nil {
+		return nil, err
+	}
+	r.TeacherReplyAt = replyAt
+	return r, nil
+}
+
 func (s *PostgresStore) ListReviewsByCourse(courseID string) []*Review {
 	ctx, cancel := s.ctx()
 	defer cancel()
 	rows, err := s.pool.Query(ctx,
-		`SELECT id::text, student_id::text, course_id::text, rating, COALESCE(body,''), created_at
-		 FROM reviews WHERE course_id=$1::uuid ORDER BY created_at DESC`, courseID)
+		`SELECT `+reviewCols+` FROM reviews WHERE course_id=$1::uuid ORDER BY created_at DESC`, courseID)
 	if err != nil {
 		return nil
 	}
 	defer rows.Close()
 	var out []*Review
 	for rows.Next() {
-		r := &Review{}
-		if err := rows.Scan(&r.ID, &r.StudentID, &r.CourseID, &r.Rating, &r.Body, &r.CreatedAt); err == nil {
+		if r, err := scanReview(rows.Scan); err == nil {
 			out = append(out, r)
 		}
 	}
@@ -1169,6 +1184,83 @@ func (s *PostgresStore) RecalcCourseRating(courseID string) {
 	_, _ = s.pool.Exec(ctx,
 		`UPDATE courses SET avg_rating=$2, ratings_count=$3, updated_at=now() WHERE id=$1::uuid`,
 		courseID, avg, count)
+}
+
+// SetReviewReply устанавливает/заменяет ответ преподавателя на отзыв (T69).
+// Мусорный id (не UUID) трактуется как «отзыва нет» — как в DeleteReview,
+// чтобы не отдавать 500 на кривом значении пути.
+func (s *PostgresStore) SetReviewReply(courseID, reviewID, body string) (*Review, error) {
+	if !validUUID(reviewID) || !validUUID(courseID) {
+		return nil, ErrNotFound
+	}
+	ctx, cancel := s.ctx()
+	defer cancel()
+	row := s.pool.QueryRow(ctx,
+		`UPDATE reviews SET teacher_reply=$3, teacher_reply_at=now()
+		 WHERE id=$1::uuid AND course_id=$2::uuid
+		 RETURNING `+reviewCols, reviewID, courseID, body)
+	r, err := scanReview(row.Scan)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("не удалось сохранить ответ на отзыв: %w", err)
+	}
+	return r, nil
+}
+
+// ClearReviewReply очищает ответ преподавателя (T69): пустая строка и NULL
+// времени. Повторная очистка — успех; ErrNotFound только если отзыва нет.
+func (s *PostgresStore) ClearReviewReply(courseID, reviewID string) error {
+	if !validUUID(reviewID) || !validUUID(courseID) {
+		return ErrNotFound
+	}
+	ctx, cancel := s.ctx()
+	defer cancel()
+	tag, err := s.pool.Exec(ctx,
+		`UPDATE reviews SET teacher_reply='', teacher_reply_at=NULL
+		 WHERE id=$1::uuid AND course_id=$2::uuid`, reviewID, courseID)
+	if err != nil {
+		return fmt.Errorf("не удалось очистить ответ на отзыв: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+// ReviewRatingBreakdown — число отзывов курса по оценкам 1..5 (T69).
+// Ключи 1..5 всегда в карте; ошибка БД/кривой id — нулевая разбивка
+// (сигнатура без error, как у остальных агрегатов чтения).
+func (s *PostgresStore) ReviewRatingBreakdown(courseID string) map[int]int {
+	out := map[int]int{1: 0, 2: 0, 3: 0, 4: 0, 5: 0}
+	if !validUUID(courseID) {
+		return out
+	}
+	ctx, cancel := s.ctx()
+	defer cancel()
+	rows, err := s.pool.Query(ctx,
+		`SELECT rating, COUNT(*)::int FROM reviews
+		 WHERE course_id=$1::uuid GROUP BY rating`, courseID)
+	if err != nil {
+		log.Printf("postgres ReviewRatingBreakdown: %v", err)
+		return out
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var rating, n int
+		if err := rows.Scan(&rating, &n); err == nil && rating >= 1 && rating <= 5 {
+			out[rating] = n
+		}
+	}
+	return out
+}
+
+// validUUID — true для корректного UUID (с trim). Общий помощник для
+// методов отзывов T69 и DeleteReview-подобных путей.
+func validUUID(id string) bool {
+	_, err := uuid.Parse(strings.TrimSpace(id))
+	return err == nil
 }
 
 // ---- Settings ----
