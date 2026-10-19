@@ -155,7 +155,7 @@ func NewRouter(app *App) http.Handler {
 			// и карточка «одним экраном» (handler/admin_course_detail.go).
 			// Регистрируется после очереди модерации: статический сегмент
 			// "review" в chi приоритетнее {id}, очередь не перехватывается.
-			r.Get("/courses/{id}", a.AdminCourseDetail)
+			r.Get("/courses/{id}", app.AdminCourseDetail)
 			// T07 (журнал платежей и настройки) сюда НЕ подключать: метод
 			// RegisterAdminPaymentsRoutes регистрирует АБСОЛЮТНЫЕ пути
 			// /admin/payments и /admin/settings (см. handler/admin_payments.go),
