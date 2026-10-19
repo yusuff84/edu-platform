@@ -157,9 +157,12 @@ export default function Catalog(): JSX.Element {
             <button type="button" className="btn btn-primary" onClick={scrollToCards}>
               Выбрать курс
             </button>
-            <Link className="btn btn-ghost" to="/me">
-              Мои курсы
-            </Link>
+            {/* «Мои курсы» — только вошедшим: /me за гвардом RequireAuth. */}
+            {meQuery.data && (
+              <Link className="btn btn-ghost" to="/me">
+                Мои курсы
+              </Link>
+            )}
           </div>
           <div className="stats">
             <div>
