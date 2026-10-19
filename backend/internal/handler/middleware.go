@@ -134,6 +134,11 @@ func NewRouter(app *App) http.Handler {
 		// T63: проверка промокода на странице курса — только вошедший.
 		r.With(app.requireAuth).Post("/courses/{id}/promo/validate", app.ValidatePromoCode)
 
+		// Пост-P7: публичные настройки интерфейса (тогл промо-баннера) —
+		// читаются шапкой без авторизации, поэтому живут вне /admin
+		// (см. public_settings.go).
+		r.Get("/settings/public", app.GetPublicSettings)
+
 		r.Route("/teacher", func(r chi.Router) {
 			r.Use(app.requireAuth, app.requireRole(repo.RoleTeacher, repo.RoleAdmin))
 			r.Post("/courses", app.TeacherCreateCourse)

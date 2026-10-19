@@ -31,6 +31,7 @@ import type {
   PromoCode,
   PromoValidation,
   Provider,
+  PublicSettings,
   ModerationDecision,
   Review,
   User,
@@ -71,6 +72,7 @@ export type {
   PromoCode,
   PromoValidation,
   Provider,
+  PublicSettings,
   QuizData,
   QuizQuestion,
   QuizQuestionInput,
@@ -366,6 +368,23 @@ export function updateAdminSettings(commissionPct: number): Promise<AdminSetting
     method: 'PUT',
     body: JSON.stringify({ commissionPct }),
   });
+}
+
+/**
+ * Пост-P7: частичное обновление настроек — только промо-баннер. Отдельная
+ * функция (а не расширение updateAdminSettings), чтобы не менять прежний
+ * контракт вызова из формы комиссии.
+ */
+export function updateAdminSettingsPromo(promoBarEnabled: boolean): Promise<AdminSettings> {
+  return apiFetch<AdminSettings>('/admin/settings', {
+    method: 'PUT',
+    body: JSON.stringify({ promoBarEnabled }),
+  });
+}
+
+/** Публичные настройки интерфейса (промо-баннер) — доступны без входа. */
+export function getPublicSettings(): Promise<PublicSettings> {
+  return apiFetch<PublicSettings>('/settings/public');
 }
 
 // ---------- Покупка / обучение ----------

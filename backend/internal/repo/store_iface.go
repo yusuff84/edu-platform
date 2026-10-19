@@ -164,6 +164,15 @@ type StoreAPI interface {
 	// не попадало. Кэш в памяти обновляется ТОЛЬКО после успешной записи.
 	SetCommissionPct(n int) error
 
+	// GetPromoBarEnabled — пост-P7: включён ли промо-баннер «Первый курс
+	// со скидкой». Флаг переключается в админке (PUT /admin/settings) и
+	// читается публичным GET /settings/public; по умолчанию включён.
+	GetPromoBarEnabled() bool
+	// SetPromoBarEnabled сохраняет флаг промо-баннера. Контракт ошибок тот же,
+	// что у SetCommissionPct: кэш в памяти обновляется только после успешной
+	// записи в БД.
+	SetPromoBarEnabled(enabled bool) error
+
 	// ---- T25: админ-консоль (сводка, курсы, отзывы, записи) ----
 
 	// AdminOverview — агрегаты для сводки супер-админа одним вызовом (T25).

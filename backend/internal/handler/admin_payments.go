@@ -237,27 +237,37 @@ func (a *App) AdminPaymentsJournal(w http.ResponseWriter, r *http.Request) {
 
 type settingsResponse struct {
 	CommissionPct int `json:"commissionPct"`
+	// PromoBarEnabled — пост-P7: включён ли промо-баннер «Первый курс
+	// со скидкой». Админка переключает, шапка читает через /settings/public.
+	PromoBarEnabled bool `json:"promoBarEnabled"`
 }
 
-// AdminGetSettings — GET /admin/settings: текущая комиссия платформы (US6),
-// только admin.
+// AdminGetSettings — GET /admin/settings: текущая комиссия платформы (US6)
+// и флаг промо-баннера (пост-P7), только admin.
 func (a *App) AdminGetSettings(w http.ResponseWriter, r *http.Request) {
 	if !a.adminOnly(w, r) {
 		return
 	}
-	writeJSON(w, http.StatusOK, settingsResponse{CommissionPct: a.Store.GetCommissionPct()})
+	writeJSON(w, http.StatusOK, settingsResponse{
+		CommissionPct:   a.Store.GetCommissionPct(),
+		PromoBarEnabled: a.Store.GetPromoBarEnabled(),
+	})
 }
 
 type updateSettingsRequest struct {
 	CommissionPct *int `json:"commissionPct"`
+	// PromoBarEnabled — пост-P7: частичное обновление, можно прислать одно
+	// поле вместо двух (админка шлёт только изменившийся тогл).
+	PromoBarEnabled *bool `json:"promoBarEnabled"`
 }
 
-// AdminUpdateSettings — PUT /admin/settings: меняет комиссию платформы (US6),
-// только admin. Валидация 0..90; значение применяется немедленно —
-// SetCommissionPct обновляет кэш в памяти обоих сторов (см. store.go,
-// postgres_store.go), перезапуск не нужен. T16 (п.4): ошибка записи в БД
-// пробрасывается и превращается в 500 — раньше Postgres её глотал, и API
-// отвечал 200, не сохранив ничего.
+// AdminUpdateSettings — PUT /admin/settings: меняет комиссию платформы (US6)
+// и/или флаг промо-баннера (пост-P7), только admin. Оба поля необязательны по
+// отдельности, но хотя бы одно должно прийти. Валидация комиссии 0..90;
+// значения применяются немедленно — Set-методы обновляют кэш в памяти обоих
+// сторов (см. store.go, postgres_store.go), перезапуск не нужен. T16 (п.4):
+// ошибка записи в БД пробрасывается и превращается в 500 — раньше Postgres её
+// глотал, и API отвечал 200, не сохранив ничего.
 func (a *App) AdminUpdateSettings(w http.ResponseWriter, r *http.Request) {
 	if !a.adminOnly(w, r) {
 		return
@@ -266,19 +276,32 @@ func (a *App) AdminUpdateSettings(w http.ResponseWriter, r *http.Request) {
 	if !decodeJSON(w, r, &req) {
 		return
 	}
-	if req.CommissionPct == nil {
-		writeErr(w, http.StatusBadRequest, "Укажите commissionPct")
+	if req.CommissionPct == nil && req.PromoBarEnabled == nil {
+		writeErr(w, http.StatusBadRequest, "Укажите commissionPct или promoBarEnabled")
 		return
 	}
-	if *req.CommissionPct < 0 || *req.CommissionPct > 90 {
-		writeErr(w, http.StatusBadRequest, "Комиссия должна быть в диапазоне от 0 до 90")
-		return
+	if req.CommissionPct != nil {
+		if *req.CommissionPct < 0 || *req.CommissionPct > 90 {
+			writeErr(w, http.StatusBadRequest, "Комиссия должна быть в диапазоне от 0 до 90")
+			return
+		}
+		if err := a.Store.SetCommissionPct(*req.CommissionPct); err != nil {
+			writeErr(w, http.StatusInternalServerError, "Не удалось сохранить комиссию платформы")
+			return
+		}
 	}
-	if err := a.Store.SetCommissionPct(*req.CommissionPct); err != nil {
-		writeErr(w, http.StatusInternalServerError, "Не удалось сохранить комиссию платформы")
-		return
+	if req.PromoBarEnabled != nil {
+		if err := a.Store.SetPromoBarEnabled(*req.PromoBarEnabled); err != nil {
+			writeErr(w, http.StatusInternalServerError, "Не удалось сохранить настройку промо-баннера")
+			return
+		}
 	}
-	writeJSON(w, http.StatusOK, settingsResponse{CommissionPct: *req.CommissionPct})
+	// Отвечаем фактическим состоянием обоих значений: при частичном PUT
+	// неприсланное поле — текущее, а не «нулевое» (фронт админки опирается).
+	writeJSON(w, http.StatusOK, settingsResponse{
+		CommissionPct:   a.Store.GetCommissionPct(),
+		PromoBarEnabled: a.Store.GetPromoBarEnabled(),
+	})
 }
 
 // refundResponse — ответ возврата средств: {"payment": <строка журнала>}.

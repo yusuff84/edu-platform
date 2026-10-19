@@ -1,7 +1,7 @@
 import { Suspense, lazy, useCallback, useEffect } from 'react';
 import { Link, NavLink, Navigate, Outlet, createBrowserRouter, useLocation } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { logout } from '../api/client';
+import { getPublicSettings, logout } from '../api/client';
 import { t } from '../i18n/t';
 import Catalog from '../pages/Catalog';
 import Course from '../pages/Course';
@@ -70,6 +70,16 @@ function Layout(): JSX.Element {
   const meQuery = useQuery(meQueryOptions);
   const user = meQuery.data;
 
+  // Пост-P7: промо-баннер — тогл из админки, поэтому спрашиваем бэкенд, а не
+  // рендерим всегда. Флаг публичный (доступен без сессии); пока не ответил —
+  // полосу не показываем, чтобы выключенная акция не «мелькала» при загрузке.
+  const promoQuery = useQuery({
+    queryKey: ['public-settings'],
+    queryFn: getPublicSettings,
+    retry: false,
+    staleTime: 60_000,
+  });
+
   // T18: обработчик стабилен между рендерами (qc из контекста не меняется) —
   // кнопка не пересоздаёт onClick при каждом обновлении ['me'] и навигации.
   const onLogout = useCallback(async (): Promise<void> => {
@@ -85,10 +95,12 @@ function Layout(): JSX.Element {
       <a href="#content" className="sr-only">
         {t('a11y.skipToContent')}
       </a>
-      <div className="promo">
-        <span>Первый курс со скидкой 20% для новых студентов</span>
-        <Link to="/">Выбрать курс</Link>
-      </div>
+      {promoQuery.data?.promoBarEnabled && (
+        <div className="promo">
+          <span>Первый курс со скидкой 20% для новых студентов</span>
+          <Link to="/">Выбрать курс</Link>
+        </div>
+      )}
       <header className="topbar">
         <div className="wrap topbar-in">
           <Link className="logo" to="/">

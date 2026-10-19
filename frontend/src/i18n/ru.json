@@ -226,6 +226,10 @@
   "admin.commissionConfirm": "Изменить комиссию платформы?",
   "admin.commissionSaved": "Комиссия сохранена",
   "admin.commissionInvalid": "Комиссия должна быть целым числом от 0 до 90",
+  "admin.settingsTitle": "Настройки платформы",
+  "admin.promoBar": "Промо-полоса «Первый курс со скидкой»",
+  "admin.promoBarHint": "Жёлтая полоса сверху всех страниц. Выключите, когда акция закончится.",
+  "admin.promoSaved": "Настройка сохранена",
   "admin.save": "Сохранить",
 
   "error.notFound": "Страница не найдена",
