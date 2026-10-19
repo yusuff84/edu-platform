@@ -1045,3 +1045,86 @@ func (s *Store) SetCommissionPct(n int) error {
 	s.mu.Unlock()
 	return nil
 }
+
+// ---- T55: детали курса для админа ----
+
+// AdminCourseDetail собирает карточку курса админа (T55) одним проходом под
+// одним RLock: вложенные вызовы методов Store взяли бы RWMutex повторно
+// (самоблокировка) — тот же приём, что в ListEnrollmentRows (T25). Наружу
+// уходят снимки (копии значений), а не живые указатели на карты хранилища.
+func (s *Store) AdminCourseDetail(courseID string) (*AdminCourseDetailData, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	c, ok := s.courses[courseID]
+	if !ok {
+		return nil, false
+	}
+
+	d := &AdminCourseDetailData{
+		Modules: []*Module{},
+		Lessons: map[string][]*Lesson{},
+	}
+
+	// Email автора: справочник пользователей — та же карта под тем же локом
+	// (GetUserByID взял бы лок повторно). "" — автора нет.
+	if u, ok := s.users[c.TeacherID]; ok {
+		d.TeacherEmail = u.Email
+	}
+
+	// Программа: модули курса по position. Counts — счётчики элемента списка
+	// курсов админки (T25): модули, уроки и число АКТИВНЫХ учеников.
+	for _, m := range s.modules {
+		if m.CourseID != courseID {
+			continue
+		}
+		d.Modules = append(d.Modules, m)
+		d.Counts.Modules++
+	}
+	sort.Slice(d.Modules, func(i, j int) bool {
+		return d.Modules[i].Position < d.Modules[j].Position
+	})
+
+	// Уроки каждого модуля по position: группировка от карты lessons.
+	inCourse := make(map[string]bool, len(d.Modules))
+	for _, m := range d.Modules {
+		inCourse[m.ID] = true
+	}
+	for _, l := range s.lessons {
+		if !inCourse[l.ModuleID] {
+			continue
+		}
+		d.Lessons[l.ModuleID] = append(d.Lessons[l.ModuleID], l)
+		d.Counts.Lessons++
+	}
+	for _, ls := range d.Lessons {
+		sort.Slice(ls, func(i, j int) bool { return ls[i].Position < ls[j].Position })
+	}
+
+	// Снимок курса (включается поле cover_path) — живой указатель не отдаём.
+	d.Course = *c
+
+	// Статистика (T55): записи всех статусов и отдельно активные,
+	// успешные платежи. Рейтинг и число отзывов берём из полей курса —
+	// это тот же источник, что у публичной карточки (RecalcCourseRating
+	// пересчитывает их при каждом изменении отзывов).
+	for _, e := range s.enrollments {
+		if e.CourseID != courseID {
+			continue
+		}
+		d.Stats.StudentsCount++
+		if e.Status == EnrollmentActive {
+			d.Stats.ActiveCount++
+			d.Counts.Students++
+		}
+	}
+	d.Stats.ReviewsCount = c.RatingsCount
+	d.Stats.AvgRating = c.AvgRating
+	for _, p := range s.payments {
+		if p.CourseID == courseID && p.Status == PaymentSucceeded {
+			d.Stats.PaymentsCount++
+			d.Stats.PaidTotalCents += p.AmountCents
+		}
+	}
+	return d, true
+}

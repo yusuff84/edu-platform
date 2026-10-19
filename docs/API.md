@@ -78,6 +78,7 @@
 | POST | `/api/v1/admin/invites` | `{email}` → `201 {id,email,token,tokenPrefix,expiresAt}`; **токен показывается один раз** |
 | GET | `/api/v1/admin/courses/review` | → `200` `{items:[Course],total}` |
 | POST | `/api/v1/admin/courses/{id}/moderate` | `{decision:"approve\|reject", comment?}` → `200` Course; `comment` обязателен при `reject` |
+| GET | `/api/v1/admin/courses/{id}` | → `200` `{course:<элемент GET /admin/courses + coverPath>, modules:[{id,title,position,lessons:[{id,title,kind,position}]}], stats:{studentsCount,activeCount,reviewsCount,avgRating,paymentsCount,paidTotalCents}}` (T55; `404` «Курс не найден») |
 | GET | `/api/v1/admin/payments?page=&limit=&status=&courseId=` | → `200` `{items:[PaymentJournalItem],total,page,limit,totals}` (US6, T07) |
 | GET | `/api/v1/admin/settings` | → `200 {commissionPct}` (US6, T07) |
 | PUT | `/api/v1/admin/settings` | `{commissionPct:0..90}` → `200 {commissionPct}` (US6, T07) |
