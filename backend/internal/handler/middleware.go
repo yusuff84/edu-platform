@@ -125,6 +125,8 @@ func NewRouter(app *App) http.Handler {
 		r.Get("/courses/{slug}", app.GetCourse)
 		r.Get("/courses/{id}/reviews", app.ListReviews)
 		r.With(app.requireAuth).Post("/courses/{id}/reviews", app.CreateReview)
+		// T63: проверка промокода на странице курса — только вошедший.
+		r.With(app.requireAuth).Post("/courses/{id}/promo/validate", app.ValidatePromoCode)
 
 		r.Route("/teacher", func(r chi.Router) {
 			r.Use(app.requireAuth, app.requireRole(repo.RoleTeacher, repo.RoleAdmin))
@@ -151,6 +153,9 @@ func NewRouter(app *App) http.Handler {
 			// только на JSON-декодер); у хендлеров обложки свой лимит ≥6 МБ
 			// через http.MaxBytesReader — см. teacher_cover.go.
 			app.RegisterTeacherCoverRoutes(r)
+			// T63: промокоды курса — POST/GET /courses/{id}/promo-codes,
+			// DELETE /courses/{id}/promo-codes/{promoId} (handler/promo_codes.go).
+			app.RegisterTeacherPromoRoutes(r)
 		})
 
 		r.Route("/admin", func(r chi.Router) {

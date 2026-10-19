@@ -16,6 +16,9 @@ import (
 type enrollRequest struct {
 	CourseID string `json:"courseId"`
 	Provider string `json:"provider"`
+	// T63: необязательный промокод. Пустая строка (или отсутствие поля) —
+	// обычная покупка без скидки.
+	PromoCode string `json:"promoCode"`
 }
 
 // CreateEnrollment — POST /enrollments: создаёт платёж и ссылку на оплату.
@@ -45,8 +48,31 @@ func (a *App) CreateEnrollment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// T63: промокод проверяется до создания платежа — те же проверки и
+	// тексты ошибок, что у POST /courses/{id}/promo/validate. Бесплатный
+	// курс + код — 400 «Курс бесплатный — промокод не нужен» (resolvePromo).
+	// amountCents — фактическая сумма к оплате, discountCents — разница
+	// с полной ценой; сплит комиссии считается от фактической суммы.
+	var promo *repo.PromoCode
+	if code := strings.ToUpper(strings.TrimSpace(req.PromoCode)); code != "" {
+		p, status, msg := a.resolvePromo(c, code)
+		if p == nil {
+			writeErr(w, status, msg)
+			return
+		}
+		promo = p
+	}
+	amountCents := c.PriceCents
+	discountCents := 0
+	promoCode := ""
+	if promo != nil {
+		promoCode = promo.Code
+		amountCents = promoFinalPrice(c.PriceCents, promo.DiscountPct)
+		discountCents = c.PriceCents - amountCents
+	}
+
 	commission := a.Store.GetCommissionPct()
-	fee, teacherAmount := service.Split(c.PriceCents, commission)
+	fee, teacherAmount := service.Split(amountCents, commission)
 	providerName := strings.ToLower(strings.TrimSpace(req.Provider))
 	if providerName == "" {
 		providerName = a.Config.PaymentsProvider
@@ -97,7 +123,7 @@ func (a *App) CreateEnrollment(w http.ResponseWriter, r *http.Request) {
 	}
 	res, err := prov.CreatePayment(r.Context(), payments.CreatePaymentRequest{
 		PaymentID:   uuid.NewString(), // клиентский ключ идемпотентности у провайдера (платёж ещё не в БД)
-		AmountCents: c.PriceCents,
+		AmountCents: amountCents,
 		Currency:    c.Currency,
 		Description: "Оплата курса: " + c.Title,
 		ReturnURL:   payments.DefaultReturnURL(),
@@ -108,10 +134,11 @@ func (a *App) CreateEnrollment(w http.ResponseWriter, r *http.Request) {
 	}
 	p, err := a.Store.CreatePayment(&repo.Payment{
 		StudentID: u.ID, CourseID: c.ID,
-		AmountCents: c.PriceCents, PlatformFeeCents: fee, TeacherAmountCents: teacherAmount,
+		AmountCents: amountCents, PlatformFeeCents: fee, TeacherAmountCents: teacherAmount,
 		Currency: c.Currency, Provider: prov.Name(),
 		ProviderPaymentID: res.ProviderPaymentID,
 		Status:            repo.PaymentPending,
+		PromoCode:         promoCode, DiscountCents: discountCents,
 	})
 	if err != nil {
 		writeErr(w, http.StatusConflict, "Такой платёж уже создан")
@@ -187,6 +214,16 @@ func (a *App) PaymentWebhook(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		a.Store.SetPaymentStatus(p.ID, repo.PaymentSucceeded)
+		// T63: usedCount промокода увеличивается ровно один раз — здесь, при
+		// первом переходе платежа в succeeded. Ветка duplicate выше уже
+		// отсекла повторную доставку события (та же идемпотентность по
+		// providerPaymentID), поэтому счётчик не задваивается. Возврат
+		// средств его не уменьшает (ветка refunded ниже).
+		if p.PromoCode != "" {
+			if promo, ok := a.Store.FindPromoCode(p.CourseID, p.PromoCode); ok {
+				a.Store.IncrementPromoCodeUsage(promo.ID)
+			}
+		}
 		a.Store.EnsureEnrollment(p.StudentID, p.CourseID)
 		writeJSON(w, http.StatusOK, map[string]any{"status": "processed"})
 	case "failed":

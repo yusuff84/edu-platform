@@ -185,6 +185,29 @@ type StoreAPI interface {
 	// уроки каждого модуля по position — только метаданные) и статистика
 	// (все записи, активные, отзывы, успешные платежи). false — курса нет.
 	AdminCourseDetail(courseID string) (*AdminCourseDetailData, bool)
+
+	// ---- T63: промокоды ----
+
+	// CreatePromoCode сохраняет промокод курса. Код приходит уже
+	// нормализованным (trim + upper) из handler; usedCount всегда
+	// начинается с 0, active = true. Дубликат (courseId, code) —
+	// ErrAlreadyExists (правило уникальности значений).
+	CreatePromoCode(p *PromoCode) (*PromoCode, error)
+	// ListPromoCodesByCourse — все коды курса, включая неактивные (история),
+	// по createdAt убыванию. Никогда не nil.
+	ListPromoCodesByCourse(courseID string) []*PromoCode
+	// GetPromoCodeByID — промокод по id; false — нет такого.
+	GetPromoCodeByID(id string) (*PromoCode, bool)
+	// FindPromoCode — промокод по (courseId, code). Код сравнивается без
+	// учёта регистра (хранится в верхнем). false — на курсе такого нет.
+	FindPromoCode(courseID, code string) (*PromoCode, bool)
+	// DeactivatePromoCode идемпотентно ставит active=false, запись
+	// сохраняется (история). ErrNotFound — промокода нет.
+	DeactivatePromoCode(id string) error
+	// IncrementPromoCodeUsage атомарно увеличивает usedCount на 1.
+	// false — промокода нет. Вызывается ровно один раз при первом переходе
+	// платежа в succeeded (идемпотентность обеспечивает handler).
+	IncrementPromoCodeUsage(id string) bool
 }
 
 // PaymentFilter — параметры журнала платежей для админки (US6, T31).
@@ -251,11 +274,11 @@ type ContentCounts struct {
 // источник обоих срезов, пересчёт от сырых отзывов совпадает с ним,
 // т.к. RecalcCourseRating выполняется на каждом изменении отзывов).
 type AdminCourseDetailStats struct {
-	StudentsCount int // ВСЕ записи на курс (any статус: active/refunded/revoked)
-	ActiveCount   int // записи в статусе active
-	ReviewsCount  int // отзывы курса (= ratings_count курса)
-	AvgRating     float64
-	PaymentsCount int // платежи курса в статусе succeeded
+	StudentsCount  int // ВСЕ записи на курс (any статус: active/refunded/revoked)
+	ActiveCount    int // записи в статусе active
+	ReviewsCount   int // отзывы курса (= ratings_count курса)
+	AvgRating      float64
+	PaymentsCount  int // платежи курса в статусе succeeded
 	PaidTotalCents int // сумма amount_cents успешных платежей курса
 }
 
@@ -270,8 +293,8 @@ type AdminCourseDetailData struct {
 	// Course — снимок курса; CoverPath внутри (колонка cover_path из
 	// 001_init.sql; T54 добавляет только эндпоинты загрузки).
 	Course       Course
-	TeacherEmail string    // email автора; "" — автор не найден
-	Modules      []*Module // по position (не nil — пустой слайс, если модулей нет)
+	TeacherEmail string               // email автора; "" — автор не найден
+	Modules      []*Module            // по position (не nil — пустой слайс, если модулей нет)
 	Lessons      map[string][]*Lesson // moduleId → уроки по position (не nil)
 	// Counts — счётчики в форме элемента GET /admin/courses (T25):
 	// Students — только активные записи.

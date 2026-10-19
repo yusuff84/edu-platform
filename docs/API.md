@@ -88,6 +88,19 @@
 > все виды курса: каталог `GET /courses`, страница `GET /courses/{slug}`,
 > списки учителя и админа.
 
+> Волна P8 (T63): промокоды. `POST /api/v1/teacher/courses/{id}/promo-codes`
+> `{code, discountPct:1..90, maxUses?, expiresAt?}` → `201 {"promoCode": PromoCode}`
+> (код нормализуется к верхнему регистру; дубликат — `400`, архивный курс — `409`);
+> `GET …/promo-codes` → `200 {"items":[PromoCode]}` (новые первыми);
+> `DELETE …/promo-codes/{promoId}` → `204` (деактивация `active=false`,
+> повторный вызов — тоже `204`). `POST /api/v1/courses/{id}/promo/validate`
+> (только вошедший) `{code}` → `200 {code,discountPct,priceCents,finalPriceCents}`,
+> скидка округляется вниз до копеек; ошибки применения кода — `400` с текстами
+> контракта, бесплатный курс — `400`. `POST /api/v1/enrollments` принимает
+> необязательный `promoCode`: `amountCents` — со скидкой, в платеже и журнале
+> админа появляются аддитивные `promoCode` и `discountCents`, `usedCount`
+> увеличивается один раз при успешной оплате.
+
 > В бэклоге T13: `GET/PATCH/DELETE /teacher/courses[...]`, PATCH модулей/уроков,
 > reorder — в `Task/T13-integration-wiring.md`.
 

@@ -185,6 +185,29 @@ type Payment struct {
 	Status             PaymentStatus
 	CreatedAt          time.Time
 	ProcessedAt        *time.Time
+	// T63: промокод, применённый при покупке. Пустая строка — обычная
+	// покупка без скидки (аддитивные поля контракта, старые платежи
+	// читаются как "").
+	PromoCode string `json:"promoCode"`
+	// DiscountCents — размер скидки в копейках: полная цена минус
+	// фактически оплаченная сумма. 0 — скидки не было.
+	DiscountCents int `json:"discountCents"`
+}
+
+// PromoCode — промокод курса (T63): процентная скидка, лимит использований
+// и срок действия. Код хранится и сравнивается в верхнем регистре;
+// MaxUses = 0 — без ограничения. ExpiresAt = nil — без срока действия
+// (в JSON отдаётся null).
+type PromoCode struct {
+	ID          string     `json:"id"`
+	CourseID    string     `json:"courseId"`
+	Code        string     `json:"code"`
+	DiscountPct int        `json:"discountPct"`
+	MaxUses     int        `json:"maxUses"`
+	UsedCount   int        `json:"usedCount"`
+	ExpiresAt   *time.Time `json:"expiresAt"`
+	Active      bool       `json:"active"`
+	CreatedAt   time.Time  `json:"createdAt"`
 }
 
 type Review struct {

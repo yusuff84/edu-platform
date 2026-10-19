@@ -36,7 +36,8 @@ type Store struct {
 	enrollIdx          map[string]string          // studentID|courseID -> enrollmentID
 	progress           map[string]*LessonProgress // studentID|lessonID -> progress
 	payments           map[string]*Payment
-	paymentsByProvider map[string]*Payment // providerPaymentID -> payment
+	paymentsByProvider map[string]*Payment   // providerPaymentID -> payment
+	promoCodes         map[string]*PromoCode // T63: id -> промокод
 	reviews            map[string]*Review
 	reviewIdx          map[string]string // studentID|courseID -> reviewID
 	sessions           map[string]*Session
@@ -57,6 +58,7 @@ func NewStore() *Store {
 		progress:           make(map[string]*LessonProgress),
 		payments:           make(map[string]*Payment),
 		paymentsByProvider: make(map[string]*Payment),
+		promoCodes:         make(map[string]*PromoCode),
 		reviews:            make(map[string]*Review),
 		reviewIdx:          make(map[string]string),
 		sessions:           make(map[string]*Session),
@@ -442,6 +444,12 @@ func (s *Store) DeleteCourse(id string) error {
 				delete(s.paymentsByProvider, p.ProviderPaymentID)
 			}
 			delete(s.payments, pid)
+		}
+	}
+	// T63: промокоды курса — зеркало ON DELETE CASCADE (008_promo_codes.sql).
+	for cid, pc := range s.promoCodes {
+		if pc.CourseID == id {
+			delete(s.promoCodes, cid)
 		}
 	}
 	return nil
@@ -1143,4 +1151,102 @@ func (s *Store) AdminCourseDetail(courseID string) (*AdminCourseDetailData, bool
 		}
 	}
 	return d, true
+}
+
+// ---- T63: промокоды ----
+
+// CreatePromoCode сохраняет промокод (T63). Дубликат (courseId, code) —
+// ErrAlreadyExists: правило уникальности значений контракта (400 у handler).
+// Новый код всегда активен, usedCount стартует с нуля.
+func (s *Store) CreatePromoCode(p *PromoCode) (*PromoCode, error) {
+	code := strings.ToUpper(strings.TrimSpace(p.Code))
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, cur := range s.promoCodes {
+		if cur.CourseID == p.CourseID && cur.Code == code {
+			return nil, ErrAlreadyExists
+		}
+	}
+	pc := &PromoCode{
+		ID:          uuid.NewString(),
+		CourseID:    p.CourseID,
+		Code:        code,
+		DiscountPct: p.DiscountPct,
+		MaxUses:     p.MaxUses,
+		UsedCount:   0,
+		ExpiresAt:   cloneTimePtr(p.ExpiresAt),
+		Active:      true,
+		CreatedAt:   time.Now().UTC(),
+	}
+	s.promoCodes[pc.ID] = pc
+	*p = *pc
+	return p, nil
+}
+
+// ListPromoCodesByCourse возвращает все коды курса (включая неактивные —
+// история), новые первыми. При равном createdAt порядок стабилен по id —
+// так же сортирует Postgres-реализация.
+func (s *Store) ListPromoCodesByCourse(courseID string) []*PromoCode {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	out := make([]*PromoCode, 0)
+	for _, pc := range s.promoCodes {
+		if pc.CourseID == courseID {
+			out = append(out, pc)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].CreatedAt.Equal(out[j].CreatedAt) {
+			return out[i].ID < out[j].ID
+		}
+		return out[i].CreatedAt.After(out[j].CreatedAt)
+	})
+	return out
+}
+
+// GetPromoCodeByID ищет промокод по id.
+func (s *Store) GetPromoCodeByID(id string) (*PromoCode, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	pc, ok := s.promoCodes[id]
+	return pc, ok
+}
+
+// FindPromoCode ищет промокод курса по коду (без учёта регистра).
+func (s *Store) FindPromoCode(courseID, code string) (*PromoCode, bool) {
+	code = strings.ToUpper(strings.TrimSpace(code))
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	for _, pc := range s.promoCodes {
+		if pc.CourseID == courseID && pc.Code == code {
+			return pc, true
+		}
+	}
+	return nil, false
+}
+
+// DeactivatePromoCode идемпотентно выключает код (active=false), сохраняя
+// запись для истории. ErrNotFound — промокода с таким id нет.
+func (s *Store) DeactivatePromoCode(id string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	pc, ok := s.promoCodes[id]
+	if !ok {
+		return ErrNotFound
+	}
+	pc.Active = false
+	return nil
+}
+
+// IncrementPromoCodeUsage атомарно увеличивает usedCount на 1. false —
+// промокода нет. Возврат средств счётчик не уменьшает (контракт T63).
+func (s *Store) IncrementPromoCodeUsage(id string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	pc, ok := s.promoCodes[id]
+	if !ok {
+		return false
+	}
+	pc.UsedCount++
+	return true
 }
