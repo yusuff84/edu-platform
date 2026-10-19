@@ -202,7 +202,10 @@ func TestAdminCourseDetailHappyPath(t *testing.T) {
 // TestAdminCourseDetailNotFound: любого fake id (в том числе не-UUID) —
 // 404 «Курс не найден».
 func TestAdminCourseDetailNotFound(t *testing.T) {
-	_, router := newTestApp()
+	app, router := newTestApp()
+	// seedPublishedCourse заводит админа, необходимого для входа; сам курс в
+	// проверках не участвует — запрашиваются заведомо несуществующие id.
+	_, _, _ = seedPublishedCourse(t, app, router, 0)
 	adminCookies := loginUser(t, router, "admin@example.com", "password123")
 
 	for _, id := range []string{"00000000-0000-0000-0000-000000000000", "fake-id"} {
@@ -323,7 +326,9 @@ func TestAdminCourseDetailStatsWithActivity(t *testing.T) {
 // Отзывы курса в админке остаются прежними: GET /admin/courses/{id}/reviews
 // не перехвачен новым маршрутом GET /admin/courses/{id} (T25, не трогаем).
 func TestAdminCourseDetailDoesNotShadowReviews(t *testing.T) {
-	_, router := newTestApp()
+	app, router := newTestApp()
+	// Админ нужен только для сессии — его заводит seedPublishedCourse.
+	_, _, _ = seedPublishedCourse(t, app, router, 0)
 	adminCookies := loginUser(t, router, "admin@example.com", "password123")
 
 	rec := doRequest(t, router, http.MethodGet,
