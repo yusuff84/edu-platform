@@ -234,8 +234,8 @@ func TestTeacherP7LessonStartsAt(t *testing.T) {
 
 // TestTeacherP7QuizValidation — валидация quiz на POST: пустой текст вопроса,
 // один вариант, пустой вариант, правильный ответ вне границ (и как correct,
-// и как correctIndex из контракта) — 400 «Некорректный тест: …»; корректный
-// тест сохраняется (201) с описанием correct в ответе.
+// и как correctIndex из контракта) или вовсе не указан — 400 «Некорректный
+// тест: …»; корректный тест сохраняется (201) с описанием correct в ответе.
 func TestTeacherP7QuizValidation(t *testing.T) {
 	app, router := newTestApp()
 	cookies, _ := lifecycleTeacher(t, app, router, "p7-quiz-teacher@example.com")
@@ -277,6 +277,10 @@ func TestTeacherP7QuizValidation(t *testing.T) {
 	// correctIndex (имя из контракта P7) вне границ — те же два варианта.
 	quizBad(map[string]any{"text": "1+1?", "options": []string{"2", "3"}, "correctIndex": 5},
 		"correctIndex вне границ")
+
+	// Правильный ответ не указан вовсе (ни correct, ни correctIndex) — 400.
+	quizBad(map[string]any{"text": "1+1?", "options": []string{"2", "3"}},
+		"правильный ответ не указан")
 
 	// Тест без вопросов.
 	rec := doRequest(t, router, http.MethodPost,
@@ -335,6 +339,22 @@ func TestTeacherP7QuizPatchValidation(t *testing.T) {
 	rec = patchQuiz(map[string]any{"text": "2+2?", "options": []string{"4", "5"}, "correctIndex": 9})
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("PATCH correctIndex вне границ: status=%d body=%s", rec.Code, rec.Body.String())
+	}
+
+	// Правильный ответ не указан вовсе → 400 «Некорректный тест».
+	rec = patchQuiz(map[string]any{"text": "2+2?", "options": []string{"4", "5"}})
+	if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "Некорректный тест") {
+		t.Fatalf("PATCH без правильного ответа: status=%d body=%s", rec.Code, rec.Body.String())
+	}
+
+	// Валидный PATCH в старой форме фронтенда (correct) — 200, тест обновился.
+	rec = patchQuiz(map[string]any{"text": "3+3?", "options": []string{"6", "7"}, "correct": 0})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("PATCH quiz с correct: status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if stored, _ := app.Store.GetLesson(l2); stored.Quiz == nil || len(stored.Quiz.Questions) != 1 ||
+		stored.Quiz.Questions[0].Correct != 0 || stored.Quiz.Questions[0].Text != "3+3?" {
+		t.Fatalf("quiz с correct не обновился / потерялся: %+v", stored.Quiz)
 	}
 
 	// Валидный PATCH — 200, обновлённый тест в хранилище.

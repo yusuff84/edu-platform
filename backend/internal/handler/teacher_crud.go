@@ -8,12 +8,10 @@ package handler
 // в middleware.go: requireAuth + requireRole(teacher, admin) навешаны родителем,
 // пути относительные — так же, как RegisterTeacherEditRoutes (T13).
 //
-// GET /teacher/courses здесь перезаписывает обработчик из teacher.go:
-// chi НЕ паникует на дубликат маршрута — setEndpoint перезаписывает
-// обработчик узла, побеждает последняя регистрация (проверено по исходникам
-// chi v5.1.0, tree.go). Поэтому файл teacher.go (зона T13/T16) не менялся,
-// а список моих курсов отдаётся с modulesCount/lessonsCount — фронт больше
-// не делает N+1 запросов.
+// GET /teacher/courses — единственная регистрация (T53 убрал мёртвый дубль
+// регистрации из middleware.go и обработку-дубль из teacher.go): список
+// моих курсов отдаётся с modulesCount/lessonsCount — фронт больше не делает
+// N+1 запросов.
 //
 // Права: только владелец курса или админ (ownCourse).
 // Статус: контент (уроки, порядок, удаление) — только draft (409 иначе);
@@ -67,10 +65,10 @@ type teacherCourseItem struct {
 	LessonsCount int `json:"lessonsCount"`
 }
 
-// TeacherListCoursesWithCounts — GET /teacher/courses: как TeacherListCourses
-// из teacher.go, но в каждый элемент добавлены modulesCount/lessonsCount
-// (одним запросом CountContentByCourses вместо N+1 на фронте; T19).
-// items никогда не null — make с нулевой ёмкостью.
+// TeacherListCoursesWithCounts — GET /teacher/courses (единственная
+// регистрация с T53): в каждый элемент списка добавлены
+// modulesCount/lessonsCount (одним запросом CountContentByCourses вместо
+// N+1 на фронте; T19). items никогда не null — make с нулевой ёмкостью.
 func (a *App) TeacherListCoursesWithCounts(w http.ResponseWriter, r *http.Request) {
 	u, ok := a.currentUser(r)
 	if !ok {
@@ -174,6 +172,13 @@ func (a *App) TeacherUpdateLesson(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if req.Quiz != nil {
+		// Контракт P7: тест проверяется в форме запроса (validate — явный
+		// правильный ответ correct/correctIndex + правила), затем слитый
+		// урок повторно проверяет validateLessonContent → validateQuiz.
+		if msg := req.Quiz.validate(); msg != "" {
+			writeErr(w, http.StatusBadRequest, msg)
+			return
+		}
 		merged.Quiz = req.Quiz.toRepo()
 		for i := range merged.Quiz.Questions {
 			if strings.TrimSpace(merged.Quiz.Questions[i].ID) == "" {
@@ -208,10 +213,10 @@ func (a *App) lessonInCourse(l *repo.Lesson, courseID string) bool {
 }
 
 // validateLessonContent проверяет содержимое урока по kind. Возвращает пустую
-// строку, если урок валиден, иначе текст ошибки для 400. Копия валидации из
-// TeacherCreateLesson (teacher.go — зона T13/T16, в волне B не меняется).
-// С T53 (P7) quiz проверяет общий validateQuiz из teacher.go (контракт P7):
-// текст вопроса, не менее двух непустых вариантов, правильный ответ в границах.
+// строку, если урок валиден, иначе текст ошибки для 400. Ветки video/live/code
+// повторяют валидацию TeacherCreateLesson (teacher.go); с T53 (P7) quiz
+// проверяет общий validateQuiz из teacher.go (контракт P7): текст вопроса,
+// не менее двух непустых вариантов, правильный ответ в границах.
 func validateLessonContent(l *repo.Lesson) string {
 	switch l.Kind {
 	case repo.LessonVideoText:

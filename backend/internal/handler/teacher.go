@@ -169,30 +169,58 @@ type quizQuestionRequest struct {
 	Explanation  string   `json:"explanation,omitempty"`
 }
 
-// quizRequest — тест из вопросов: валидируется через validateQuiz на POST/PATCH.
+// quizRequest — тест из вопросов: на POST/PATCH его проверяет validate
+// (полный набор правил P7 в форме запроса), затем слитый урок проходит
+// validateLessonContent → validateQuiz (форма хранилища).
 type quizRequest struct {
 	Questions []quizQuestionRequest `json:"questions"`
 }
 
+// correctAnswerIndex возвращает индекс правильного ответа: correct (как
+// хранится и отдаётся репозиторием — форма существующего фронтенда) имеет
+// приоритет над correctIndex (имя из контракта P7 и qa-скрипта). Вызывать
+// после validate: тест без явно указанного ответа отклоняется.
+func (q quizQuestionRequest) correctAnswerIndex() int {
+	if q.Correct != nil {
+		return *q.Correct
+	}
+	if q.CorrectIndex != nil {
+		return *q.CorrectIndex
+	}
+	return 0
+}
+
+// validate проверяет тест в форме запроса по контракту P7. Дополнительно к
+// правилам validateQuiz (они не видны в форме хранилища) требует, чтобы
+// правильный ответ был указан явно: «неопределённый» индекс (ни correct,
+// ни correctIndex) — тоже 400 «Некорректный тест: …». Возвращает текст
+// ошибки или пустую строку.
+func (q *quizRequest) validate() string {
+	if q == nil || len(q.Questions) == 0 {
+		return "Некорректный тест: должен быть хотя бы один вопрос"
+	}
+	for _, in := range q.Questions {
+		if in.Correct == nil && in.CorrectIndex == nil {
+			return "Некорректный тест: не указан правильный вариант ответа"
+		}
+	}
+	return validateQuiz(q.toRepo())
+}
+
 // toRepo переводит запросную форму теста в форму хранилища (repo.QuizData).
-// correct имеет приоритет над correctIndex, оба отсутствуют — 0.
+// Вызывать после validate — она гарантирует непустой тест с указанным
+// правильным ответом.
 func (q *quizRequest) toRepo() *repo.QuizData {
 	if q == nil {
 		return nil
 	}
 	out := &repo.QuizData{Questions: make([]repo.QuizQuestion, len(q.Questions))}
 	for i, in := range q.Questions {
-		correct := 0
-		if in.Correct != nil {
-			correct = *in.Correct
-		} else if in.CorrectIndex != nil {
-			correct = *in.CorrectIndex
-		}
 		out.Questions[i] = repo.QuizQuestion{
 			ID:          in.ID,
 			Text:        in.Text,
 			Options:     in.Options,
-			Correct:     correct,
+			Correct:     in.correctAnswerIndex(),
 			Explanation: in.Explanation,
 		}
 	}
@@ -298,9 +326,10 @@ func (a *App) TeacherCreateLesson(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	case repo.LessonQuiz:
-		// Контракт P7: тест валидируется на бэкенде, текст ошибки начинается
+		// Контракт P7: тест проверяется в форме запроса (validate — явный
+		// правильный ответ + правила validateQuiz), текст ошибки начинается
 		// с «Некорректный тест:», иначе — по валидации T16.
-		if msg := validateQuiz(l.Quiz); msg != "" {
+		if msg := req.Quiz.validate(); msg != "" {
 			writeErr(w, http.StatusBadRequest, msg)
 			return
 		}
