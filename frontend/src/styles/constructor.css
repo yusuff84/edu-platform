@@ -296,3 +296,42 @@
   outline: 2px solid #3f51b5;
   outline-offset: 2px;
 }
+
+/* ---------- T57: обложка курса (T54) ---------- */
+
+/* Превью обложки в карточке курса: пропорциональный кадр, обрезка по краям. */
+.tc-cover-img {
+  display: block;
+  width: 100%;
+  max-width: 320px;
+  max-height: 180px;
+  object-fit: cover;
+  border: 1px solid #e5e5e5;
+  border-radius: 8px;
+  margin: 0.5rem 0 0.75rem;
+}
+
+/* hidden input[type=file]: визуально скрыт, но остаётся доступным для фокуса;
+   диалог выбора открывают кнопки «Загрузить/Заменить обложку». */
+.tc-cover-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.tc-cover-actions {
+  align-items: center;
+}
+
+/* Инлайн-подтверждение удаления (стиль T49): вопрос + Подтвердить/Отмена. */
+.tc-cover-confirm {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  font-size: 0.875rem;
+  color: #b00020;
+}

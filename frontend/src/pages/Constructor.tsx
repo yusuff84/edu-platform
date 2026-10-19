@@ -25,8 +25,8 @@
 // Все тела запросов собираются только из полей, относящихся к kind урока:
 // backend включает DisallowUnknownFields() — лишнее поле = 400.
 
-import { useState } from 'react';
-import type { FormEvent } from 'react';
+import { useRef, useState } from 'react';
+import type { ChangeEvent, FormEvent } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
@@ -54,6 +54,15 @@ import {
 // T36: детали курса конструктора — из api/teacherStudents.ts (client.ts не наш,
 // добавление туда getTeacherCourseDetail принадлежит соседней волне).
 import { getTeacherCourseDetail } from '../api/teacherStudents';
+// T57: обложка курса (T54) — отдельный multipart-модуль рядом с api-клиентом.
+import {
+  COVER_ACCEPT,
+  COVER_MAX_BYTES,
+  COVER_TYPES,
+  coverUrl,
+  removeCover,
+  uploadCover,
+} from '../api/teacherCover';
 import LessonPreview from '../components/LessonPreview';
 import type { LessonPreviewData } from '../components/LessonPreview';
 import { t } from '../i18n/t';
@@ -705,6 +714,62 @@ export default function Constructor(): JSX.Element {
     }
     cardMutation.mutate();
   }
+
+  // ---------- T57: обложка курса (T54) ----------
+
+  // hidden input[type=file] дергается кнопками «Загрузить/Заменить обложку».
+  const coverInputRef = useRef<HTMLInputElement | null>(null);
+  // Инлайн-подтверждение удаления (стиль T49: Подтвердить/Отмена, не confirm()).
+  const [coverConfirm, setCoverConfirm] = useState(false);
+
+  const uploadCoverMutation = useMutation({
+    mutationFn: (file: File) => uploadCover(course?.id ?? '', file),
+    onSuccess: () => {
+      setNotice({ text: t('p7.cover.saved'), kind: 'ok' });
+      // Обложка попадает во вью конструктора и в список своих курсов —
+      // обновляем оба кэша (refetch курса после мутации).
+      void qc.invalidateQueries({ queryKey: ['teach-course'] });
+      void qc.invalidateQueries({ queryKey: ['teaching'] });
+    },
+    onError: (e: unknown) => setNotice({ text: errText(e), kind: 'error' }),
+  });
+
+  const removeCoverMutation = useMutation({
+    mutationFn: () => removeCover(course?.id ?? ''),
+    onSuccess: () => {
+      setCoverConfirm(false);
+      setNotice({ text: t('p7.cover.removed'), kind: 'ok' });
+      void qc.invalidateQueries({ queryKey: ['teach-course'] });
+      void qc.invalidateQueries({ queryKey: ['teaching'] });
+    },
+    onError: (e: unknown) => setNotice({ text: errText(e), kind: 'error' }),
+  });
+
+  /**
+   * Выбор файла обложки: тип и размер проверяем ДО запроса (контракт T54 —
+   * JPEG/PNG/WebP, ≤5 МБ), несоответствие показывает p7.cover.typeError
+   * без похода на сервер. value сбрасывается, чтобы один и тот же файл можно
+   * было выбрать повторно (после замены или ошибки).
+   */
+  function onCoverFileChange(e: ChangeEvent<HTMLInputElement>): void {
+    const file = e.target.files?.[0] ?? null;
+    e.target.value = '';
+    if (!file) return;
+    if (!COVER_TYPES.includes(file.type) || file.size > COVER_MAX_BYTES) {
+      setNotice({ text: t('p7.cover.typeError'), kind: 'error' });
+      return;
+    }
+    uploadCoverMutation.mutate(file);
+  }
+
+  function openCoverDialog(): void {
+    coverInputRef.current?.click();
+  }
+
+  // T57: в архиве менять обложку нельзя (бэкенд ответил бы 409) — глушим кнопки;
+  // во время мутаций тоже.
+  const coverBusy = uploadCoverMutation.isPending || removeCoverMutation.isPending;
+  const coverDisabled = cardFrozen || coverBusy;
 
   // ---------- T19: переименование модуля ----------
 
@@ -1407,6 +1472,73 @@ export default function Constructor(): JSX.Element {
                     </button>
                   </div>
                 )}
+              </section>
+
+              {/* T57: обложка курса (T54) — превью и загрузка/замена/удаление.
+                  Тип и размер проверяем на клиенте (p7.cover.typeError) без
+                  запроса; в архиве кнопки глушим — бэкенд и так вернёт 409. */}
+              <section className="teach-section panel tc-cover">
+                <h2>{t('p7.cover.label')}</h2>
+                <p className="teach-note">{t('p7.cover.hint')}</p>
+                {course.coverPath && (
+                  <img
+                    className="tc-cover-img"
+                    src={coverUrl(course.coverPath)}
+                    alt={t('p7.cover.alt')}
+                  />
+                )}
+                <input
+                  ref={coverInputRef}
+                  type="file"
+                  className="tc-cover-input"
+                  accept={COVER_ACCEPT}
+                  disabled={coverDisabled}
+                  onChange={onCoverFileChange}
+                />
+                <div className="teach-card-actions tc-cover-actions">
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    onClick={openCoverDialog}
+                    disabled={coverDisabled}
+                  >
+                    {uploadCoverMutation.isPending
+                      ? t('teach.saving')
+                      : course.coverPath
+                        ? t('p7.cover.replace')
+                        : t('p7.cover.upload')}
+                  </button>
+                  {course.coverPath && coverConfirm && (
+                    <span className="tc-cover-confirm">
+                      <span>{t('p7.cover.remove')}</span>
+                      <button
+                        type="button"
+                        className="teach-danger"
+                        onClick={() => removeCoverMutation.mutate()}
+                        disabled={coverDisabled}
+                      >
+                        {removeCoverMutation.isPending ? t('teach.saving') : t('common.confirm')}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setCoverConfirm(false)}
+                        disabled={coverDisabled}
+                      >
+                        {t('common.cancel')}
+                      </button>
+                    </span>
+                  )}
+                  {course.coverPath && !coverConfirm && (
+                    <button
+                      type="button"
+                      className="teach-danger"
+                      onClick={() => setCoverConfirm(true)}
+                      disabled={coverDisabled}
+                    >
+                      {t('p7.cover.remove')}
+                    </button>
+                  )}
+                </div>
               </section>
 
               {/* Отправка на модерацию — только для черновика. */}

@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { CourseStatus } from '../api/client';
 import { ApiError, enroll, formatPrice, getCourse, me, myCourses } from '../api/client';
+import { coverUrl } from '../api/teacherCover';
 import Reviews from '../components/Reviews';
 import { t } from '../i18n/t';
 import '../styles/catalog.css';
@@ -80,9 +81,9 @@ export default function Course(): JSX.Element {
   if (courseQuery.isLoading)
     return (
       <div className="wrap">
-        <div className="page">
+        <main className="page">
           <p role="status">{t('course.loading')}</p>
-        </div>
+        </main>
       </div>
     );
   if (courseQuery.isError || !courseQuery.data) {
@@ -92,7 +93,7 @@ export default function Course(): JSX.Element {
       // Черновик/снятый курс бэкенд отдаёт как 404 для посторонних.
       return (
         <div className="wrap">
-          <div className="page">
+          <main className="page">
             <h1>{t('course.notFound')}</h1>
             <p>{t('course.notFoundHint')}</p>
             <p>
@@ -100,13 +101,13 @@ export default function Course(): JSX.Element {
                 {t('my.goCatalog')}
               </Link>
             </p>
-          </div>
+          </main>
         </div>
       );
     }
     return (
       <div className="wrap">
-        <div className="page">
+        <main className="page">
           <h1>{t('course.notFound')}</h1>
           <p role="alert">{t('common.error')}</p>
           <p>
@@ -121,7 +122,7 @@ export default function Course(): JSX.Element {
               {t('my.goCatalog')}
             </Link>
           </p>
-        </div>
+        </main>
       </div>
     );
   }
@@ -144,10 +145,12 @@ export default function Course(): JSX.Element {
     openModuleId === null ? index === 0 : openModuleId === id;
   const toggle = (id: string, index: number): void =>
     setOpenModuleId(isOpen(id, index) ? ALL_CLOSED : id);
+  // T57: обложка из T54 («/uploads/covers/<имя>»); нет обложки — прежний вид.
+  const coverSrc = coverUrl(course.coverPath);
 
   return (
     <div className="wrap">
-      <div className="page">
+      <main className="page">
         <div className="crumbs">
           <Link to="/">{t('catalog.title')}</Link> / {course.title}
         </div>
@@ -177,6 +180,9 @@ export default function Course(): JSX.Element {
               <div className="pill-row">
                 <span className="pill">Курс</span>
               </div>
+              {coverSrc && (
+                <img className="cover-hero" src={coverSrc} alt={t('p7.cover.alt')} />
+              )}
               <h1 style={{ marginTop: 12 }}>{course.title}</h1>
               <p className="muted">{course.description}</p>
               <div className="meta">
@@ -267,10 +273,15 @@ export default function Course(): JSX.Element {
           </div>
 
           <aside className="panel buybox">
-            <div
-              className={`cover ${coverFor(course.slug)}`}
-              style={{ height: 150, borderRadius: 12 }}
-            />
+            {/* T57: есть обложка — настоящий кадр вместо загадочного градиента. */}
+            {coverSrc ? (
+              <img className="cover-buy" src={coverSrc} alt="" />
+            ) : (
+              <div
+                className={`cover ${coverFor(course.slug)}`}
+                style={{ height: 150, borderRadius: 12 }}
+              />
+            )}
             <div className="price">{formatPrice(course.priceCents)}</div>
             {!user && !meQuery.isLoading && (
               <p className="muted">{t('course.loginToBuy')}</p>
@@ -302,7 +313,7 @@ export default function Course(): JSX.Element {
             <p className="notice">Возврат в течение 7 дней без лишних вопросов.</p>
           </aside>
         </div>
-      </div>
+      </main>
     </div>
   );
 }
