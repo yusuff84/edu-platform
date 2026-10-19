@@ -11,6 +11,12 @@ export default defineConfig({
         target: process.env.VITE_API_PROXY ?? 'http://localhost:8082',
         changeOrigin: true,
       },
+      // T54+T57: обложки курсов (/uploads/covers/...) отдаёт api — в dev-режиме
+      // тоже нужен прокси, иначе <img> получает index.html SPA.
+      '/uploads': {
+        target: process.env.VITE_API_PROXY ?? 'http://localhost:8082',
+        changeOrigin: true,
+      },
     },
   },
   preview: {
