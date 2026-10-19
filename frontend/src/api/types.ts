@@ -30,6 +30,28 @@ export interface Paged<T> {
   limit: number;
 }
 
+// ---------- Каталог: фильтры (T65/T66) ----------
+
+/** Категория курса — фиксированный список слагов контракта P8. */
+export type CourseCategory = 'programming' | 'design' | 'data' | 'marketing' | 'ai' | 'other';
+
+/** Фильтр цены каталога: бесплатные / платные. */
+export type CoursePriceFilter = 'free' | 'paid';
+
+/** Допустимые значения фильтра минимального рейтинга (как строки запроса). */
+export type CourseMinRatingFilter = '3.5' | '4' | '4.5';
+
+/** Сортировка каталога (по умолчанию popular). */
+export type CourseSort = 'popular' | 'new' | 'rating' | 'price_asc' | 'price_desc';
+
+/** Статистика категории из GET /categories. */
+export interface CategoryStat {
+  /** Слаг категории из фиксированного списка. */
+  slug: string;
+  /** Число опубликованных курсов (может быть 0). */
+  coursesCount: number;
+}
+
 // ---------- Пользователь ----------
 
 export interface User {
@@ -56,6 +78,8 @@ export interface CourseItem {
   avgRating: number;
   /** Именно ratingsCount, не reviewsCount. */
   ratingsCount: number;
+  /** T65: категория курса (слаг фиксированного списка); аддитивное поле. */
+  category?: string;
   /**
    * T54: путь к обложке "/uploads/covers/<имя>" (аддитивно с волны P7).
    * null/"" — обложки нет; плитки без обложки рисуются как раньше.
