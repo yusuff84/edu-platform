@@ -96,9 +96,12 @@ function Layout(): JSX.Element {
             <NavLink to="/" end className={({ isActive }) => (isActive ? 'active' : '')}>
               {t('nav.catalog')}
             </NavLink>
-            <NavLink to="/me" className={({ isActive }) => (isActive ? 'active' : '')}>
-              {t('nav.myCourses')}
-            </NavLink>
+            {/* «Мои курсы» (/me) — за гвардом RequireAuth: гостю ссылку не показываем. */}
+            {user && (
+              <NavLink to="/me" className={({ isActive }) => (isActive ? 'active' : '')}>
+                {t('nav.myCourses')}
+              </NavLink>
+            )}
             {user && (
               <NavLink to="/profile" className={({ isActive }) => (isActive ? 'active' : '')}>
                 {t('nav.profile')}
@@ -181,9 +184,15 @@ function Layout(): JSX.Element {
           <div>
             <b>Студенту</b>
             <Link to="/">Каталог</Link>
-            <Link to="/me">Мои курсы</Link>
-            <Link to="/login">Вход</Link>
-            <Link to="/register">Регистрация</Link>
+            {/* Авторизационные ссылки — по состоянию сессии, как в шапке. */}
+            {user ? (
+              <Link to="/me">Мои курсы</Link>
+            ) : (
+              <>
+                <Link to="/login">Вход</Link>
+                <Link to="/register">Регистрация</Link>
+              </>
+            )}
           </div>
           <div>
             <b>Авторам</b>
