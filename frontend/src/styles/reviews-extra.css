@@ -1,0 +1,237 @@
+/* T70 — отзывы: статистика/гистограмма, фильтр по оценке, ответы преподавателя.
+   Импортируется только из components/Reviews.tsx; catalog.css и общие стили
+   не трогаем. Все правила скоупятся корнем .reviews. */
+
+.reviews-stats {
+  display: grid;
+  grid-template-columns: minmax(140px, 200px) 1fr;
+  gap: 18px;
+  align-items: center;
+  margin: 14px 0 18px;
+  padding: 16px 18px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+}
+
+.reviews-summary {
+  display: grid;
+  gap: 4px;
+  justify-items: center;
+  align-content: center;
+  padding-right: 18px;
+  border-right: 1px solid var(--line-soft);
+}
+
+.reviews-avg {
+  font-size: 40px;
+  font-weight: 800;
+  line-height: 1;
+  color: var(--fg);
+}
+
+.reviews-avg-stars {
+  color: #8a6d00;
+  font-size: 14px;
+  letter-spacing: 2px;
+}
+
+.reviews-total {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.reviews-hist {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.reviews-hist-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 2px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.reviews-reset {
+  border: 0;
+  background: transparent;
+  padding: 2px 0;
+  color: var(--brand);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.reviews-reset:hover:not(:disabled) {
+  color: var(--brand-dark);
+  text-decoration: underline;
+}
+
+.reviews-reset:disabled {
+  color: var(--faint);
+  cursor: default;
+}
+
+.reviews-reset:focus-visible,
+.reviews-hist-row:focus-visible {
+  outline: 2px solid var(--focus-ring-color);
+  outline-offset: var(--focus-ring-offset);
+}
+
+.reviews-hist-row {
+  display: grid;
+  grid-template-columns: 46px 1fr 34px;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  border: 0;
+  border-radius: 10px;
+  padding: 4px 6px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.reviews-hist-row:hover {
+  background: var(--line-soft);
+}
+
+.reviews-hist-row[aria-pressed='true'] {
+  background: var(--sun-soft);
+}
+
+.reviews-hist-label {
+  font-size: 13px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.reviews-bar {
+  display: block;
+  height: 10px;
+  border-radius: 999px;
+  background: var(--line-soft);
+  overflow: hidden;
+}
+
+.reviews-bar-fill {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--sun);
+  transition: width 0.2s ease;
+}
+
+.reviews-hist-count {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+  text-align: right;
+}
+
+/* Плашка ответа преподавателя под отзывом. */
+
+.reviews-reply {
+  margin-top: 10px;
+  padding: 12px 14px;
+  border-left: 3px solid var(--sun);
+  border-radius: 0 var(--r-sm) var(--r-sm) 0;
+  background: var(--sun-soft);
+}
+
+.reviews-reply-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  color: #8a6d00;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.reviews-reply p {
+  margin: 6px 0 0;
+}
+
+/* Форма ответа (владелец курса/admin). */
+
+.reviews-reply-form {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: #faf9f6;
+}
+
+.reviews-reply-form textarea {
+  margin-top: 0.25rem;
+  min-height: 96px;
+}
+
+.reviews-reply-form .err {
+  margin: 0;
+}
+
+.reviews-counter {
+  justify-self: end;
+  color: var(--muted);
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.reviews-counter.over {
+  color: var(--danger);
+}
+
+.reviews-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.reviews-reply-form .reviews-actions {
+  margin-top: 0;
+}
+
+.reviews-actions .btn {
+  margin-top: 0;
+}
+
+/* Удаление ответа — опасное действие, но не акцент экрана. */
+.reviews-delete-reply {
+  color: var(--danger);
+}
+
+.reviews-delete-reply:hover:not(:disabled) {
+  color: var(--danger);
+  background: var(--danger-bg);
+}
+
+@media (max-width: 640px) {
+  .reviews-stats {
+    grid-template-columns: 1fr;
+    gap: 14px;
+  }
+
+  .reviews-summary {
+    padding: 0 0 12px;
+    border-right: 0;
+    border-bottom: 1px solid var(--line-soft);
+  }
+}

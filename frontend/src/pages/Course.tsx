@@ -269,7 +269,7 @@ export default function Course(): JSX.Element {
               </div>
             </section>
 
-            <Reviews courseId={course.id} />
+            <Reviews courseId={course.id} canReply={isAuthor || isAdmin} />
           </div>
 
           <aside className="panel buybox">

@@ -12,6 +12,7 @@ import type {
   Course,
   CourseDetail,
   CourseItem,
+  CourseReviewsPage,
   CreateLessonInput,
   EnrollmentResult,
   Invite,
@@ -57,6 +58,7 @@ export type {
   QuizQuestion,
   QuizQuestionInput,
   Review,
+  ReviewBreakdown,
   Role,
   User,
 } from './types';
@@ -393,6 +395,48 @@ export function createReview(
     method: 'POST',
     body: JSON.stringify({ rating: input.rating, body: input.body }),
   });
+}
+
+/**
+ * T69: страница отзывов курса вместе с конвертом (avgRating/ratingsCount/
+ * breakdown). `rating` необязателен; при фильтре items/total — по оценке,
+ * статистика в конверте всё равно по всем отзывам.
+ */
+export function getCourseReviews(
+  courseId: string,
+  params?: { rating?: number },
+): Promise<CourseReviewsPage> {
+  return apiFetch<CourseReviewsPage>(
+    `/courses/${encodeURIComponent(courseId)}/reviews${buildQuery({
+      rating: params?.rating,
+    })}`,
+  );
+}
+
+/** T69: ответ преподавателя на отзыв (PUT, владелец курса/admin). */
+export function replyToReview(
+  courseId: string,
+  reviewId: string,
+  body: string,
+): Promise<Review> {
+  return apiFetch<{ review: Review }>(
+    `/teacher/courses/${encodeURIComponent(courseId)}/reviews/${encodeURIComponent(reviewId)}/reply`,
+    {
+      method: 'PUT',
+      body: JSON.stringify({ body }),
+    },
+  ).then((res) => res.review);
+}
+
+/** T69: удаление ответа преподавателя; 204, в том числе если ответа не было. */
+export function deleteReviewReply(
+  courseId: string,
+  reviewId: string,
+): Promise<void> {
+  return apiFetch<void>(
+    `/teacher/courses/${encodeURIComponent(courseId)}/reviews/${encodeURIComponent(reviewId)}/reply`,
+    { method: 'DELETE' },
+  );
 }
 
 // ---------- Утилиты ----------
