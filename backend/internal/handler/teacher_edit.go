@@ -63,6 +63,7 @@ type updateCourseRequest struct {
 	Description *string `json:"description"`
 	Slug        *string `json:"slug"`
 	PriceCents  *int    `json:"priceCents"`
+	Category    *string `json:"category"` // T65: nil — не менять
 }
 
 // TeacherUpdateCourse — PATCH /teacher/courses/{id}: частичное обновление
@@ -117,6 +118,16 @@ func (a *App) TeacherUpdateCourse(w http.ResponseWriter, r *http.Request) {
 		}
 		upd.PriceCents = req.PriceCents
 	}
+	if req.Category != nil {
+		// T65: PATCH принимает только фиксированные слаги; пустое значение
+		// тоже неизвестно (в отличие от создания, где отсутствие поля — other).
+		category := strings.TrimSpace(*req.Category)
+		if !validCourseCategory(category) {
+			writeErr(w, http.StatusBadRequest, "Неизвестная категория курса")
+			return
+		}
+		upd.Category = &category
+	}
 	if req.Slug != nil {
 		// T41: кириллица транслитерируется в латиницу (как в POST-создании).
 		s := translitSlug(*req.Slug)
@@ -131,7 +142,8 @@ func (a *App) TeacherUpdateCourse(w http.ResponseWriter, r *http.Request) {
 		}
 		upd.Slug = &s
 	}
-	if upd.Title == nil && upd.Description == nil && upd.Slug == nil && upd.PriceCents == nil {
+	if upd.Title == nil && upd.Description == nil && upd.Slug == nil &&
+		upd.PriceCents == nil && upd.Category == nil {
 		writeErr(w, http.StatusBadRequest, "Укажите хотя бы одно поле для обновления")
 		return
 	}

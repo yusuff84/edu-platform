@@ -122,6 +122,9 @@ func NewRouter(app *App) http.Handler {
 		r.Get("/auth/yandex/callback", app.YandexAuthCallback)
 
 		r.Get("/courses", app.ListCourses)
+		// T65: публичный список категорий — фиксированные шесть слагов
+		// и число published-курсов (регистрируется до /courses/{slug}).
+		r.Get("/categories", app.ListCategories)
 		r.Get("/courses/{slug}", app.GetCourse)
 		r.Get("/courses/{id}/reviews", app.ListReviews)
 		r.With(app.requireAuth).Post("/courses/{id}/reviews", app.CreateReview)

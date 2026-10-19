@@ -59,6 +59,12 @@ type StoreAPI interface {
 	GetCourseBySlug(slug string) (*Course, bool)
 	SlugTaken(slug string) bool
 	ListPublishedCourses(q string) []*Course
+	// ListCatalogCourses — опубликованные курсы с серверными фильтрами и
+	// сортировкой каталога (T65). Пагинация остаётся на стороне handler.
+	ListCatalogCourses(f CatalogFilter) []*Course
+	// CountPublishedCoursesByCategory — число published-курсов по слагам
+	// категорий (T65); отсутствующий в карте слаг означает 0.
+	CountPublishedCoursesByCategory() map[string]int
 	ListCoursesByTeacher(teacherID string) []*Course
 	ListCoursesByStatus(status CourseStatus) []*Course
 	SetCourseStatus(id string, status CourseStatus, comment string) bool

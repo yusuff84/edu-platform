@@ -47,12 +47,17 @@ func (s *Store) CloneCourseAs(courseID, teacherID string) (*Course, error) {
 	if owner == "" {
 		owner = src.TeacherID
 	}
+	category := src.Category
+	if strings.TrimSpace(category) == "" {
+		category = "other"
+	}
 	c := &Course{
 		ID:          uuid.NewString(),
 		TeacherID:   owner,
 		Slug:        s.freeCopySlugLocked(src.Slug),
 		Title:       copyTitle(src.Title),
 		Description: src.Description,
+		Category:    category,
 		CoverPath:   cloneStringPtr(src.CoverPath),
 		PriceCents:  src.PriceCents,
 		Currency:    src.Currency,

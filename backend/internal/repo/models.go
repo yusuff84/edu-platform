@@ -96,6 +96,10 @@ type Course struct {
 	Slug        string `json:"slug"`
 	Title       string `json:"title"`
 	Description string `json:"description"`
+	// Category — категория каталога (T65): один из слагов
+	// programming/design/data/marketing/ai/other. Валидация — в хендлерах;
+	// у старых курсов и при создании без поля — "other".
+	Category string `json:"category"`
 	// CoverPath — публичный путь обложки «/uploads/covers/<файл>» (T54).
 	// nil — обложки нет: в JSON отдаётся null (контракт волны P7:
 	// coverPath string|null во всех видах курса).

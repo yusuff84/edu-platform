@@ -46,10 +46,24 @@
 
 | Метод | Путь | Доступ | Тело / ответ |
 |---|---|---|---|
-| GET | `/api/v1/courses?q=&page=&limit=` | публичный | → `200` конверт `{items:[CourseItem],total,page,limit}` |
+| GET | `/api/v1/courses?q=&category=&price=&minRating=&sort=&page=&limit=` | публичный | → `200` конверт `{items:[CourseItem],total,page,limit}` |
+| GET | `/api/v1/categories` | публичный | → `200` `{items:[{slug,coursesCount}]}` — шесть категорий в фиксированном порядке: `programming, design, data, marketing, ai, other`; `coursesCount` — только `published` (T65) |
 | GET | `/api/v1/courses/{slug}` | публичный* | → `200` `{course, modules:[ModuleView]}`; *`draft` виден автору и админу, остальным 404 |
 | GET | `/api/v1/courses/{id}/reviews` | публичный | `{id}` — UUID или slug → `200` `{items:[Review],total,avgRating,ratingsCount}` |
 | POST | `/api/v1/courses/{id}/reviews` | студент с активной записью | `{rating:1..5, body}` → `201` `Review` |
+
+> Волна P8 (T65): `category` — слаг из `programming`, `design`, `data`,
+> `marketing`, `ai`, `other`. Необязателен при создании курса (по умолчанию
+> `other`), в `PATCH /api/v1/teacher/courses/{id}` без поля не меняется,
+> неизвестное или пустое значение — `400 «Неизвестная категория курса»`.
+> Поле `category` добавлено во все виды курса: каталог, страница курса,
+> списки и деталь teacher/admin. Серверные фильтры `GET /courses`:
+> `price=free|paid`, `minRating=3.5|4|4.5`, а также `sort` со значениями
+> `popular`, `new`, `rating`, `price_asc`, `price_desc` (по умолчанию
+> `popular`, вторичный ключ — `createdAt` desc); фильтры комбинируются с
+> `q/page/limit`, `total` считается до пагинации. Ошибки: `400 «Неизвестная
+> категория»`, «Недопустимый фильтр цены», «Недопустимый фильтр рейтинга»,
+> «Недопустимая сортировка».
 
 ### Прогресс обучения (`me`)
 
@@ -62,7 +76,7 @@
 
 | Метод | Путь | Тело / ответ |
 |---|---|---|
-| POST | `/api/v1/teacher/courses` | `{title, description, priceCents, slug?, currency?}` → `201` Course |
+| POST | `/api/v1/teacher/courses` | `{title, description, priceCents, category?, slug?, currency?}` → `201` Course |
 | GET | `/api/v1/teacher/courses` | → `200` `{items:[Course],total}` |
 | POST | `/api/v1/teacher/courses/{id}/modules` | `{title}` → `201` Module |
 | POST | `/api/v1/teacher/courses/{id}/lessons` | по `kind`: `{moduleId,title,kind,bodyMd?,videoUrl?,liveUrl?,startsAt?,quiz?,codeTask?}` → `201` Lesson |
