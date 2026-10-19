@@ -278,6 +278,14 @@ export interface PaymentJournalPage {
 export interface AdminSettings {
   /** Комиссия платформы в процентах, 0..90. */
   commissionPct: number;
+  /** Пост-P7: включён ли промо-баннер «Первый курс со скидкой» (тогл админки). */
+  promoBarEnabled: boolean;
+}
+
+/** Публичные настройки интерфейса (GET /settings/public) — без авторизации. */
+export interface PublicSettings {
+  /** Показывать ли гостевой промо-баннер сверху страниц. */
+  promoBarEnabled: boolean;
 }
 
 // ---------- Входные формы запросов ----------

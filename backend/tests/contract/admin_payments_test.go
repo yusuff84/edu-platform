@@ -307,3 +307,69 @@ func TestAdminSettingsCommission(t *testing.T) {
 		t.Fatalf("сплит не учитывает новую комиссию: fee=%d teacher=%d", p.PlatformFeeCents, p.TeacherAmountCents)
 	}
 }
+
+// Пост-P7: тогл промо-баннера. GET /admin/settings отдаёт promoBarEnabled
+// (по умолчанию true), PUT принимает частичное обновление (одно поле вместо
+// двух), публичный GET /settings/public отражает состояние без авторизации.
+func TestAdminSettingsPromoBar(t *testing.T) {
+	app, router := newTestApp()
+	// Свой админ (как в seedPublishedCourse): регистрация + роль напрямую в store.
+	registerUser(t, router, "promo-admin@example.com", "password123", "")
+	promoteToAdmin(t, app, "promo-admin@example.com")
+	adminCookies := loginUser(t, router, "promo-admin@example.com", "password123")
+
+	// Публичный эндпоинт доступен без куки и по умолчанию включён.
+	rec := doRequest(t, router, http.MethodGet, "/api/v1/settings/public", nil, nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("public settings: status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var pub map[string]any
+	decodeBody(t, rec, &pub)
+	if pub["promoBarEnabled"] != true {
+		t.Fatalf("promoBarEnabled по умолчанию=%v, ждали true", pub["promoBarEnabled"])
+	}
+	// Приватные настройки в публичный ответ не попадают.
+	if _, ok := pub["commissionPct"]; ok {
+		t.Fatalf("публичные настройки не должны отдавать комиссию: %s", rec.Body.String())
+	}
+
+	// Админский GET отдаёт оба поля.
+	rec = doRequest(t, router, http.MethodGet, "/api/v1/admin/settings", nil, adminCookies)
+	var settings map[string]any
+	decodeBody(t, rec, &settings)
+	if settings["promoBarEnabled"] != true || settings["commissionPct"] != float64(15) {
+		t.Fatalf("admin settings: %s", rec.Body.String())
+	}
+
+	// Частичный PUT: только промо; комиссия в ответе — текущая (не «нулевая»).
+	rec = doRequest(t, router, http.MethodPut, "/api/v1/admin/settings", map[string]any{
+		"promoBarEnabled": false,
+	}, adminCookies)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("put promo: status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	decodeBody(t, rec, &settings)
+	if settings["promoBarEnabled"] != false || settings["commissionPct"] != float64(15) {
+		t.Fatalf("ответ PUT promo: %s", rec.Body.String())
+	}
+
+	// Гость видит выключенный баннер.
+	rec = doRequest(t, router, http.MethodGet, "/api/v1/settings/public", nil, nil)
+	decodeBody(t, rec, &pub)
+	if pub["promoBarEnabled"] != false {
+		t.Fatalf("public после выключения: %s", rec.Body.String())
+	}
+
+	// Включаем обратно — оба чтения снова true.
+	rec = doRequest(t, router, http.MethodPut, "/api/v1/admin/settings", map[string]any{
+		"promoBarEnabled": true,
+	}, adminCookies)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("put promo on: status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	rec = doRequest(t, router, http.MethodGet, "/api/v1/settings/public", nil, nil)
+	decodeBody(t, rec, &pub)
+	if pub["promoBarEnabled"] != true {
+		t.Fatalf("public после включения: %s", rec.Body.String())
+	}
+}

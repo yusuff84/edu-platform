@@ -10,12 +10,14 @@ import {
   createLesson,
   createModule,
   getAdminSettings,
+  getPublicSettings,
   moderateCourse,
   myTeaching,
   paymentJournal,
   reviewQueue,
   submitCourse,
   updateAdminSettings,
+  updateAdminSettingsPromo,
 } from '../../.tmp-api-test/client.js';
 
 let api;
@@ -296,6 +298,25 @@ test('updateAdminSettings: PUT /admin/settings, тело строго {commissio
   assert.equal(req.method, 'PUT');
   assert.equal(req.path, '/api/v1/admin/settings');
   assert.deepEqual(expectBodyKeys(jsonBody(req), ['commissionPct']), { commissionPct: 12.5 });
+});
+
+test('updateAdminSettingsPromo: PUT /admin/settings, тело строго {promoBarEnabled}', async () => {
+  api.mockReply({ json: { commissionPct: 10, promoBarEnabled: false } });
+  const settings = await updateAdminSettingsPromo(false);
+  assert.deepEqual(settings, { commissionPct: 10, promoBarEnabled: false });
+  const req = lastRequest(api);
+  assert.equal(req.method, 'PUT');
+  assert.equal(req.path, '/api/v1/admin/settings');
+  assert.deepEqual(expectBodyKeys(jsonBody(req), ['promoBarEnabled']), { promoBarEnabled: false });
+});
+
+test('getPublicSettings: GET /settings/public без авторизации', async () => {
+  api.mockReply({ json: { promoBarEnabled: true } });
+  const settings = await getPublicSettings();
+  assert.deepEqual(settings, { promoBarEnabled: true });
+  const req = lastRequest(api);
+  assert.equal(req.method, 'GET');
+  assert.equal(req.path, '/api/v1/settings/public');
 });
 
 test('paymentJournal: без параметров — GET /admin/payments без query', async () => {
