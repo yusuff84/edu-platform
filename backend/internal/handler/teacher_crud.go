@@ -8,12 +8,10 @@ package handler
 // в middleware.go: requireAuth + requireRole(teacher, admin) навешаны родителем,
 // пути относительные — так же, как RegisterTeacherEditRoutes (T13).
 //
-// GET /teacher/courses здесь перезаписывает обработчик из teacher.go:
-// chi НЕ паникует на дубликат маршрута — setEndpoint перезаписывает
-// обработчик узла, побеждает последняя регистрация (проверено по исходникам
-// chi v5.1.0, tree.go). Поэтому файл teacher.go (зона T13/T16) не менялся,
-// а список моих курсов отдаётся с modulesCount/lessonsCount — фронт больше
-// не делает N+1 запросов.
+// GET /teacher/courses — единственная регистрация (T53 убрал мёртвый дубль
+// регистрации из middleware.go и обработку-дубль из teacher.go): список
+// моих курсов отдаётся с modulesCount/lessonsCount — фронт больше не делает
+// N+1 запросов.
 //
 // Права: только владелец курса или админ (ownCourse).
 // Статус: контент (уроки, порядок, удаление) — только draft (409 иначе);
@@ -26,7 +24,6 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
-	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -68,10 +65,10 @@ type teacherCourseItem struct {
 	LessonsCount int `json:"lessonsCount"`
 }
 
-// TeacherListCoursesWithCounts — GET /teacher/courses: как TeacherListCourses
-// из teacher.go, но в каждый элемент добавлены modulesCount/lessonsCount
-// (одним запросом CountContentByCourses вместо N+1 на фронте; T19).
-// items никогда не null — make с нулевой ёмкостью.
+// TeacherListCoursesWithCounts — GET /teacher/courses (единственная
+// регистрация с T53): в каждый элемент списка добавлены
+// modulesCount/lessonsCount (одним запросом CountContentByCourses вместо
+// N+1 на фронте; T19). items никогда не null — make с нулевой ёмкостью.
 func (a *App) TeacherListCoursesWithCounts(w http.ResponseWriter, r *http.Request) {
 	u, ok := a.currentUser(r)
 	if !ok {
@@ -105,7 +102,7 @@ type updateLessonRequest struct {
 	VideoURL *string          `json:"videoUrl"`
 	LiveURL  *string          `json:"liveUrl"`
 	StartsAt *string          `json:"startsAt"` // "" — очистить; отсутствует — не менять
-	Quiz     *repo.QuizData   `json:"quiz"`
+	Quiz     *quizRequest     `json:"quiz"`
 	CodeTask *repo.CodeTask   `json:"codeTask"`
 }
 
@@ -163,7 +160,9 @@ func (a *App) TeacherUpdateLesson(w http.ResponseWriter, r *http.Request) {
 		if raw == "" {
 			merged.StartsAt = nil // явная очистка
 		} else {
-			ts, err := time.Parse(time.RFC3339, raw)
+			// Контракт P7: datetime-local (без зоны) тоже принимается, строка
+			// без зоны трактуется как UTC; ответ/ошибки — как было (400).
+			ts, err := parseLessonStartsAt(raw)
 			if err != nil {
 				writeErr(w, http.StatusBadRequest,
 					"Некорректный startsAt: ожидается дата в формате RFC3339 (например 2030-01-01T12:00:00Z)")
@@ -173,7 +172,14 @@ func (a *App) TeacherUpdateLesson(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if req.Quiz != nil {
-		merged.Quiz = req.Quiz
+		// Контракт P7: тест проверяется в форме запроса (validate — явный
+		// правильный ответ correct/correctIndex + правила), затем слитый
+		// урок повторно проверяет validateLessonContent → validateQuiz.
+		if msg := req.Quiz.validate(); msg != "" {
+			writeErr(w, http.StatusBadRequest, msg)
+			return
+		}
+		merged.Quiz = req.Quiz.toRepo()
 		for i := range merged.Quiz.Questions {
 			if strings.TrimSpace(merged.Quiz.Questions[i].ID) == "" {
 				merged.Quiz.Questions[i].ID = uuid.NewString()
@@ -207,8 +213,10 @@ func (a *App) lessonInCourse(l *repo.Lesson, courseID string) bool {
 }
 
 // validateLessonContent проверяет содержимое урока по kind. Возвращает пустую
-// строку, если урок валиден, иначе текст ошибки для 400. Копия валидации из
-// TeacherCreateLesson (teacher.go — зона T13/T16, в волне B не меняется).
+// строку, если урок валиден, иначе текст ошибки для 400. Ветки video/live/code
+// повторяют валидацию TeacherCreateLesson (teacher.go); с T53 (P7) quiz
+// проверяет общий validateQuiz из teacher.go (контракт P7): текст вопроса,
+// не менее двух непустых вариантов, правильный ответ в границах.
 func validateLessonContent(l *repo.Lesson) string {
 	switch l.Kind {
 	case repo.LessonVideoText:
@@ -220,17 +228,10 @@ func validateLessonContent(l *repo.Lesson) string {
 			return "Для live-урока нужна ссылка на трансляцию"
 		}
 	case repo.LessonQuiz:
-		if l.Quiz == nil || len(l.Quiz.Questions) == 0 {
-			return "Квиз должен содержать минимум 1 вопрос"
-		}
-		for i := range l.Quiz.Questions {
-			q := &l.Quiz.Questions[i]
-			if strings.TrimSpace(q.Text) == "" || len(q.Options) < 2 {
-				return "Каждый вопрос: текст и минимум 2 варианта ответа"
-			}
-			if q.Correct < 0 || q.Correct >= len(q.Options) {
-				return "Индекс правильного ответа вне диапазона вариантов"
-			}
+		// Контракт P7: тест валидируется и на PATCH, текст ошибки начинается
+		// с «Некорректный тест:» (validateQuiz — общий с POST, T53).
+		if msg := validateQuiz(l.Quiz); msg != "" {
+			return msg
 		}
 	case repo.LessonCode:
 		if l.CodeTask == nil {

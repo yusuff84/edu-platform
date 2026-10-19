@@ -68,6 +68,16 @@
 | POST | `/api/v1/teacher/courses/{id}/lessons` | по `kind`: `{moduleId,title,kind,bodyMd?,videoUrl?,liveUrl?,startsAt?,quiz?,codeTask?}` → `201` Lesson |
 | POST | `/api/v1/teacher/courses/{id}/submit` | пустое → `200` Course (`status:review`) |
 
+> Волна P7 (T53): `POST /api/v1/teacher/courses/{id}/unpublish` — тело
+> не требуется, `published → draft`, ответ `200` `{course}`; `409 «Снять с
+> публикации можно только опубликованный курс»`, `403` — чужой курс, `404` —
+> курса нет. PATCH урока принимает `startsAt` в RFC3339 **или** datetime-local
+> `ГГГГ-ММ-ДДТЧЧ:ММ` (строка без зоны трактуется как UTC; мусор — `400`).
+> Тест (`kind:"quiz"`) валидируется на бэкенде: текст вопроса после TrimSpace,
+> не менее двух непустых вариантов, правильный ответ (`correct` или
+> `correctIndex`) указан и попадает в границы списка, иначе
+> `400 «Некорректный тест: …»`.
+
 > В бэклоге T13: `GET/PATCH/DELETE /teacher/courses[...]`, PATCH модулей/уроков,
 > reorder — в `Task/T13-integration-wiring.md`.
 

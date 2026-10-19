@@ -123,7 +123,9 @@ func NewRouter(app *App) http.Handler {
 		r.Route("/teacher", func(r chi.Router) {
 			r.Use(app.requireAuth, app.requireRole(repo.RoleTeacher, repo.RoleAdmin))
 			r.Post("/courses", app.TeacherCreateCourse)
-			r.Get("/courses", app.TeacherListCourses)
+			// GET /teacher/courses регистрируется одна — в
+			// RegisterTeacherCRUDRoutes (teacher_crud.go, T19): мёртвый дубль
+			// регистрации сюда больше не возвращается (чистка T53).
 			r.Post("/courses/{id}/modules", app.TeacherCreateModule)
 			r.Post("/courses/{id}/lessons", app.TeacherCreateLesson)
 			r.Post("/courses/{id}/submit", app.TeacherSubmitCourse)
