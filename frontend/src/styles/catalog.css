@@ -122,3 +122,36 @@
 .review-form textarea {
   margin-top: 0.25rem;
 }
+
+/* ---------- T57: обложка курса (T54, coverPath) ---------- */
+
+/* Публичная страница курса: кадр-хиро над заголовком шапки. Отсутствие
+   обложки ничего не меняет — img просто не рендерится. */
+.cover-hero {
+  display: block;
+  width: 100%;
+  height: 200px;
+  object-fit: cover;
+  border-radius: 12px;
+  margin-bottom: 14px;
+}
+
+/* Публичная страница курса: реальная обложка в вилке покупки
+   (вместо клише-градиента cover-*, который остаётся у курсов без обложки). */
+.cover-buy {
+  display: block;
+  width: 100%;
+  height: 150px;
+  object-fit: cover;
+  border-radius: 12px;
+}
+
+/* Мини-превью на плитке каталога: кадр заполняет существующую обложку
+   плитки (градиент-подложка под ним — страховка от «битой пикчю»). */
+.tile-cover-img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
