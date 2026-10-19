@@ -1,7 +1,13 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
-import { listCourses, me } from '../api/client';
+import { getCategories, listCourses, me } from '../api/client';
+import type {
+  CategoryStat,
+  CourseMinRatingFilter,
+  CoursePriceFilter,
+  CourseSort,
+} from '../api/client';
 import CourseCard from '../components/CourseCard';
 import {
   DiplomaBlock,
@@ -12,7 +18,9 @@ import {
   SupportBlock,
 } from '../components/marketing';
 import { t } from '../i18n/t';
+import type { RuKey } from '../i18n/t';
 import '../styles/catalog.css';
+import '../styles/catalog-filters.css';
 
 /** Размер страницы каталога (контракт: limit по умолч. 20, максимум 100). */
 const LIMIT = 12;
@@ -21,33 +29,90 @@ const SKELETONS = 6;
 /** Задержка поиска, мс. */
 const DEBOUNCE_MS = 300;
 
-type Seg = 'often' | 'rating' | 'price';
+// ---------- T66: параметры фильтров каталога ----------
 
-const PILLS: Array<{ label: string; q: string }> = [
-  { label: 'Популярное', q: '' },
-  { label: 'Программирование', q: 'python' },
-  { label: 'Дизайн', q: 'дизайн' },
-  { label: 'Данные', q: 'sql' },
-  { label: 'Маркетинг', q: 'маркетинг' },
-  { label: 'Нейросети', q: 'нейро' },
-];
+/** Фиксированный список категорий (контракт T65). */
+const CATEGORY_SLUGS = ['programming', 'design', 'data', 'marketing', 'ai', 'other'] as const;
+type CategorySlug = (typeof CATEGORY_SLUGS)[number];
 
-const SEGS: Array<{ key: Seg; label: string }> = [
-  { key: 'often', label: 'Часто выбирают' },
-  { key: 'rating', label: 'Высокий рейтинг' },
-  { key: 'price', label: 'Доступные' },
-];
+/** Подписи категорий — только готовые ключи p8.cat.*. */
+const CATEGORY_LABEL: Record<CategorySlug, RuKey> = {
+  programming: 'p8.cat.programming',
+  design: 'p8.cat.design',
+  data: 'p8.cat.data',
+  marketing: 'p8.cat.marketing',
+  ai: 'p8.cat.ai',
+  other: 'p8.cat.other',
+};
+
+const PRICE_FILTERS: CoursePriceFilter[] = ['free', 'paid'];
+
+const PRICE_LABEL: Record<CoursePriceFilter, RuKey> = {
+  free: 'p8.catalog.priceFree',
+  paid: 'p8.catalog.pricePaid',
+};
+
+const RATING_FILTERS: CourseMinRatingFilter[] = ['3.5', '4', '4.5'];
+
+const RATING_LABEL: Record<CourseMinRatingFilter, RuKey> = {
+  '3.5': 'p8.catalog.rating35',
+  '4': 'p8.catalog.rating40',
+  '4.5': 'p8.catalog.rating45',
+};
+
+const SORT_OPTIONS: CourseSort[] = ['popular', 'new', 'rating', 'price_asc', 'price_desc'];
+
+const SORT_LABEL: Record<CourseSort, RuKey> = {
+  popular: 'p8.catalog.sortPopular',
+  new: 'p8.catalog.sortNew',
+  rating: 'p8.catalog.sortRating',
+  price_asc: 'p8.catalog.sortPriceAsc',
+  price_desc: 'p8.catalog.sortPriceDesc',
+};
+
+/** Сортировка по умолчанию — как на backend; в URL её не дублируем. */
+const DEFAULT_SORT: CourseSort = 'popular';
+
+/** Параметры фильтров, которые пишутся в URL. */
+type FilterParam = 'category' | 'price' | 'minRating' | 'sort';
+
+/** Значение из фиксированного списка или undefined (неизвестное не применяем). */
+function readOneOf<T extends string>(
+  value: string | null,
+  allowed: readonly T[],
+): T | undefined {
+  return value !== null && (allowed as readonly string[]).includes(value)
+    ? (value as T)
+    : undefined;
+}
+
+/** Номер страницы из URL: целое ≥ 1, иначе 1. */
+function readPage(value: string | null): number {
+  const n = Number(value);
+  return Number.isInteger(n) && n >= 1 ? n : 1;
+}
+
+/** Название категории по слагу; неизвестный слаг показываем как есть. */
+function categoryLabel(slug: string): string {
+  const key = CATEGORY_LABEL[slug as CategorySlug];
+  return key ? t(key) : slug;
+}
 
 export default function Catalog(): JSX.Element {
   const [searchParams, setSearchParams] = useSearchParams();
-  // Поиск живёт в URL (?q=) — ссылку можно передать, «назад/вперёд» работает.
-  const urlQ = searchParams.get('q') ?? '';
 
-  // Локальное значение поля ввода; в URL попадает после дебаунса.
+  // Единственный источник истины для активных фильтров — URL (ссылка шарится,
+  // «назад/вперёд» восстанавливают состояние). Локально живёт только черновик
+  // строки поиска (до debounce) и свёрнутость панели на узких экранах.
+  const urlQ = searchParams.get('q') ?? '';
+  const category = readOneOf(searchParams.get('category'), CATEGORY_SLUGS);
+  const price = readOneOf(searchParams.get('price'), PRICE_FILTERS);
+  const minRating = readOneOf(searchParams.get('minRating'), RATING_FILTERS);
+  const sort = readOneOf(searchParams.get('sort'), SORT_OPTIONS) ?? DEFAULT_SORT;
+  const page = readPage(searchParams.get('page'));
+
   const [q, setQ] = useState(urlQ);
-  const [page, setPage] = useState(1);
-  const [seg, setSeg] = useState<Seg>('often');
-  const [activePill, setActivePill] = useState('Популярное');
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const cardsRef = useRef<HTMLDivElement>(null);
 
   // Изменение URL извне (кнопка «назад», внешняя ссылка) → текст в поле.
@@ -65,78 +130,134 @@ export default function Catalog(): JSX.Element {
           const p = new URLSearchParams(prev);
           if (next) p.set('q', next);
           else p.delete('q');
+          p.delete('page');
           return p;
         },
         { replace: true },
       );
-      setPage(1);
     }, DEBOUNCE_MS);
     return () => window.clearTimeout(id);
   }, [q, urlQ, setSearchParams]);
 
   const query = useQuery({
     // Данные предыдущей страницы держим на экране, пока грузится новая.
-    queryKey: ['courses', urlQ, page, LIMIT],
-    queryFn: () => listCourses({ q: urlQ || undefined, page, limit: LIMIT }),
+    queryKey: [
+      'courses',
+      {
+        q: urlQ,
+        category: category ?? '',
+        price: price ?? '',
+        minRating: minRating ?? '',
+        sort,
+        page,
+        limit: LIMIT,
+      },
+    ],
+    queryFn: () =>
+      listCourses({
+        q: urlQ || undefined,
+        category: category || undefined,
+        price,
+        minRating,
+        // popular — серверный дефолт: не засоряем запрос и URL.
+        sort: sort === DEFAULT_SORT ? undefined : sort,
+        page,
+        limit: LIMIT,
+      }),
     placeholderData: keepPreviousData,
     retry: false,
   });
   const meQuery = useQuery({ queryKey: ['me'], queryFn: me, retry: false });
   const role = meQuery.data?.role;
 
-  // Клиентская сортировка вкладок поверх серверной выдачи страницы.
-  const items = useMemo(() => {
-    const list = [...(query.data?.items ?? [])];
-    if (seg === 'often') list.sort((a, b) => (b.ratingsCount ?? 0) - (a.ratingsCount ?? 0));
-    if (seg === 'rating') list.sort((a, b) => b.avgRating - a.avgRating);
-    if (seg === 'price') list.sort((a, b) => a.priceCents - b.priceCents);
-    return list;
-  }, [query.data, seg]);
+  // Категории и счётчики курсов — с сервера; пока их нет (или запрос упал),
+  // показываем фиксированный список без счётчиков, чтобы фильтр работал.
+  const categoriesQuery = useQuery({
+    queryKey: ['categories'],
+    queryFn: getCategories,
+    retry: false,
+  });
+  const categories: CategoryStat[] =
+    categoriesQuery.data && categoriesQuery.data.length > 0
+      ? categoriesQuery.data
+      : CATEGORY_SLUGS.map((slug) => ({ slug, coursesCount: 0 }));
 
   const data = query.data;
+  const items = data?.items ?? [];
   const total = data?.total ?? 0;
   const totalPages = Math.max(1, Math.ceil(total / LIMIT));
 
-  // Страница могла выйти за пределы выдачи (поиск уменьшил total) — вернуться на последнюю.
+  // Страница могла выйти за пределы выдачи (фильтры уменьшили total) — вернуться на последнюю.
   useEffect(() => {
-    if (data && page > totalPages) setPage(totalPages);
-  }, [data, page, totalPages]);
+    if (!data || page <= totalPages) return;
+    setSearchParams(
+      (prev) => {
+        const p = new URLSearchParams(prev);
+        if (totalPages > 1) p.set('page', String(totalPages));
+        else p.delete('page');
+        return p;
+      },
+      { replace: true },
+    );
+  }, [data, page, totalPages, setSearchParams]);
 
   const avgRating =
     items.length > 0 ? items.reduce((n, c) => n + c.avgRating, 0) / items.length : 0;
   const totalReviews = items.reduce((n, c) => n + (c.ratingsCount ?? 0), 0);
 
-  const isSearching = urlQ.trim().length > 0;
+  const filtersActive = Boolean(
+    urlQ.trim() || category || price || minRating || sort !== DEFAULT_SORT,
+  );
   const isEmpty = Boolean(data) && items.length === 0;
   // «Показано N из M»: сколько курсов пользователь уже увидел листанием.
   const shown = data ? Math.min(total, (page - 1) * LIMIT + items.length) : 0;
 
-  /** Применить текущий текст поля сразу (по кнопке «Найти» или пилюле), без дебаунса. */
+  /** Точечная запись фильтра в URL; пустое значение удаляет параметр. */
+  function setFilter(name: FilterParam, value: string): void {
+    setSearchParams((prev) => {
+      const p = new URLSearchParams(prev);
+      if (value) p.set(name, value);
+      else p.delete(name);
+      // Любое изменение фильтра — с первой страницы.
+      p.delete('page');
+      return p;
+    });
+  }
+
+  /** Применить текущий текст поля сразу (по кнопке «Найти»), без дебаунса. */
   function applySearch(value: string): void {
     const next = value.trim();
-    setSearchParams(
-      (prev) => {
-        const p = new URLSearchParams(prev);
-        if (next) p.set('q', next);
-        else p.delete('q');
-        return p;
-      },
-      { replace: true },
-    );
-    setPage(1);
+    setQ(next);
+    if (next === urlQ) return;
+    setSearchParams((prev) => {
+      const p = new URLSearchParams(prev);
+      if (next) p.set('q', next);
+      else p.delete('q');
+      p.delete('page');
+      return p;
+    });
   }
 
-  function resetSearch(): void {
+  /** Сбросить все фильтры и поиск, вернуться на первую страницу. */
+  function resetFilters(): void {
     setQ('');
-    setActivePill('Популярное');
-    applySearch('');
+    setSearchParams((prev) => {
+      const p = new URLSearchParams(prev);
+      for (const key of ['q', 'category', 'price', 'minRating', 'sort', 'page']) {
+        p.delete(key);
+      }
+      return p;
+    });
   }
 
-  function onPill(pill: { label: string; q: string }): void {
-    setActivePill(pill.label);
-    setSeg('often');
-    setQ(pill.q);
-    applySearch(pill.q);
+  /** Переход по страницам — тоже через URL (page=1 не дублируем). */
+  function goToPage(next: number): void {
+    setSearchParams((prev) => {
+      const p = new URLSearchParams(prev);
+      if (next > 1) p.set('page', String(next));
+      else p.delete('page');
+      return p;
+    });
   }
 
   function scrollToCards(): void {
@@ -179,16 +300,6 @@ export default function Catalog(): JSX.Element {
             </div>
           </div>
           <div className="cats">
-            {PILLS.map((p) => (
-              <button
-                key={p.label}
-                type="button"
-                className={`cat${activePill === p.label ? ' active' : ''}`}
-                onClick={() => onPill(p)}
-              >
-                {p.label}
-              </button>
-            ))}
             <a
               className="cat dark"
               href="#lead"
@@ -209,20 +320,6 @@ export default function Catalog(): JSX.Element {
             Курсы для карьеры
             <br />и жизни
           </h2>
-          <div className="seg" role="tablist">
-            {SEGS.map((s) => (
-              <button
-                key={s.key}
-                type="button"
-                role="tab"
-                aria-selected={seg === s.key}
-                className={seg === s.key ? 'active' : ''}
-                onClick={() => setSeg(s.key)}
-              >
-                {s.label}
-              </button>
-            ))}
-          </div>
           <form
             role="search"
             aria-label={t('a11y.searchLabel')}
@@ -259,10 +356,159 @@ export default function Catalog(): JSX.Element {
           </form>
         </div>
 
+        {/* Узкие экраны: панель фильтров сворачивается этим тогглом. */}
+        <button
+          type="button"
+          className="btn btn-sm catalog-filters-toggle"
+          aria-expanded={filtersOpen}
+          aria-controls="catalog-filters"
+          onClick={() => setFiltersOpen((open) => !open)}
+        >
+          {t(filtersOpen ? 'p8.catalog.filtersHide' : 'p8.catalog.filtersShow')}
+        </button>
+
+        <section
+          id="catalog-filters"
+          className={`panel catalog-filters${filtersOpen ? ' is-open' : ''}`}
+          aria-label={t('p8.catalog.filters')}
+        >
+          <div className="catalog-filters__grid">
+            <div className="catalog-filters__group catalog-filters__group--categories">
+              <span className="catalog-filters__label" id="catalog-category-label">
+                {t('p8.catalog.category')}
+              </span>
+              <div
+                className="catalog-chips"
+                role="group"
+                aria-labelledby="catalog-category-label"
+              >
+                <button
+                  type="button"
+                  className={`catalog-chip${category ? '' : ' is-active'}`}
+                  aria-pressed={!category}
+                  onClick={() => setFilter('category', '')}
+                >
+                  {t('p8.catalog.allCategories')}
+                </button>
+                {categories.map((c) => {
+                  const active = category === c.slug;
+                  return (
+                    <button
+                      key={c.slug}
+                      type="button"
+                      className={`catalog-chip${active ? ' is-active' : ''}`}
+                      aria-pressed={active}
+                      onClick={() => setFilter('category', c.slug)}
+                    >
+                      {categoryLabel(c.slug)}
+                      {c.coursesCount > 0 && (
+                        <span className="catalog-chip__count">{c.coursesCount}</span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="catalog-filters__group">
+              <span className="catalog-filters__label" id="catalog-price-label">
+                {t('p8.catalog.price')}
+              </span>
+              <div className="catalog-chips" role="group" aria-labelledby="catalog-price-label">
+                <button
+                  type="button"
+                  className={`catalog-chip${price ? '' : ' is-active'}`}
+                  aria-pressed={!price}
+                  onClick={() => setFilter('price', '')}
+                >
+                  {t('p8.catalog.priceAny')}
+                </button>
+                {PRICE_FILTERS.map((value) => {
+                  const active = price === value;
+                  return (
+                    <button
+                      key={value}
+                      type="button"
+                      className={`catalog-chip${active ? ' is-active' : ''}`}
+                      aria-pressed={active}
+                      onClick={() => setFilter('price', value)}
+                    >
+                      {t(PRICE_LABEL[value])}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="catalog-filters__group">
+              <span className="catalog-filters__label" id="catalog-rating-label">
+                {t('p8.catalog.rating')}
+              </span>
+              <div
+                className="catalog-chips"
+                role="group"
+                aria-labelledby="catalog-rating-label"
+              >
+                <button
+                  type="button"
+                  className={`catalog-chip${minRating ? '' : ' is-active'}`}
+                  aria-pressed={!minRating}
+                  onClick={() => setFilter('minRating', '')}
+                >
+                  {t('p8.catalog.ratingAny')}
+                </button>
+                {RATING_FILTERS.map((value) => {
+                  const active = minRating === value;
+                  return (
+                    <button
+                      key={value}
+                      type="button"
+                      className={`catalog-chip${active ? ' is-active' : ''}`}
+                      aria-pressed={active}
+                      onClick={() => setFilter('minRating', value)}
+                    >
+                      {t(RATING_LABEL[value])}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <label className="catalog-filters__group catalog-filters__sort" htmlFor="catalog-sort">
+              <span className="catalog-filters__label">{t('p8.catalog.sort')}</span>
+              <select
+                id="catalog-sort"
+                className="select"
+                value={sort}
+                onChange={(e) =>
+                  setFilter('sort', e.target.value === DEFAULT_SORT ? '' : e.target.value)
+                }
+              >
+                {SORT_OPTIONS.map((value) => (
+                  <option key={value} value={value}>
+                    {t(SORT_LABEL[value])}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <div className="catalog-filters__actions">
+              <button
+                type="button"
+                className="btn btn-sm"
+                onClick={resetFilters}
+                disabled={!filtersActive && page === 1}
+              >
+                {t('p8.catalog.reset')}
+              </button>
+            </div>
+          </div>
+        </section>
+
         <div className="count-line" ref={cardsRef}>
           <h2>{t('catalog.title')}</h2>
-          <span>
-            Найдено: {items.length} из {total}
+          <span aria-live="polite">
+            {t('p8.catalog.found')}: {total}
           </span>
         </div>
 
@@ -288,15 +534,17 @@ export default function Catalog(): JSX.Element {
 
         {isEmpty && (
           <div className="empty">
-            <h3>{isSearching ? 'Курсов пока нет' : t('catalog.emptyCatalogTitle')}</h3>
+            <h3>
+              {filtersActive ? t('p8.catalog.nothingFound') : t('catalog.emptyCatalogTitle')}
+            </h3>
             <p style={{ margin: '0 0 14px' }}>
-              {isSearching
-                ? 'Попробуйте изменить запрос или сбросить фильтры — подберём что-нибудь подходящее.'
+              {filtersActive
+                ? t('p8.catalog.nothingFoundHint')
                 : t('catalog.emptyCatalogHint')}
             </p>
-            {isSearching ? (
-              <button type="button" className="btn" onClick={resetSearch}>
-                Сбросить фильтры
+            {filtersActive ? (
+              <button type="button" className="btn" onClick={resetFilters}>
+                {t('p8.catalog.reset')}
               </button>
             ) : (
               <>
@@ -330,7 +578,7 @@ export default function Catalog(): JSX.Element {
             <button
               type="button"
               className="btn btn-sm"
-              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              onClick={() => goToPage(page - 1)}
               disabled={page <= 1}
             >
               {t('common.prev')}
@@ -341,7 +589,7 @@ export default function Catalog(): JSX.Element {
             <button
               type="button"
               className="btn btn-sm"
-              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              onClick={() => goToPage(page + 1)}
               disabled={page >= totalPages}
             >
               {t('common.next')}

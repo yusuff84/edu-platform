@@ -1,0 +1,165 @@
+/* T66 — панель фильтров каталога: категории, цена, рейтинг, сортировка.
+   Стили скоупятся корнем .catalog-page; catalog.css и styles.css не меняются.
+   Геометрия/цвета — на переменных и классах дизайн-системы. */
+
+/* ---------- Панель и её сетка ---------- */
+
+.catalog-page .catalog-filters {
+  margin-top: 22px;
+}
+
+.catalog-filters__grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, auto);
+  gap: 16px 22px;
+  align-items: end;
+}
+
+.catalog-filters__group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.catalog-filters__group--categories {
+  grid-column: 1 / -1;
+}
+
+.catalog-filters__label {
+  font-size: 12.5px;
+  font-weight: 800;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+/* ---------- Чипы значений ---------- */
+
+.catalog-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.catalog-page .catalog-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 7px 14px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--fg);
+  font-family: var(--font);
+  font-size: 13.5px;
+  font-weight: 700;
+  line-height: 1.15;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+
+.catalog-page .catalog-chip:hover {
+  background: var(--line-soft);
+}
+
+.catalog-page .catalog-chip.is-active {
+  background: var(--fg);
+  border-color: var(--fg);
+  color: #fff;
+}
+
+.catalog-page .catalog-chip.is-active:hover {
+  background: #000;
+  border-color: #000;
+}
+
+.catalog-chip__count {
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--line-soft);
+  color: var(--muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.catalog-page .catalog-chip.is-active .catalog-chip__count {
+  background: rgba(255, 255, 255, 0.24);
+  color: #fff;
+}
+
+/* ---------- Сортировка и сброс ---------- */
+
+.catalog-filters__sort .select {
+  min-width: 0;
+}
+
+.catalog-filters__actions {
+  display: flex;
+  align-items: flex-end;
+  justify-content: flex-end;
+}
+
+.catalog-page .catalog-filters__actions .btn {
+  white-space: nowrap;
+}
+
+/* ---------- Бейдж категории на карточке курса ---------- */
+
+.catalog-page .catalog-category-badge {
+  align-self: flex-start;
+  margin-top: 10px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: var(--sun-soft);
+  color: var(--fg);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+
+/* ---------- Узкие экраны: тоггл и сворачивание панели ---------- */
+
+.catalog-page .catalog-filters-toggle {
+  display: none;
+}
+
+@media (max-width: 960px) {
+  .catalog-page .catalog-filters-toggle {
+    display: inline-flex;
+    margin-top: 20px;
+  }
+
+  .catalog-page .catalog-filters {
+    display: none;
+    margin-top: 12px;
+  }
+
+  .catalog-page .catalog-filters.is-open {
+    display: block;
+  }
+
+  .catalog-filters__grid {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+
+  .catalog-filters__actions {
+    justify-content: flex-start;
+  }
+}
+
+@media (max-width: 620px) {
+  .catalog-filters__grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .catalog-page .catalog-filters {
+    padding: 18px;
+  }
+
+  .catalog-page .catalog-chip {
+    font-size: 13px;
+    padding: 7px 12px;
+  }
+}

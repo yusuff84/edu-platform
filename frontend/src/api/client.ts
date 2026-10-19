@@ -7,11 +7,15 @@
 
 import type {
   AdminSettings,
+  CategoryStat,
   CompleteLessonInput,
   CompleteResult,
   Course,
   CourseDetail,
   CourseItem,
+  CourseMinRatingFilter,
+  CoursePriceFilter,
+  CourseSort,
   CreateLessonInput,
   EnrollmentResult,
   Invite,
@@ -30,13 +34,18 @@ import type {
 // Реэкспорт типов: страницы импортируют типы из '../api/client' без правок.
 export type {
   AdminSettings,
+  CategoryStat,
   CodeTask,
   CodeTest,
   CompleteLessonInput,
   CompleteResult,
   Course,
+  CourseCategory,
   CourseDetail,
   CourseItem,
+  CourseMinRatingFilter,
+  CoursePriceFilter,
+  CourseSort,
   CourseStatus,
   CreateLessonInput,
   EnrollmentResult,
@@ -155,12 +164,33 @@ export function me(): Promise<User> {
 
 export function listCourses(params?: {
   q?: string;
+  /** T65: слаг категории; пустое значение не отправляется. */
+  category?: string;
+  /** T65: free | paid; пустое значение не отправляется. */
+  price?: CoursePriceFilter;
+  /** T65: 3.5 | 4 | 4.5; пустое значение не отправляется. */
+  minRating?: CourseMinRatingFilter;
+  /** T65: popular | new | rating | price_asc | price_desc. */
+  sort?: CourseSort;
   page?: number;
   limit?: number;
 }): Promise<Paged<CourseItem>> {
   return apiFetch<Paged<CourseItem>>(
-    `/courses${buildQuery({ q: params?.q, page: params?.page, limit: params?.limit })}`,
+    `/courses${buildQuery({
+      q: params?.q,
+      category: params?.category,
+      price: params?.price,
+      minRating: params?.minRating,
+      sort: params?.sort,
+      page: params?.page,
+      limit: params?.limit,
+    })}`,
   );
+}
+
+/** T65: категории каталога; конверт { items } распаковывается в массив. */
+export function getCategories(): Promise<CategoryStat[]> {
+  return apiFetch<{ items: CategoryStat[] }>('/categories').then((res) => res.items);
 }
 
 /** Страница курса: конверт { course, modules } распаковывается в CourseDetail. */
