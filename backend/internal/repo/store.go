@@ -41,6 +41,7 @@ type Store struct {
 	reviewIdx          map[string]string // studentID|courseID -> reviewID
 	sessions           map[string]*Session
 	commissionPct      int
+	promoBarEnabled    bool
 }
 
 // NewStore создаёт пустое хранилище.
@@ -61,6 +62,7 @@ func NewStore() *Store {
 		reviewIdx:          make(map[string]string),
 		sessions:           make(map[string]*Session),
 		commissionPct:      15,
+		promoBarEnabled:    true,
 	}
 }
 
@@ -1058,6 +1060,24 @@ func (s *Store) SetCommissionPct(n int) error {
 	}
 	s.mu.Lock()
 	s.commissionPct = n
+	s.mu.Unlock()
+	return nil
+}
+
+// GetPromoBarEnabled возвращает состояние промо-баннера (пост-P7).
+// В NewStore флаг включён: поведение «как раньше» по умолчанию.
+func (s *Store) GetPromoBarEnabled() bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.promoBarEnabled
+}
+
+// SetPromoBarEnabled переключает промо-баннер. In-memory запись всегда
+// успешна, поэтому nil — но сигнатура совпадает со StoreAPI (см.
+// SetCommissionPct).
+func (s *Store) SetPromoBarEnabled(enabled bool) error {
+	s.mu.Lock()
+	s.promoBarEnabled = enabled
 	s.mu.Unlock()
 	return nil
 }

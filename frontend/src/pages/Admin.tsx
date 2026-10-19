@@ -15,6 +15,7 @@ import {
   paymentJournal,
   reviewQueue,
   updateAdminSettings,
+  updateAdminSettingsPromo,
 } from '../api/client';
 // T51: список/отзыв приглашений и возврат платежа — отдельный модуль,
 // чтобы не трогать client.ts (правило волны P6).
@@ -490,6 +491,22 @@ export default function Admin(): JSX.Element {
     onError: (e: unknown) => setCommissionMsg({ ok: false, text: errorText(e) }),
   });
 
+  // ---- Пост-P7: промо-баннер (тогл) ----
+  // Отдельная мутация: PUT частичный (только promoBarEnabled), комиссию не
+  // задевает. После успеха обновляем и ['admin-settings'], и ['public-settings']
+  // — Layout показывает/скрывает полосу сразу, без перезагрузки страницы.
+  const [promoMsg, setPromoMsg] = useState<{ ok: boolean; text: string } | null>(null);
+
+  const promoMutation = useMutation({
+    mutationFn: (enabled: boolean) => updateAdminSettingsPromo(enabled),
+    onSuccess: (data) => {
+      qc.setQueryData(['admin-settings'], data);
+      void qc.invalidateQueries({ queryKey: ['public-settings'] });
+      setPromoMsg({ ok: true, text: t('admin.promoSaved') });
+    },
+    onError: (e: unknown) => setPromoMsg({ ok: false, text: errorText(e) }),
+  });
+
   function onSaveCommission(e: FormEvent<HTMLFormElement>): void {
     e.preventDefault();
     const raw = commissionInput.trim().replace(',', '.');
@@ -592,7 +609,7 @@ export default function Admin(): JSX.Element {
       <nav className="admin-nav" aria-label={t('cabinet.adminTitle')}>
         <a href="#queue">{t('admin.reviewQueue')}</a>
         <a href="#journal">{t('admin.journal')}</a>
-        <a href="#settings">{t('admin.commissionPct')}</a>
+        <a href="#settings">{t('admin.settingsTitle')}</a>
         <a href="#invites">{t('admin.invites')}</a>
       </nav>
 
@@ -953,9 +970,9 @@ export default function Admin(): JSX.Element {
         )}
       </section>
 
-      {/* ---------- 3. Настройки комиссии ---------- */}
+      {/* ---------- 3. Настройки платформы: комиссия (US6) и промо (пост-P7) ---------- */}
       <section id="settings" className="admin-section panel">
-        <h2>{t('admin.commissionPct')}</h2>
+        <h2>{t('admin.settingsTitle')}</h2>
 
         {settings.isLoading && <p>{t('admin.loading')}</p>}
         {settings.isError && (
@@ -990,6 +1007,26 @@ export default function Admin(): JSX.Element {
             {commissionMutation.isPending ? t('admin.loading') : t('admin.save')}
           </button>
         </form>
+
+        {/* Пост-P7: тогл промо-баннера — общий флаг для шапки всех страниц. */}
+        <div className="admin-promo">
+          <label htmlFor="admin-promo-bar">
+            <input
+              id="admin-promo-bar"
+              type="checkbox"
+              checked={settings.data?.promoBarEnabled ?? false}
+              disabled={settings.isLoading || promoMutation.isPending}
+              onChange={(e) => promoMutation.mutate(e.target.checked)}
+            />
+            <span>{t('admin.promoBar')}</span>
+          </label>
+          <p className="muted">{t('admin.promoBarHint')}</p>
+          {promoMsg && (
+            <p role={promoMsg.ok ? 'status' : 'alert'} className={promoMsg.ok ? '' : 'error'}>
+              {promoMsg.text}
+            </p>
+          )}
+        </div>
       </section>
 
       {/* ---------- 4. Приглашения ---------- */}

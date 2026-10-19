@@ -25,6 +25,9 @@ type PostgresStore struct {
 
 	mu            sync.RWMutex
 	commissionPct int
+	// promoBarEnabled — пост-P7, флаг промо-баннера: дефолт «включён»
+	// (историческое поведение), в БД пишется только после действий админа.
+	promoBarEnabled bool
 }
 
 var _ StoreAPI = (*PostgresStore)(nil)
@@ -37,7 +40,7 @@ func NewPostgresStore(pool *pgxpool.Pool, fallbackCommission int) *PostgresStore
 	if fallbackCommission > 90 {
 		fallbackCommission = 90
 	}
-	return &PostgresStore{pool: pool, commissionPct: fallbackCommission}
+	return &PostgresStore{pool: pool, commissionPct: fallbackCommission, promoBarEnabled: true}
 }
 
 // Pool возвращает underlying пул (для migrate/seed и graceful close).
@@ -1242,6 +1245,48 @@ func (s *PostgresStore) SetCommissionPct(n int) error {
 	}
 	s.mu.Lock()
 	s.commissionPct = n
+	s.mu.Unlock()
+	return nil
+}
+
+// GetPromoBarEnabled читает флаг промо-баннера из app_settings (пост-P7).
+// При отсутствии строки/ошибке БД возвращает кэш в памяти — так работает и
+// до первого переключения админом (значение по умолчанию — true).
+func (s *PostgresStore) GetPromoBarEnabled() bool {
+	ctx, cancel := s.ctx()
+	defer cancel()
+	var raw string
+	if err := s.pool.QueryRow(ctx,
+		`SELECT value FROM app_settings WHERE key='promo_bar_enabled'`).Scan(&raw); err != nil {
+		s.mu.RLock()
+		defer s.mu.RUnlock()
+		return s.promoBarEnabled
+	}
+	b, err := strconv.ParseBool(strings.TrimSpace(raw))
+	if err != nil {
+		s.mu.RLock()
+		defer s.mu.RUnlock()
+		return s.promoBarEnabled
+	}
+	s.mu.Lock()
+	s.promoBarEnabled = b
+	s.mu.Unlock()
+	return b
+}
+
+// SetPromoBarEnabled сохраняет флаг промо-баннера в app_settings и обновляет
+// кэш только после успешной записи (контракт ошибок как у SetCommissionPct).
+func (s *PostgresStore) SetPromoBarEnabled(enabled bool) error {
+	ctx, cancel := s.ctx()
+	defer cancel()
+	if _, err := s.pool.Exec(ctx,
+		`INSERT INTO app_settings (key, value) VALUES ('promo_bar_enabled',$1)
+		 ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value, updated_at=now()`,
+		strconv.FormatBool(enabled)); err != nil {
+		return fmt.Errorf("не удалось сохранить настройку промо-баннера в app_settings: %w", err)
+	}
+	s.mu.Lock()
+	s.promoBarEnabled = enabled
 	s.mu.Unlock()
 	return nil
 }

@@ -51,6 +51,12 @@
 | GET | `/api/v1/courses/{id}/reviews` | публичный | `{id}` — UUID или slug → `200` `{items:[Review],total,avgRating,ratingsCount}` |
 | POST | `/api/v1/courses/{id}/reviews` | студент с активной записью | `{rating:1..5, body}` → `201` `Review` |
 
+### Настройки интерфейса (публичные)
+
+| Метод | Путь | Доступ | Тело / ответ |
+|---|---|---|---|
+| GET | `/api/v1/settings/public` | публичный | → `200 {promoBarEnabled}` — пост-P7: тогл промо-баннера, читается шапкой без входа; приватные настройки сюда не попадают |
+
 ### Прогресс обучения (`me`)
 
 | Метод | Путь | Доступ | Тело / ответ |
@@ -100,8 +106,8 @@
 | POST | `/api/v1/admin/courses/{id}/moderate` | `{decision:"approve\|reject", comment?}` → `200` Course; `comment` обязателен при `reject` |
 | GET | `/api/v1/admin/courses/{id}` | → `200` `{course:<элемент GET /admin/courses + coverPath>, modules:[{id,title,position,lessons:[{id,title,kind,position}]}], stats:{studentsCount,activeCount,reviewsCount,avgRating,paymentsCount,paidTotalCents}}` (T55; `404` «Курс не найден») |
 | GET | `/api/v1/admin/payments?page=&limit=&status=&courseId=` | → `200` `{items:[PaymentJournalItem],total,page,limit,totals}` (US6, T07) |
-| GET | `/api/v1/admin/settings` | → `200 {commissionPct}` (US6, T07) |
-| PUT | `/api/v1/admin/settings` | `{commissionPct:0..90}` → `200 {commissionPct}` (US6, T07) |
+| GET | `/api/v1/admin/settings` | → `200 {commissionPct,promoBarEnabled}` (US6, T07; промо — пост-P7) |
+| PUT | `/api/v1/admin/settings` | `{commissionPct?0..90, promoBarEnabled?}` — хотя бы одно поле → `200 {commissionPct,promoBarEnabled}` (US6, T07; частичное обновление — пост-P7) |
 
 ### Оплата
 
