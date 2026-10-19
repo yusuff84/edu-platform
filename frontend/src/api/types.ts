@@ -177,6 +177,28 @@ export interface Review {
   /** Текст отзыва называется body, не text (omitempty). */
   body?: string;
   createdAt: string;
+  /** T69: ответ преподавателя; пустая строка/отсутствие — ответа нет. */
+  teacherReply?: string;
+  /** T69: когда ответ оставлен или обновлён; null — ответа нет. */
+  teacherReplyAt?: string | null;
+}
+
+/** T69: разбивка оценок 5→1 по всем отзывам курса (ключи — строки "1".."5"). */
+export type ReviewBreakdown = Record<'1' | '2' | '3' | '4' | '5', number>;
+
+/**
+ * T69: конверт GET /courses/{id}/reviews целиком.
+ * avgRating/ratingsCount/breakdown считаются по всем отзывам и не зависят
+ * от фильтра rating; items/total — по фильтру.
+ */
+export interface CourseReviewsPage {
+  items: Review[];
+  total: number;
+  page: number;
+  limit: number;
+  avgRating: number;
+  ratingsCount: number;
+  breakdown: ReviewBreakdown;
 }
 
 // ---------- Обучение ----------
