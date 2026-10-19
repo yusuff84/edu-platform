@@ -50,12 +50,14 @@
 | GET | `/api/v1/courses/{slug}` | публичный* | → `200` `{course, modules:[ModuleView]}`; *`draft` виден автору и админу, остальным 404 |
 | GET | `/api/v1/courses/{id}/reviews` | публичный | `{id}` — UUID или slug → `200` `{items:[Review],total,avgRating,ratingsCount}` |
 | POST | `/api/v1/courses/{id}/reviews` | студент с активной записью | `{rating:1..5, body}` → `201` `Review` |
+| GET | `/api/v1/certificates/{number}` | публичный | → `200` `{number,issuedAt,studentName,courseTitle,courseSlug}`; `studentName` — displayName студента (e-mail не отдаётся); `404 «Сертификат не найден»` |
 
 ### Прогресс обучения (`me`)
 
 | Метод | Путь | Доступ | Тело / ответ |
 |---|---|---|---|
-| GET | `/api/v1/me/courses` | cookie | → `200` `{items:[{course,percent,nextLesson}],total}` |
+| GET | `/api/v1/me/courses` | cookie | → `200` `{items:[{course,percent,nextLesson,certificateNumber}],total}`; `certificateNumber` — пустая строка, если сертификата нет |
+| GET | `/api/v1/me/certificates` | cookie | → `200` `{items:[{number,issuedAt,courseId,courseTitle,courseSlug}]}` — новые первыми; сертификат выдаётся автоматически при первом достижении 100% прогресса (все уроки курса завершены) |
 | POST | `/api/v1/me/courses/{id}/lessons/{lessonId}/complete` | активная запись | `{quizAnswers?, code?, language?}` → `200 {passed,completed,percent,nextLesson}` или `{passed:false,message}`; для code-задач `502` при недоступном runner |
 
 ### Преподаватель (`teacher` — роли teacher/admin)

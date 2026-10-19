@@ -93,6 +93,8 @@ func (s *Store) DeleteUser(id string) error {
 			delete(s.enrollments, eid)
 		}
 	}
+	// T67: сертификаты ученика уходят каскадом (010_certificates.sql).
+	s.dropCertificatesByUserLocked(id)
 	return nil
 }
 

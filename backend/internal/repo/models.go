@@ -202,3 +202,36 @@ type Session struct {
 	CreatedAt time.Time
 	ExpiresAt time.Time
 }
+
+// Certificate — сертификат о завершении курса (T67). Number — публичный
+// идентификатор «EDU-<ГГГГ>-<8 hex ВЕРХНИМ регистром>»; пара (UserID,
+// CourseID) уникальна, поэтому повторное достижение 100% прогресса второй
+// сертификат не создаёт.
+type Certificate struct {
+	ID       string    `json:"id"`
+	UserID   string    `json:"userId"`
+	CourseID string    `json:"courseId"`
+	Number   string    `json:"number"`
+	IssuedAt time.Time `json:"issuedAt"`
+}
+
+// CertificateListItem — элемент GET /me/certificates (T67): номер, дата
+// выдачи и данные курса, новые сертификаты первыми.
+type CertificateListItem struct {
+	Number      string    `json:"number"`
+	IssuedAt    time.Time `json:"issuedAt"`
+	CourseID    string    `json:"courseId"`
+	CourseTitle string    `json:"courseTitle"`
+	CourseSlug  string    `json:"courseSlug"`
+}
+
+// CertificateDetails — публичная карточка GET /certificates/{number} (T67):
+// StudentName — displayName студента (пустая строка, если не задан; e-mail
+// наружу не отдаётся).
+type CertificateDetails struct {
+	Number      string    `json:"number"`
+	IssuedAt    time.Time `json:"issuedAt"`
+	StudentName string    `json:"studentName"`
+	CourseTitle string    `json:"courseTitle"`
+	CourseSlug  string    `json:"courseSlug"`
+}

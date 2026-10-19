@@ -185,6 +185,21 @@ type StoreAPI interface {
 	// уроки каждого модуля по position — только метаданные) и статистика
 	// (все записи, активные, отзывы, успешные платежи). false — курса нет.
 	AdminCourseDetail(courseID string) (*AdminCourseDetailData, bool)
+
+	// ---- T67: сертификаты ----
+
+	// IssueCertificate идемпотентно выдаёт сертификат ученику за курс:
+	// повторный вызов (и повторное достижение 100% прогресса) возвращает уже
+	// существующий сертификат, второй не создаётся — UNIQUE (user_id, course_id).
+	// Номер — EDU-<ГГГГ>-<8 hex ВЕРХНИМ регистром> (crypto/rand); при коллизии
+	// номера генерация повторяется. ErrNotFound — ученика или курса нет.
+	IssueCertificate(studentID, courseID string) (*Certificate, error)
+	// GetCertificateByNumber — публичная карточка сертификата по номеру:
+	// данные курса и displayName студента. false — сертификата нет.
+	GetCertificateByNumber(number string) (*CertificateDetails, bool)
+	// ListCertificatesByStudent — сертификаты ученика, новые первыми.
+	// Никогда не nil (пустой слайс — если сертификатов нет).
+	ListCertificatesByStudent(studentID string) []*CertificateListItem
 }
 
 // PaymentFilter — параметры журнала платежей для админки (US6, T31).

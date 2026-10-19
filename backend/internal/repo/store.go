@@ -40,6 +40,11 @@ type Store struct {
 	reviews            map[string]*Review
 	reviewIdx          map[string]string // studentID|courseID -> reviewID
 	sessions           map[string]*Session
+	// T67: сертификаты. certIdx — уникальная пара (userID|courseID),
+	// certByNumber — публичный номер.
+	certificates map[string]*Certificate // id -> certificate
+	certIdx      map[string]string       // userID|courseID -> certificate id
+	certByNumber map[string]string       // number -> certificate id
 	commissionPct      int
 }
 
@@ -60,6 +65,9 @@ func NewStore() *Store {
 		reviews:            make(map[string]*Review),
 		reviewIdx:          make(map[string]string),
 		sessions:           make(map[string]*Session),
+		certificates:       make(map[string]*Certificate),
+		certIdx:            make(map[string]string),
+		certByNumber:       make(map[string]string),
 		commissionPct:      15,
 	}
 }
@@ -444,6 +452,8 @@ func (s *Store) DeleteCourse(id string) error {
 			delete(s.payments, pid)
 		}
 	}
+	// T67: сертификаты за курс уходят каскадом (010_certificates.sql).
+	s.dropCertificatesByCourseLocked(id)
 	return nil
 }
 
