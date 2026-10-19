@@ -1,14 +1,12 @@
 // Package storage — сохранение загружаемых файлов (обложки курсов и т.п.).
 //
-// Статус (T13): пакет подключён к роутеру — каталог uploads/ раздаётся
-// как статика по /uploads/* (см. NewRouter в handler/middleware.go).
-// Загрузочного эндпоинта в MVP нет: LocalStore.SaveLocal готов для
-// будущего upload-хендлера (Course.CoverPath уже есть в модели и в типе
-// фронтенда), но сейчас не вызывается ниоткуда.
+// Статус (T54): пакет используется хендлером обложки (teacher_cover.go);
+// каталог uploads/ раздаётся как статика по /uploads/* (см. NewRouter в
+// handler/middleware.go). В образе api каталог /uploads принадлежит appuser
+// (backend/Dockerfile) — иначе запись падает с 500.
 package storage
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
 )
@@ -29,12 +27,16 @@ func (s LocalStore) SaveLocal(path string, data []byte) (string, error) {
 	if dir == "" {
 		dir = "uploads"
 	}
-	full := filepath.Join(dir, filepath.Clean("/"+path))
+	// clean — «/covers/<файл>»: уже с ведущим слэшем, без «..» и двойных слэшей.
+	clean := filepath.Clean("/" + path)
+	full := filepath.Join(dir, clean)
 	if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
 		return "", err
 	}
 	if err := os.WriteFile(full, data, 0o644); err != nil {
 		return "", err
 	}
-	return fmt.Sprintf("/uploads/%s", filepath.Clean("/"+path)), nil
+	// Публичный путь — «/uploads/covers/<файл>» (контракт P7): раньше здесь
+	// собирался лишний слэш («/uploads//covers/…»), пойман сквозным QA на стенде.
+	return "/uploads" + filepath.ToSlash(clean), nil
 }
