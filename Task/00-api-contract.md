@@ -997,6 +997,171 @@ trim 3..2000 символов, иначе `400 «Ответ: от 3 до 2000 с
 
 ---
 
+## Волна P9 (T71–T82) — ЗАМОРОЖЕНО до запуска агентов
+
+Шесть фич: вопросы и ответы по урокам, избранное, превью-уроки, аналитика
+учителя, похожие курсы, публичный профиль преподавателя. Все изменения
+аддитивные: формы существующих ответов не меняются, кроме аддитивного
+`isPreview` в уроке. Миграции волны: `012_lesson_questions.sql`,
+`013_favorites.sql`, `014_lesson_preview.sql`, `015_analytics_indexes.sql`.
+
+### T71 — Вопросы и ответы по урокам
+
+Модели (JSON-теги):
+
+```
+LessonQuestion {
+  id, courseId, lessonId, lessonTitle,
+  studentId, studentName, body, createdAt,
+  answers: [LessonAnswer]        // старые первыми, может быть []
+}
+LessonAnswer {
+  id, questionId, authorId, authorName,
+  authorRole,                    // "student" | "teacher" | "admin"
+  isTeacher,                     // true — автор курса или admin
+  body, createdAt
+}
+```
+
+`GET /api/v1/courses/{id}/questions?lessonId=&page=&limit=` — публичный.
+`id` — UUID курса. Без параметров — все вопросы курса. `lessonId` не из этого
+курса → `404 «Урок не найден в этом курсе»`. Неопубликованный курс для
+не-владельца/не-админа → `404 «Курс не найден»`. Ответ:
+`200 {"items":[LessonQuestion],"total":N,"page":1,"limit":20}`; вопросы — новые
+первыми, ответы внутри — старые первыми. `page` по умолчанию 1, `limit` — 20
+(максимум 100; нечисловые/вне диапазона → дефолт).
+
+`POST /api/v1/courses/{id}/questions` — только вошедший. Тело
+`{"lessonId":"…","body":"…"}`; `body` после trim 10..2000, иначе
+`400 «Вопрос: от 10 до 2000 символов»`. Писать могут записанные на курс
+(активная запись), владелец курса и admin; иначе
+`403 «Задавать вопросы могут только записанные на курс»`. Урок не из курса →
+`404 «Урок не найден в этом курсе»`. Ответ: `201 {"question": LessonQuestion}`
+(с пустым `answers`).
+
+`POST /api/v1/courses/{id}/questions/{questionId}/answers` — только вошедший.
+Тело `{"body":"…"}`; trim 3..2000, иначе `400 «Ответ: от 3 до 2000 символов»`.
+Отвечать могут записанные на курс, владелец курса и admin; иначе
+`403 «Отвечать могут только записанные на курс»`. Вопрос не найден (в т.ч.
+вопрос другого курса) → `404 «Вопрос не найден»`. Ответ:
+`201 {"answer": LessonAnswer}`.
+
+`DELETE /api/v1/courses/{id}/questions/{questionId}` — автор вопроса, владелец
+курса или admin; иначе `403 «Нет прав на удаление»`; нет вопроса →
+`404 «Вопрос не найден»`; успех — `204` (ответы каскадом).
+
+`DELETE /api/v1/courses/{id}/questions/{questionId}/answers/{answerId}` — автор
+ответа, владелец курса или admin; иначе `403 «Нет прав на удаление»`; нет
+ответа → `404 «Ответ не найден»`; успех — `204`.
+
+### T73 — Избранное
+
+Таблица `favorites (user_id, course_id, created_at)`, PK `(user_id, course_id)`,
+FK каскадом на users/courses.
+
+- `PUT /api/v1/me/favorites/{courseId}` — только вошедший. Только published
+  курс, иначе `404 «Курс не найден»`. Идемпотентно: `204`.
+- `DELETE /api/v1/me/favorites/{courseId}` — только вошедший. Идемпотентно:
+  `204` (в т.ч. если курса уже нет).
+- `GET /api/v1/me/favorites` — только вошедший:
+  `200 {"items":[CourseItem],"total":N}`; порядок — добавленные позже первыми;
+  архивные/удалённые курсы в список не попадают.
+- Признака `isFavorite` в публичных видах курса НЕТ: фронт определяет
+  избранное по списку `/me/favorites`.
+
+### T75 — Превью-уроки
+
+- `Lesson.isPreview` (`json:"isPreview"`) — аддитивное поле во всех видах
+  урока, включая публичную страницу курса.
+- `POST /teacher/courses/{id}/lessons` и
+  `PATCH /teacher/courses/{id}/lessons/{lessonID}` принимают необязательное
+  `isPreview` (bool); создание без поля — `false`, PATCH без поля не меняет.
+- `GET /api/v1/courses/{slug}/preview/{lessonId}` — публичный. Курс должен
+  существовать и быть published, урок — принадлежать курсу и иметь
+  `isPreview=true`; иначе `404 «Курс не найден»` / `404 «Урок не найден»`.
+  Ответ: `200 {"course":{"id","slug","title"},"lesson":<lessonView>}`, где
+  `lessonView` — публичный вид урока (тест без правильных ответов, код без
+  скрытых тестов), как на странице курса.
+
+### T77 — Аналитика учителя
+
+`GET /api/v1/teacher/stats` — teacher/admin. Teacher видит только свои курсы,
+admin — все курсы платформы.
+
+```
+200 {
+  "courses":    {"total","published","draft","review","archived"},
+  "students":   {"total","unique"},
+  "revenue":    {"paidTotalCents","platformFeeCents","teacherCents"},
+  "completion": {"completed","avgPercent"},
+  "ratings":    {"avgRating","ratingsCount"},
+  "last30d":    {"enrollments","revenueCents"}
+}
+```
+
+- `students.total` — активные записи; `unique` — уникальные ученики с активной
+  записью; `completion.completed` — активные записи с прогрессом 100 %,
+  `avgPercent` — средний прогресс активных записей (0..100, дробное);
+- `revenue.*` — только `succeeded`-платежи: сумма `amountCents`,
+  `platformFeeCents`, `teacherAmountCents`;
+- `ratings` — по опубликованным курсам преподавателя (средневзвешенный
+  `avgRating` и суммарное число оценок);
+- `last30d` — активные записи, созданные за 30 дней, и succeeded-платежи за
+  30 дней.
+
+`GET /api/v1/teacher/stats/courses?limit=50` — teacher/admin:
+`200 {"items":[…],"total":N}`, где элемент:
+`{courseId,title,status,students,revenueCents,avgRating,ratingsCount,avgPercent}`.
+Порядок — `revenueCents` desc, затем `students` desc, затем `title`;
+`limit` по умолчанию 50 (максимум 200). Входят все курсы (любой статус).
+
+### T79 — Похожие курсы
+
+`GET /api/v1/courses/{id}/similar?limit=4` — публичный. Курс (UUID) должен
+существовать и быть published, иначе `404 «Курс не найден»`. Возвращает
+опубликованные курсы той же `category`, кроме самого курса, сортировка —
+активные записи desc, затем `avgRating` desc, затем `createdAt` desc.
+`limit` по умолчанию 4 (максимум 12). Ответ:
+`200 {"items":[CourseItem],"total":N}`; `items` может быть пустым.
+
+### T81 — Публичный профиль преподавателя
+
+`GET /api/v1/teachers/{id}` — публичный:
+
+```
+200 {
+  "teacher": {"id","displayName","coursesCount","studentsCount",
+              "avgRating","ratingsCount"},
+  "courses": [CourseItem]
+}
+```
+
+- 404 «Преподаватель не найден» — пользователя нет или роль не teacher/admin;
+- `coursesCount` — число published-курсов; `studentsCount` — активные записи
+  на published-курсы; `avgRating`/`ratingsCount` — по published-курсам
+  (средневзвешенно);
+- `courses` — все published-курсы преподавателя, порядок: активные записи desc,
+  затем `createdAt` desc; без пагинации (максимум 100).
+
+### Новые ключи i18n (ru.json) — заморожены для P9
+
+- `p9.qa.*`: title, ask, askTitle, placeholder, send, answer, answerPlaceholder,
+  answers, empty, emptyHint, loginToAsk, enrollToAsk, delete, deleteConfirm,
+  deleted, sent, answerSent, notFound, teacherBadge, lessonLabel, allLessons,
+  cancel, save, count;
+- `p9.fav.*`: add, remove, added, removed, title, empty, emptyHint, goCatalog,
+  loginHint;
+- `p9.preview.*`: badge, watch, title, close, hint, toggle, toggleHint;
+- `p9.stats.*`: title, courses, students, uniqueStudents, revenue, platformFee,
+  net, completion, avgPercent, ratings, last30d, enrollments, perCourse, course,
+  status, studentsCol, revenueCol, avgPercentCol, empty, open, completed,
+  totalPaid, noCourses, coursesCount;
+- `p9.similar.*`: title, all;
+- `p9.teacher.*`: title, courses, students, rating, coursesCount, notFound,
+  notFoundHint, allCourses, openProfile.
+
+---
+
 ## Отступления (осознанные и разрешённые)
 
 | Отступление | Кто | Почему |
