@@ -3,6 +3,7 @@ package handler
 import (
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -15,6 +16,7 @@ type courseItem struct {
 	Slug         string            `json:"slug"`
 	Title        string            `json:"title"`
 	Description  string            `json:"description"`
+	Category     string            `json:"category"`
 	CoverPath    *string           `json:"coverPath"`
 	PriceCents   int               `json:"priceCents"`
 	Currency     string            `json:"currency"`
@@ -24,21 +26,80 @@ type courseItem struct {
 }
 
 func toCourseItem(c *repo.Course) courseItem {
+	category := c.Category
+	if category == "" {
+		category = "other"
+	}
 	return courseItem{
 		ID: c.ID, Slug: c.Slug, Title: c.Title, Description: c.Description,
+		Category:   category,
 		CoverPath:  c.CoverPath,
 		PriceCents: c.PriceCents, Currency: c.Currency,
 		AvgRating: c.AvgRating, RatingsCount: c.RatingsCount,
 	}
 }
 
-// ListCourses — GET /courses: каталог только опубликованных курсов.
-func (a *App) ListCourses(w http.ResponseWriter, r *http.Request) {
-	q := r.URL.Query().Get("q")
-	page, _ := strconv.Atoi(r.URL.Query().Get("page"))
-	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+// catalogDefaults — значения фильтров GET /courses по умолчанию (T65):
+// без параметров каталог сортируется по популярности.
+const catalogSortDefault = "popular"
 
-	all := a.Store.ListPublishedCourses(q)
+// ListCourses — GET /courses: каталог только опубликованных курсов.
+//
+// T65: серверные фильтры/сортировка — category, price, minRating, sort
+// (комбинируются с q/page/limit через AND). Валидация значений — здесь:
+// неизвестный слаг категории → 400 «Неизвестная категория», price вне
+// free|paid → «Недопустимый фильтр цены», minRating не из 3.5|4|4.5 →
+// «Недопустимый фильтр рейтинга», sort не из списка → «Недопустимая
+// сортировка». total считается по отфильтрованному набору до пагинации.
+func (a *App) ListCourses(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	search := q.Get("q")
+	page, _ := strconv.Atoi(q.Get("page"))
+	limit, _ := strconv.Atoi(q.Get("limit"))
+
+	category := strings.TrimSpace(q.Get("category"))
+	if category != "" && !validCourseCategory(category) {
+		writeErr(w, http.StatusBadRequest, "Неизвестная категория")
+		return
+	}
+
+	price := strings.TrimSpace(q.Get("price"))
+	switch price {
+	case "", "free", "paid":
+	default:
+		writeErr(w, http.StatusBadRequest, "Недопустимый фильтр цены")
+		return
+	}
+
+	var minRating float64
+	switch strings.TrimSpace(q.Get("minRating")) {
+	case "":
+	case "3.5":
+		minRating = 3.5
+	case "4":
+		minRating = 4
+	case "4.5":
+		minRating = 4.5
+	default:
+		writeErr(w, http.StatusBadRequest, "Недопустимый фильтр рейтинга")
+		return
+	}
+
+	sortKey := strings.TrimSpace(q.Get("sort"))
+	if sortKey == "" {
+		sortKey = catalogSortDefault
+	}
+	switch sortKey {
+	case "popular", "new", "rating", "price_asc", "price_desc":
+	default:
+		writeErr(w, http.StatusBadRequest, "Недопустимая сортировка")
+		return
+	}
+
+	all := a.Store.ListCatalogCourses(repo.CatalogFilter{
+		Q: search, Category: category, Price: price,
+		MinRating: minRating, Sort: sortKey,
+	})
 	start, safePage, safeLimit := paginate(len(all), page, limit)
 	end := start + safeLimit
 	if end > len(all) {

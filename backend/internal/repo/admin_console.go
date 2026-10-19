@@ -36,6 +36,18 @@ type CourseFilter struct {
 	From, To     time.Time    // границы по createdAt включительно; нулевое — без границы
 }
 
+// CatalogFilter — параметры публичного каталога GET /courses (T65).
+// Пустые значения означают «без фильтра»; Sort "" — popular. Значения
+// category/price/minRating/sort валидирует handler (400 на неизвестные),
+// хранилище получает только допустимые.
+type CatalogFilter struct {
+	Q         string  // подстрока по title/description, регистронезависимо
+	Category  string  // слаг категории; "" — любая
+	Price     string  // free|paid|"" ("" — любая цена)
+	MinRating float64 // 0 — без фильтра; иначе минимальный avgRating
+	Sort      string  // popular|new|rating|price_asc|price_desc ("" = popular)
+}
+
 // EnrollmentFilter — параметры списка записей на курсы (T25/T48).
 // CourseID/StringID "" означают «любой»; Q — подстрока без учёта регистра
 // по email ИЛИ displayName ученика ("" — без фильтра); Status "" — любой,

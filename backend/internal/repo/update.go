@@ -15,6 +15,7 @@ type CourseUpdate struct {
 	Description *string
 	Slug        *string
 	PriceCents  *int
+	Category    *string // T65: nil — категория не меняется
 }
 
 // UpdateCourse применяет частичное обновление курса; false — курса нет.
@@ -36,6 +37,9 @@ func (s *Store) UpdateCourse(id string, u CourseUpdate) bool {
 	}
 	if u.PriceCents != nil {
 		c.PriceCents = *u.PriceCents
+	}
+	if u.Category != nil {
+		c.Category = *u.Category
 	}
 	c.UpdatedAt = time.Now().UTC()
 	return true

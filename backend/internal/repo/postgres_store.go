@@ -350,11 +350,14 @@ func scanCourse(scan func(dest ...any) error) (*Course, error) {
 	var avg float64
 	var count int
 	var created, updated time.Time
-	if err := scan(&c.ID, &teacherID, &c.Slug, &c.Title, &c.Description, &cover,
+	if err := scan(&c.ID, &teacherID, &c.Slug, &c.Title, &c.Description, &c.Category, &cover,
 		&c.PriceCents, &currency, &status, &avg, &count, &comment, &created, &updated); err != nil {
 		return nil, err
 	}
 	c.TeacherID = teacherID
+	if strings.TrimSpace(c.Category) == "" {
+		c.Category = "other"
+	}
 	c.CoverPath = cover
 	c.Currency = strings.TrimSpace(currency)
 	if c.Currency == "" {
@@ -369,7 +372,7 @@ func scanCourse(scan func(dest ...any) error) (*Course, error) {
 	return c, nil
 }
 
-const courseCols = `id::text, teacher_id::text, slug, title, description,
+const courseCols = `id::text, teacher_id::text, slug, title, description, category,
 	cover_path, price_cents, currency::text, status,
 	COALESCE(avg_rating,0)::float8, ratings_count, COALESCE(moderation_comment,''),
 	created_at, updated_at`
@@ -380,19 +383,26 @@ func (s *PostgresStore) CreateCourse(c *Course) *Course {
 	if currency == "" {
 		currency = "RUB"
 	}
+	// T65: без явной категории — other, как DEFAULT миграции 009 (передаём
+	// значение явно, чтобы поведение не зависело от версии схемы).
+	category := strings.TrimSpace(c.Category)
+	if category == "" {
+		category = "other"
+	}
 	ctx, cancel := s.ctx()
 	defer cancel()
 	row := s.pool.QueryRow(ctx,
-		`INSERT INTO courses (teacher_id, slug, title, description, price_cents, currency, status)
-		 VALUES ($1::uuid,$2,$3,$4,$5,$6,'draft')
+		`INSERT INTO courses (teacher_id, slug, title, description, category, price_cents, currency, status)
+		 VALUES ($1::uuid,$2,$3,$4,$5,$6,$7,'draft')
 		 RETURNING `+courseCols,
-		c.TeacherID, c.Slug, c.Title, c.Description, c.PriceCents, currency)
+		c.TeacherID, c.Slug, c.Title, c.Description, category, c.PriceCents, currency)
 	if nc, err := scanCourse(row.Scan); err == nil {
 		*c = *nc
 		return c
 	} else {
 		log.Printf("postgres CreateCourse: %v", err)
 		c.ID = uuid.NewString()
+		c.Category = category
 		c.Currency = currency
 		c.Status = CourseDraft
 		c.CreatedAt = now
@@ -453,6 +463,93 @@ func (s *PostgresStore) ListPublishedCourses(q string) []*Course {
 	for rows.Next() {
 		if c, err := scanCourse(rows.Scan); err == nil {
 			out = append(out, c)
+		}
+	}
+	return out
+}
+
+// ListCatalogCourses возвращает опубликованные курсы с серверными фильтрами
+// каталога (T65): q (title/description, ILIKE), category, price (free=0,
+// paid>0), minRating (только курсы с отзывами). Сортировка — по f.Sort,
+// вторичный ключ — created_at DESC, затем id DESC (детерминированный порядок
+// при полном совпадении ключей). Пагинацию применяет handler, поэтому LIMIT
+// в запросе нет. Значения фильтров — параметры $N; в SQL подставляется только
+// выбранный из белого списка ORDER BY.
+func (s *PostgresStore) ListCatalogCourses(f CatalogFilter) []*Course {
+	where := "c.status='published'"
+	args := make([]any, 0, 4)
+	if q := strings.TrimSpace(f.Q); q != "" {
+		args = append(args, q)
+		where += fmt.Sprintf(" AND (c.title ILIKE '%%'||$%d||'%%' OR c.description ILIKE '%%'||$%d||'%%')",
+			len(args), len(args))
+	}
+	if category := strings.TrimSpace(f.Category); category != "" {
+		args = append(args, category)
+		where += fmt.Sprintf(" AND c.category=$%d", len(args))
+	}
+	switch f.Price {
+	case "free":
+		where += " AND c.price_cents=0"
+	case "paid":
+		where += " AND c.price_cents>0"
+	}
+	if f.MinRating > 0 {
+		args = append(args, f.MinRating)
+		where += fmt.Sprintf(" AND c.ratings_count>0 AND COALESCE(c.avg_rating,0)>=$%d", len(args))
+	}
+
+	orderBy := `(SELECT COUNT(*) FROM enrollments e
+	             WHERE e.course_id = c.id AND e.status = 'active') DESC,
+	             c.created_at DESC, c.id DESC`
+	switch f.Sort {
+	case "new":
+		orderBy = "c.created_at DESC, c.id DESC"
+	case "rating":
+		orderBy = "COALESCE(c.avg_rating,0) DESC, c.created_at DESC, c.id DESC"
+	case "price_asc":
+		orderBy = "c.price_cents ASC, c.created_at DESC, c.id DESC"
+	case "price_desc":
+		orderBy = "c.price_cents DESC, c.created_at DESC, c.id DESC"
+	}
+
+	ctx, cancel := s.ctx()
+	defer cancel()
+	rows, err := s.pool.Query(ctx,
+		`SELECT `+courseColsJoined+` FROM courses c WHERE `+where+` ORDER BY `+orderBy, args...)
+	if err != nil {
+		log.Printf("postgres ListCatalogCourses: %v", err)
+		return nil
+	}
+	defer rows.Close()
+	var out []*Course
+	for rows.Next() {
+		if c, err := scanCourse(rows.Scan); err == nil {
+			out = append(out, c)
+		}
+	}
+	return out
+}
+
+// CountPublishedCoursesByCategory — число published-курсов по категориям
+// (T65) одним GROUP BY. Слаги без курсов в карту не попадают; хендлер
+// разворачивает фиксированный список и подставляет 0.
+func (s *PostgresStore) CountPublishedCoursesByCategory() map[string]int {
+	ctx, cancel := s.ctx()
+	defer cancel()
+	out := make(map[string]int)
+	rows, err := s.pool.Query(ctx,
+		`SELECT category, COUNT(*)::int FROM courses
+		 WHERE status='published' GROUP BY category`)
+	if err != nil {
+		log.Printf("postgres CountPublishedCoursesByCategory: %v", err)
+		return out
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var category string
+		var n int
+		if err := rows.Scan(&category, &n); err == nil {
+			out[category] = n
 		}
 	}
 	return out

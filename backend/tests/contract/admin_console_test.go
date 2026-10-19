@@ -298,8 +298,9 @@ func TestAdminConsoleCoursesList(t *testing.T) {
 
 	// Форма строки — ровно как в контракте, счётчики и email учителя.
 	// T54 (волна P7): в строку аддитивно добавлен coverPath (string|null).
+	// T65 (волна P8): аддитивно добавлен category (string).
 	published := courseItemByID(t, items, publishedID)
-	wantKeys(t, published, "id", "slug", "title", "coverPath", "teacherId", "teacherEmail",
+	wantKeys(t, published, "id", "slug", "title", "category", "coverPath", "teacherId", "teacherEmail",
 		"status", "priceCents", "createdAt", "updatedAt", "modulesCount", "lessonsCount",
 		"studentsCount")
 	if v, ok := published["coverPath"]; !ok || v != nil {

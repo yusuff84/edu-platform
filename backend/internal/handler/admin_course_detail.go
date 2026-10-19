@@ -90,6 +90,7 @@ func (a *App) AdminCourseDetail(w http.ResponseWriter, r *http.Request) {
 			ID:           d.Course.ID,
 			Slug:         d.Course.Slug,
 			Title:        d.Course.Title,
+			Category:     d.Course.Category,
 			TeacherID:    d.Course.TeacherID,
 			TeacherEmail: d.TeacherEmail,
 			Status:       d.Course.Status,
