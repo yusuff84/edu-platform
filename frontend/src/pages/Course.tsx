@@ -15,6 +15,7 @@ import {
 } from '../api/client';
 import { coverUrl } from '../api/teacherCover';
 import Reviews from '../components/Reviews';
+import SimilarCourses from '../components/SimilarCourses';
 import { t } from '../i18n/t';
 import '../styles/catalog.css';
 import '../styles/promo.css';
@@ -330,6 +331,9 @@ export default function Course(): JSX.Element {
             </section>
 
             <Reviews courseId={course.id} canReply={isAuthor || isAdmin} />
+
+            {/* T80: похожие курсы той же категории — под блоком отзывов. */}
+            <SimilarCourses courseId={course.id} category={course.category} />
           </div>
 
           <aside className="panel buybox">

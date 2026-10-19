@@ -95,6 +95,11 @@ export interface Course {
   title: string;
   description: string;
   /**
+   * T65: категория каталога (слаг фиксированного списка). Бэкенд отдаёт
+   * поле во всех видах курса; для старых курсов — "other".
+   */
+  category?: string;
+  /**
    * T54: путь к обложке "/uploads/covers/<имя>"; отсутствует или null,
    * если обложки нет (omitempty на бэкенде после DELETE → пусто).
    */
