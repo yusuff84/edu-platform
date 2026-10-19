@@ -44,12 +44,23 @@ import {
   createCourse,
   createLesson,
   createModule,
+  createPromoCode,
+  deactivatePromoCode,
   formatDate,
   formatPrice,
+  listPromoCodes,
   myTeaching,
   submitCourse,
 } from '../api/client';
-import type { Course, CourseStatus, CreateLessonInput, Lesson, LessonKind, Module } from '../api/client';
+import type {
+  Course,
+  CourseStatus,
+  CreateLessonInput,
+  Lesson,
+  LessonKind,
+  Module,
+  PromoCode,
+} from '../api/client';
 import {
   archiveCourse,
   duplicateCourse,
@@ -75,6 +86,7 @@ import type { LessonPreviewData } from '../components/LessonPreview';
 import { t } from '../i18n/t';
 import '../styles/constructor.css';
 import '../styles/constructorExtra.css';
+import '../styles/promo.css';
 
 // ---------- Константы ----------
 
@@ -90,6 +102,29 @@ const STATUS_LABELS: Record<CourseStatus, string> = {
   published: t('teach.statusPublished'),
   archived: t('teach.statusArchived'),
 };
+
+// ---------- P8: промокоды (T63/T64) ----------
+
+/** Контракт T63: после trim+upper — 3–32 символа [A-Z0-9_-]. */
+const PROMO_CODE_RE = /^[A-Z0-9_-]{3,32}$/;
+
+type PromoStatus = 'active' | 'inactive' | 'expired';
+
+const PROMO_STATUS_LABELS: Record<PromoStatus, string> = {
+  active: t('p8.promo.active'),
+  inactive: t('p8.promo.inactive'),
+  expired: t('p8.promo.expired'),
+};
+
+/**
+ * Статус промокода — вычисляется на клиенте (отдельного поля в модели нет):
+ * отключённый важнее истёкшего, истёкший — активный, но expiresAt уже прошёл.
+ */
+function promoStatus(p: PromoCode): PromoStatus {
+  if (!p.active) return 'inactive';
+  if (p.expiresAt && new Date(p.expiresAt).getTime() <= Date.now()) return 'expired';
+  return 'active';
+}
 
 // Сообщения на русском без ключа словаря (см. отчёт T06: кандидаты в ru.json).
 // Схема создания курса ниже — по образцу прежнего кода страницы.
@@ -866,6 +901,105 @@ export default function Constructor(): JSX.Element {
   // во время мутаций тоже.
   const coverBusy = uploadCoverMutation.isPending || removeCoverMutation.isPending;
   const coverDisabled = cardFrozen || coverBusy;
+
+  // ---------- P8: промокоды (T63/T64) ----------
+  // Секция доступна только у существующего курса и не в архиве (контракт:
+  // создание/деактивация в архиве → 409, список тоже не нужен).
+  const promoAvailable = Boolean(course && course.status !== 'archived');
+  const promoQuery = useQuery({
+    queryKey: ['promo-codes', course?.id],
+    queryFn: () => listPromoCodes(course?.id ?? ''),
+    enabled: promoAvailable,
+    retry: false,
+  });
+
+  // Черновик формы: числа держим строками, чтобы пустое поле отличалось от 0.
+  const [promoForm, setPromoForm] = useState({
+    code: '',
+    discountPct: '',
+    maxUses: '0',
+    expiresAt: '',
+  });
+  const [promoErrors, setPromoErrors] = useState<Record<string, string>>({});
+  // Inline-подтверждение отключения (стиль T49/T52/T57, без window.confirm).
+  const [promoConfirmId, setPromoConfirmId] = useState<string | null>(null);
+
+  const promoCreateMutation = useMutation({
+    mutationFn: (payload: {
+      code: string;
+      discountPct: number;
+      maxUses: number;
+      expiresAt?: string;
+    }) => createPromoCode(course?.id ?? '', payload),
+    onSuccess: () => {
+      setPromoForm({ code: '', discountPct: '', maxUses: '0', expiresAt: '' });
+      setPromoErrors({});
+      setNotice({ text: t('p8.promo.created'), kind: 'ok' });
+      void qc.invalidateQueries({ queryKey: ['promo-codes', course?.id] });
+    },
+    onError: (e: unknown) => setNotice({ text: errText(e), kind: 'error' }),
+  });
+
+  const promoOffMutation = useMutation({
+    mutationFn: (promoId: string) => deactivatePromoCode(course?.id ?? '', promoId),
+    onSuccess: () => {
+      setPromoConfirmId(null);
+      setNotice({ text: t('p8.promo.turnedOff'), kind: 'ok' });
+      void qc.invalidateQueries({ queryKey: ['promo-codes', course?.id] });
+    },
+    onError: (e: unknown) => {
+      setPromoConfirmId(null);
+      setNotice({ text: errText(e), kind: 'error' });
+    },
+  });
+
+  /**
+   * Клиентская предвалидация по замороженным ключам p8.promo.*Invalid.
+   * Код нормализуется (trim+upper), дата «действует до» — конец выбранного
+   * дня UTC: YYYY-MM-DDT23:59:59Z. Ошибки сервера показываются отдельно
+   * текстом ApiError.message (notice), клиентские — под полями.
+   */
+  function onPromoSubmit(e: FormEvent): void {
+    e.preventDefault();
+    const errors: Record<string, string> = {};
+    const code = promoForm.code.trim().toUpperCase();
+    if (!PROMO_CODE_RE.test(code)) errors.code = t('p8.promo.codeInvalid');
+
+    const discountPct = Number(promoForm.discountPct);
+    if (!Number.isInteger(discountPct) || discountPct < 1 || discountPct > 90) {
+      errors.discountPct = t('p8.promo.discountInvalid');
+    }
+
+    const maxUses = promoForm.maxUses.trim() === '' ? 0 : Number(promoForm.maxUses);
+    if (!Number.isInteger(maxUses) || maxUses < 0) {
+      errors.maxUses = t('p8.promo.maxUsesInvalid');
+    }
+
+    let expiresAt: string | undefined;
+    if (promoForm.expiresAt) {
+      expiresAt = `${promoForm.expiresAt}T23:59:59Z`;
+      const expiresTime = new Date(expiresAt).getTime();
+      if (Number.isNaN(expiresTime) || expiresTime <= Date.now()) {
+        errors.expiresAt = t('p8.promo.expiresInvalid');
+      }
+    }
+
+    setPromoErrors(errors);
+    const first = errors.code
+      ? 'promo-code'
+      : errors.discountPct
+        ? 'promo-discount'
+        : errors.maxUses
+          ? 'promo-max-uses'
+          : errors.expiresAt
+            ? 'promo-expires'
+            : null;
+    if (first) {
+      focusField(first);
+      return;
+    }
+    promoCreateMutation.mutate({ code, discountPct, maxUses, expiresAt });
+  }
 
   // ---------- T19: переименование модуля ----------
 
@@ -1792,6 +1926,156 @@ export default function Constructor(): JSX.Element {
                   )}
                 </div>
               </section>
+
+              {/* P8 (T63/T64): промокоды курса — форма создания и история.
+                  В архиве секцию не показываем: API отвечает 409. */}
+              {promoAvailable && (
+                <section className="teach-section panel promo-section">
+                  <h2>{t('p8.promo.title')}</h2>
+                  <p className="teach-note">{t('p8.promo.hint')}</p>
+
+                  <form className="form-grid promo-form" onSubmit={onPromoSubmit} noValidate>
+                    <label htmlFor="promo-code">{t('p8.promo.code')}</label>
+                    <input
+                      id="promo-code"
+                      className="input"
+                      value={promoForm.code}
+                      onChange={(e) => setPromoForm((p) => ({ ...p, code: e.target.value }))}
+                      aria-invalid={promoErrors.code ? true : undefined}
+                    />
+                    {promoErrors.code && <p className="error">{promoErrors.code}</p>}
+
+                    <label htmlFor="promo-discount">{t('p8.promo.discount')}</label>
+                    <input
+                      id="promo-discount"
+                      className="input"
+                      type="number"
+                      min={1}
+                      max={90}
+                      step={1}
+                      value={promoForm.discountPct}
+                      onChange={(e) =>
+                        setPromoForm((p) => ({ ...p, discountPct: e.target.value }))
+                      }
+                      aria-invalid={promoErrors.discountPct ? true : undefined}
+                    />
+                    {promoErrors.discountPct && (
+                      <p className="error">{promoErrors.discountPct}</p>
+                    )}
+
+                    <label htmlFor="promo-max-uses">{t('p8.promo.maxUses')}</label>
+                    <input
+                      id="promo-max-uses"
+                      className="input"
+                      type="number"
+                      min={0}
+                      step={1}
+                      value={promoForm.maxUses}
+                      onChange={(e) =>
+                        setPromoForm((p) => ({ ...p, maxUses: e.target.value }))
+                      }
+                      aria-invalid={promoErrors.maxUses ? true : undefined}
+                    />
+                    <p className="teach-note ce-field-hint">{t('p8.promo.maxUsesHint')}</p>
+                    {promoErrors.maxUses && <p className="error">{promoErrors.maxUses}</p>}
+
+                    <label htmlFor="promo-expires">{t('p8.promo.expiresAt')}</label>
+                    <input
+                      id="promo-expires"
+                      className="input"
+                      type="date"
+                      value={promoForm.expiresAt}
+                      onChange={(e) =>
+                        setPromoForm((p) => ({ ...p, expiresAt: e.target.value }))
+                      }
+                      aria-invalid={promoErrors.expiresAt ? true : undefined}
+                    />
+                    <p className="teach-note ce-field-hint">{t('p8.promo.expiresHint')}</p>
+                    {promoErrors.expiresAt && <p className="error">{promoErrors.expiresAt}</p>}
+
+                    <div className="teach-card-actions">
+                      <button
+                        type="submit"
+                        className="btn btn-primary"
+                        disabled={promoCreateMutation.isPending}
+                      >
+                        {t('p8.promo.create')}
+                      </button>
+                    </div>
+                  </form>
+
+                  {promoQuery.isLoading && <p role="status">{t('common.loading')}</p>}
+                  {promoQuery.isError && (
+                    <p className="error">
+                      {errText(promoQuery.error)}{' '}
+                      <button type="button" onClick={() => void promoQuery.refetch()}>
+                        {t('common.retry')}
+                      </button>
+                    </p>
+                  )}
+                  {promoQuery.data && promoQuery.data.length === 0 && (
+                    <p className="muted promo-empty">{t('p8.promo.empty')}</p>
+                  )}
+                  {promoQuery.data && promoQuery.data.length > 0 && (
+                    <ul className="promo-list">
+                      {promoQuery.data.map((p) => {
+                        const status = promoStatus(p);
+                        const busy =
+                          promoOffMutation.isPending && promoOffMutation.variables === p.id;
+                        return (
+                          <li key={p.id} className={`promo-item promo-item-${status}`}>
+                            <div className="promo-item-main">
+                              <strong className="promo-code">{p.code}</strong>
+                              <span className="promo-discount">−{p.discountPct}%</span>
+                              <span className={`promo-badge promo-badge-${status}`}>
+                                {PROMO_STATUS_LABELS[status]}
+                              </span>
+                              <span className="promo-meta">
+                                {t('p8.promo.used')}: {p.usedCount}
+                                {p.maxUses > 0
+                                  ? ` / ${p.maxUses}`
+                                  : ` · ${t('p8.promo.noLimit')}`}
+                              </span>
+                              <span className="promo-meta">
+                                {t('p8.promo.expiresAt')}: {formatDate(p.expiresAt)}
+                              </span>
+                            </div>
+                            {p.active &&
+                              (promoConfirmId === p.id ? (
+                                <div className="promo-confirm" role="group">
+                                  <span>{t('p8.promo.turnOffConfirm')}</span>
+                                  <button
+                                    type="button"
+                                    className="teach-danger"
+                                    onClick={() => promoOffMutation.mutate(p.id)}
+                                    disabled={busy}
+                                  >
+                                    {t('common.confirm')}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setPromoConfirmId(null)}
+                                    disabled={busy}
+                                  >
+                                    {t('common.cancel')}
+                                  </button>
+                                </div>
+                              ) : (
+                                <button
+                                  type="button"
+                                  className="teach-danger promo-off"
+                                  onClick={() => setPromoConfirmId(p.id)}
+                                >
+                                  {t('p8.promo.turnOff')}
+                                </button>
+                              ))}
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  )}
+                </section>
+              )}
 
               {/* Отправка на модерацию — только для черновика. Рядом — чеклист
                   готовности (T56): пока не закрыты все пункты, кнопка выключена. */}

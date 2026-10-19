@@ -20,13 +20,20 @@
 import { useMemo, useState } from 'react';
 import { Link, NavLink, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ApiError, completeLesson, getCourse, myCourses } from '../api/client';
+import {
+  ApiError,
+  completeLesson,
+  getCourse,
+  myCertificates,
+  myCourses,
+} from '../api/client';
 import type { CompleteLessonInput, CompleteResult, Lesson } from '../api/client';
 import { courseProgress } from '../api/meExtra';
 import LessonView from '../components/LessonView';
 import { t } from '../i18n/t';
 import '../styles/learn.css';
 import '../styles/profile.css';
+import '../styles/certificate.css';
 
 /** Урок с названием модуля — для плоского списка и подсветки. */
 type FlatLesson = Lesson & { moduleTitle: string };
@@ -85,6 +92,21 @@ export default function Learn(): JSX.Element {
     retry: false,
   });
   const progress = progressQuery.data;
+
+  // T68: сертификат к завершённому курсу. Номер сначала берём из MyCourse
+  // (аддитивное certificateNumber), иначе — из /me/certificates по courseId.
+  // Запрос стартует только на 100% и только если номера нет в «моих курсах».
+  const certificateFromCourse = meCourse?.certificateNumber?.trim() ?? '';
+  const certificatesQuery = useQuery({
+    queryKey: ['my-certificates'],
+    queryFn: myCertificates,
+    enabled: Boolean(meCourse) && progress?.percent === 100 && !certificateFromCourse,
+    retry: false,
+  });
+  const certificateNumber =
+    certificateFromCourse ||
+    (certificatesQuery.data ?? []).find((c) => c.courseId === courseId)?.number ||
+    '';
 
   const modules = useMemo(() => {
     const mods = courseQuery.data?.modules ?? [];
@@ -148,6 +170,8 @@ export default function Learn(): JSX.Element {
       // Второй ключ ('me-courses') — запасной вариант переименования из T03.
       void qc.invalidateQueries({ queryKey: ['my-courses'] });
       void qc.invalidateQueries({ queryKey: ['me-courses'] });
+      // T68: на 100% бэкенд выдаёт сертификат — подтягиваем номер для баннера.
+      void qc.invalidateQueries({ queryKey: ['my-certificates'] });
     },
     onError: (e: unknown) => {
       if (!activeLesson) return;
@@ -336,6 +360,19 @@ export default function Learn(): JSX.Element {
           <section className="panel learn-finished" role="status">
             <h2>{t('learn.courseFinished')}</h2>
             <p>{t('learn.finishedHint')}</p>
+            {/* T68: баннер сертификата. На 100% он есть всегда; ссылка —
+                только когда бэкенд уже вернул номер (иначе баннер без ссылки). */}
+            <div className="cert-finish">
+              <p className="cert-finish-title">{t('p8.cert.done')}</p>
+              {certificateNumber && (
+                <Link
+                  className="btn btn-primary"
+                  to={`/certificates/${encodeURIComponent(certificateNumber)}`}
+                >
+                  {t('p8.cert.open')}
+                </Link>
+              )}
+            </div>
             {slug ? (
               <Link className="btn" to={`/courses/${slug}`}>
                 {t('learn.leaveReview')}

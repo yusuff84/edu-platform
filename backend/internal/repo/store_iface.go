@@ -59,6 +59,12 @@ type StoreAPI interface {
 	GetCourseBySlug(slug string) (*Course, bool)
 	SlugTaken(slug string) bool
 	ListPublishedCourses(q string) []*Course
+	// ListCatalogCourses — опубликованные курсы с серверными фильтрами и
+	// сортировкой каталога (T65). Пагинация остаётся на стороне handler.
+	ListCatalogCourses(f CatalogFilter) []*Course
+	// CountPublishedCoursesByCategory — число published-курсов по слагам
+	// категорий (T65); отсутствующий в карте слаг означает 0.
+	CountPublishedCoursesByCategory() map[string]int
 	ListCoursesByTeacher(teacherID string) []*Course
 	ListCoursesByStatus(status CourseStatus) []*Course
 	SetCourseStatus(id string, status CourseStatus, comment string) bool
@@ -194,6 +200,61 @@ type StoreAPI interface {
 	// уроки каждого модуля по position — только метаданные) и статистика
 	// (все записи, активные, отзывы, успешные платежи). false — курса нет.
 	AdminCourseDetail(courseID string) (*AdminCourseDetailData, bool)
+
+	// ---- T67: сертификаты ----
+
+	// IssueCertificate идемпотентно выдаёт сертификат ученику за курс:
+	// повторный вызов (и повторное достижение 100% прогресса) возвращает уже
+	// существующий сертификат, второй не создаётся — UNIQUE (user_id, course_id).
+	// Номер — EDU-<ГГГГ>-<8 hex ВЕРХНИМ регистром> (crypto/rand); при коллизии
+	// номера генерация повторяется. ErrNotFound — ученика или курса нет.
+	IssueCertificate(studentID, courseID string) (*Certificate, error)
+	// GetCertificateByNumber — публичная карточка сертификата по номеру:
+	// данные курса и displayName студента. false — сертификата нет.
+	GetCertificateByNumber(number string) (*CertificateDetails, bool)
+	// ListCertificatesByStudent — сертификаты ученика, новые первыми.
+	// Никогда не nil (пустой слайс — если сертификатов нет).
+	ListCertificatesByStudent(studentID string) []*CertificateListItem
+
+	// ---- T69: ответы преподавателя на отзывы и разбивка оценок ----
+
+	// SetReviewReply устанавливает или заменяет публичный ответ
+	// преподавателя на отзыв (T69): текст без trim-обработки — её делает
+	// handler, — и время установки teacherReplyAt = now (обновляется при
+	// каждом вызове). Возвращает снимок отзыва после записи.
+	// ErrNotFound — отзыва с таким id в этом курсе нет (в том числе отзыв
+	// другого курса). Владение курсом проверяет handler.
+	SetReviewReply(courseID, reviewID, body string) (*Review, error)
+	// ClearReviewReply очищает ответ преподавателя: teacherReply = "",
+	// teacherReplyAt = NULL (T69). Повторная очистка уже очищенного отзыва —
+	// успех. ErrNotFound — отзыва с таким id в этом курсе нет.
+	ClearReviewReply(courseID, reviewID string) error
+	// ReviewRatingBreakdown — число отзывов курса по каждой оценке (T69).
+	// В карте всегда присутствуют ключи 1..5 (нет отзывов — нули).
+	ReviewRatingBreakdown(courseID string) map[int]int
+
+	// ---- T63: промокоды ----
+
+	// CreatePromoCode сохраняет промокод курса. Код приходит уже
+	// нормализованным (trim + upper) из handler; usedCount всегда
+	// начинается с 0, active = true. Дубликат (courseId, code) —
+	// ErrAlreadyExists (правило уникальности значений).
+	CreatePromoCode(p *PromoCode) (*PromoCode, error)
+	// ListPromoCodesByCourse — все коды курса, включая неактивные (история),
+	// по createdAt убыванию. Никогда не nil.
+	ListPromoCodesByCourse(courseID string) []*PromoCode
+	// GetPromoCodeByID — промокод по id; false — нет такого.
+	GetPromoCodeByID(id string) (*PromoCode, bool)
+	// FindPromoCode — промокод по (courseId, code). Код сравнивается без
+	// учёта регистра (хранится в верхнем). false — на курсе такого нет.
+	FindPromoCode(courseID, code string) (*PromoCode, bool)
+	// DeactivatePromoCode идемпотентно ставит active=false, запись
+	// сохраняется (история). ErrNotFound — промокода нет.
+	DeactivatePromoCode(id string) error
+	// IncrementPromoCodeUsage атомарно увеличивает usedCount на 1.
+	// false — промокода нет. Вызывается ровно один раз при первом переходе
+	// платежа в succeeded (идемпотентность обеспечивает handler).
+	IncrementPromoCodeUsage(id string) bool
 }
 
 // PaymentFilter — параметры журнала платежей для админки (US6, T31).
@@ -260,11 +321,11 @@ type ContentCounts struct {
 // источник обоих срезов, пересчёт от сырых отзывов совпадает с ним,
 // т.к. RecalcCourseRating выполняется на каждом изменении отзывов).
 type AdminCourseDetailStats struct {
-	StudentsCount int // ВСЕ записи на курс (any статус: active/refunded/revoked)
-	ActiveCount   int // записи в статусе active
-	ReviewsCount  int // отзывы курса (= ratings_count курса)
-	AvgRating     float64
-	PaymentsCount int // платежи курса в статусе succeeded
+	StudentsCount  int // ВСЕ записи на курс (any статус: active/refunded/revoked)
+	ActiveCount    int // записи в статусе active
+	ReviewsCount   int // отзывы курса (= ratings_count курса)
+	AvgRating      float64
+	PaymentsCount  int // платежи курса в статусе succeeded
 	PaidTotalCents int // сумма amount_cents успешных платежей курса
 }
 
@@ -279,8 +340,8 @@ type AdminCourseDetailData struct {
 	// Course — снимок курса; CoverPath внутри (колонка cover_path из
 	// 001_init.sql; T54 добавляет только эндпоинты загрузки).
 	Course       Course
-	TeacherEmail string    // email автора; "" — автор не найден
-	Modules      []*Module // по position (не nil — пустой слайс, если модулей нет)
+	TeacherEmail string               // email автора; "" — автор не найден
+	Modules      []*Module            // по position (не nil — пустой слайс, если модулей нет)
 	Lessons      map[string][]*Lesson // moduleId → уроки по position (не nil)
 	// Counts — счётчики в форме элемента GET /admin/courses (T25):
 	// Students — только активные записи.

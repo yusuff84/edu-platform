@@ -113,12 +113,12 @@ func TestAdminCourseDetailHappyPath(t *testing.T) {
 
 	body := adminCourseDetail(t, router, adminCookies, courseID)
 
-	// --- course: ровно 14 полей = 13 элемента списка T25 + coverPath ---
+	// --- course: ровно 15 полей = 13 элемента списка T25 + coverPath + category (T65) ---
 	course, ok := body["course"].(map[string]any)
 	if !ok {
 		t.Fatalf("ответ без course: %v", body)
 	}
-	wantKeys(t, course, "id", "slug", "title", "teacherId", "teacherEmail", "status",
+	wantKeys(t, course, "id", "slug", "title", "category", "teacherId", "teacherEmail", "status",
 		"priceCents", "createdAt", "updatedAt", "modulesCount", "lessonsCount",
 		"studentsCount", "coverPath")
 	if course["id"] != courseID {

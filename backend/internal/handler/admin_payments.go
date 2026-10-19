@@ -94,6 +94,10 @@ type paymentJournalItem struct {
 	Status             repo.PaymentStatus `json:"status"`
 	CreatedAt          time.Time          `json:"createdAt"`
 	ProcessedAt        *time.Time         `json:"processedAt"`
+	// T63: применённый промокод и размер скидки (аддитивные поля контракта:
+	// promoCode — пустая строка, если кода не было).
+	PromoCode     string `json:"promoCode"`
+	DiscountCents int    `json:"discountCents"`
 }
 
 type paymentJournalTotals struct {
@@ -127,6 +131,7 @@ func toJournalItem(it repo.PaymentJournalRow) paymentJournalItem {
 		Currency:           it.Currency, Provider: it.Provider,
 		ProviderPaymentID: it.ProviderPaymentID, Status: it.Status,
 		CreatedAt: it.CreatedAt, ProcessedAt: it.ProcessedAt,
+		PromoCode: it.PromoCode, DiscountCents: it.DiscountCents,
 	}
 }
 

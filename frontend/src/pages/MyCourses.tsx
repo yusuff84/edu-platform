@@ -15,6 +15,7 @@ import { courseProgress } from '../api/meExtra';
 import { coverFor } from '../components/CourseCard';
 import { t } from '../i18n/t';
 import '../styles/profile.css';
+import '../styles/certificate.css';
 
 export default function MyCourses(): JSX.Element {
   const query = useQuery({ queryKey: ['my-courses'], queryFn: myCourses });
@@ -130,6 +131,10 @@ export default function MyCourses(): JSX.Element {
               ? `/learn/${course.id}/${nextLessonId}`
               : `/learn/${course.id}`;
 
+            // T68: сертификат приходит аддитивным полем записи (пустая строка —
+            // сертификата ещё нет); бейдж ведёт на публичную страницу по номеру.
+            const certificateNumber = item.certificateNumber?.trim() ?? '';
+
             return (
               <div key={course.id} className="panel">
                 <div
@@ -190,6 +195,14 @@ export default function MyCourses(): JSX.Element {
                   {!revoked && (
                     <Link className="btn btn-primary" to={href}>
                       {t('my.continue')}
+                    </Link>
+                  )}
+                  {certificateNumber && (
+                    <Link
+                      className="btn cert-badge"
+                      to={`/certificates/${encodeURIComponent(certificateNumber)}`}
+                    >
+                      {t('p8.cert.badge')}
                     </Link>
                   )}
                   {progress.isError && !revoked && (

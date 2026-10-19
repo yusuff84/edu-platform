@@ -353,11 +353,14 @@ func scanCourse(scan func(dest ...any) error) (*Course, error) {
 	var avg float64
 	var count int
 	var created, updated time.Time
-	if err := scan(&c.ID, &teacherID, &c.Slug, &c.Title, &c.Description, &cover,
+	if err := scan(&c.ID, &teacherID, &c.Slug, &c.Title, &c.Description, &c.Category, &cover,
 		&c.PriceCents, &currency, &status, &avg, &count, &comment, &created, &updated); err != nil {
 		return nil, err
 	}
 	c.TeacherID = teacherID
+	if strings.TrimSpace(c.Category) == "" {
+		c.Category = "other"
+	}
 	c.CoverPath = cover
 	c.Currency = strings.TrimSpace(currency)
 	if c.Currency == "" {
@@ -372,7 +375,7 @@ func scanCourse(scan func(dest ...any) error) (*Course, error) {
 	return c, nil
 }
 
-const courseCols = `id::text, teacher_id::text, slug, title, description,
+const courseCols = `id::text, teacher_id::text, slug, title, description, category,
 	cover_path, price_cents, currency::text, status,
 	COALESCE(avg_rating,0)::float8, ratings_count, COALESCE(moderation_comment,''),
 	created_at, updated_at`
@@ -383,19 +386,26 @@ func (s *PostgresStore) CreateCourse(c *Course) *Course {
 	if currency == "" {
 		currency = "RUB"
 	}
+	// T65: без явной категории — other, как DEFAULT миграции 009 (передаём
+	// значение явно, чтобы поведение не зависело от версии схемы).
+	category := strings.TrimSpace(c.Category)
+	if category == "" {
+		category = "other"
+	}
 	ctx, cancel := s.ctx()
 	defer cancel()
 	row := s.pool.QueryRow(ctx,
-		`INSERT INTO courses (teacher_id, slug, title, description, price_cents, currency, status)
-		 VALUES ($1::uuid,$2,$3,$4,$5,$6,'draft')
+		`INSERT INTO courses (teacher_id, slug, title, description, category, price_cents, currency, status)
+		 VALUES ($1::uuid,$2,$3,$4,$5,$6,$7,'draft')
 		 RETURNING `+courseCols,
-		c.TeacherID, c.Slug, c.Title, c.Description, c.PriceCents, currency)
+		c.TeacherID, c.Slug, c.Title, c.Description, category, c.PriceCents, currency)
 	if nc, err := scanCourse(row.Scan); err == nil {
 		*c = *nc
 		return c
 	} else {
 		log.Printf("postgres CreateCourse: %v", err)
 		c.ID = uuid.NewString()
+		c.Category = category
 		c.Currency = currency
 		c.Status = CourseDraft
 		c.CreatedAt = now
@@ -456,6 +466,93 @@ func (s *PostgresStore) ListPublishedCourses(q string) []*Course {
 	for rows.Next() {
 		if c, err := scanCourse(rows.Scan); err == nil {
 			out = append(out, c)
+		}
+	}
+	return out
+}
+
+// ListCatalogCourses возвращает опубликованные курсы с серверными фильтрами
+// каталога (T65): q (title/description, ILIKE), category, price (free=0,
+// paid>0), minRating (только курсы с отзывами). Сортировка — по f.Sort,
+// вторичный ключ — created_at DESC, затем id DESC (детерминированный порядок
+// при полном совпадении ключей). Пагинацию применяет handler, поэтому LIMIT
+// в запросе нет. Значения фильтров — параметры $N; в SQL подставляется только
+// выбранный из белого списка ORDER BY.
+func (s *PostgresStore) ListCatalogCourses(f CatalogFilter) []*Course {
+	where := "c.status='published'"
+	args := make([]any, 0, 4)
+	if q := strings.TrimSpace(f.Q); q != "" {
+		args = append(args, q)
+		where += fmt.Sprintf(" AND (c.title ILIKE '%%'||$%d||'%%' OR c.description ILIKE '%%'||$%d||'%%')",
+			len(args), len(args))
+	}
+	if category := strings.TrimSpace(f.Category); category != "" {
+		args = append(args, category)
+		where += fmt.Sprintf(" AND c.category=$%d", len(args))
+	}
+	switch f.Price {
+	case "free":
+		where += " AND c.price_cents=0"
+	case "paid":
+		where += " AND c.price_cents>0"
+	}
+	if f.MinRating > 0 {
+		args = append(args, f.MinRating)
+		where += fmt.Sprintf(" AND c.ratings_count>0 AND COALESCE(c.avg_rating,0)>=$%d", len(args))
+	}
+
+	orderBy := `(SELECT COUNT(*) FROM enrollments e
+	             WHERE e.course_id = c.id AND e.status = 'active') DESC,
+	             c.created_at DESC, c.id DESC`
+	switch f.Sort {
+	case "new":
+		orderBy = "c.created_at DESC, c.id DESC"
+	case "rating":
+		orderBy = "COALESCE(c.avg_rating,0) DESC, c.created_at DESC, c.id DESC"
+	case "price_asc":
+		orderBy = "c.price_cents ASC, c.created_at DESC, c.id DESC"
+	case "price_desc":
+		orderBy = "c.price_cents DESC, c.created_at DESC, c.id DESC"
+	}
+
+	ctx, cancel := s.ctx()
+	defer cancel()
+	rows, err := s.pool.Query(ctx,
+		`SELECT `+courseColsJoined+` FROM courses c WHERE `+where+` ORDER BY `+orderBy, args...)
+	if err != nil {
+		log.Printf("postgres ListCatalogCourses: %v", err)
+		return nil
+	}
+	defer rows.Close()
+	var out []*Course
+	for rows.Next() {
+		if c, err := scanCourse(rows.Scan); err == nil {
+			out = append(out, c)
+		}
+	}
+	return out
+}
+
+// CountPublishedCoursesByCategory — число published-курсов по категориям
+// (T65) одним GROUP BY. Слаги без курсов в карту не попадают; хендлер
+// разворачивает фиксированный список и подставляет 0.
+func (s *PostgresStore) CountPublishedCoursesByCategory() map[string]int {
+	ctx, cancel := s.ctx()
+	defer cancel()
+	out := make(map[string]int)
+	rows, err := s.pool.Query(ctx,
+		`SELECT category, COUNT(*)::int FROM courses
+		 WHERE status='published' GROUP BY category`)
+	if err != nil {
+		log.Printf("postgres CountPublishedCoursesByCategory: %v", err)
+		return out
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var category string
+		var n int
+		if err := rows.Scan(&category, &n); err == nil {
+			out[category] = n
 		}
 	}
 	return out
@@ -903,9 +1000,11 @@ func scanPayment(scan func(dest ...any) error) (*Payment, error) {
 	p := &Payment{}
 	var studentID, courseID, currency, provider, providerID, status string
 	var processed *time.Time
+	var promoCode string
+	var discountCents int
 	if err := scan(&p.ID, &studentID, &courseID, &p.AmountCents, &p.PlatformFeeCents,
 		&p.TeacherAmountCents, &currency, &provider, &providerID, &status,
-		&p.CreatedAt, &processed); err != nil {
+		&p.CreatedAt, &processed, &promoCode, &discountCents); err != nil {
 		return nil, err
 	}
 	p.StudentID = studentID
@@ -915,18 +1014,22 @@ func scanPayment(scan func(dest ...any) error) (*Payment, error) {
 	p.ProviderPaymentID = providerID
 	p.Status = PaymentStatus(status)
 	p.ProcessedAt = processed
+	p.PromoCode = promoCode
+	p.DiscountCents = discountCents
 	return p, nil
 }
 
+// paymentCols — порядок колонок payments для scanPayment. T63: в конец
+// добавлены promo_code и discount_cents (аддитивные поля контракта).
 const paymentCols = `id::text, student_id::text, course_id::text, amount_cents, platform_fee_cents,
 	teacher_amount_cents, currency::text, provider, COALESCE(provider_payment_id,''),
-	status, created_at, processed_at`
+	status, created_at, processed_at, COALESCE(promo_code,''), discount_cents`
 
 // paymentColsP — то же, что paymentCols, но с алиасом таблицы p
 // (для JOIN-запросов журнала платежей).
 const paymentColsP = `p.id::text, p.student_id::text, p.course_id::text, p.amount_cents, p.platform_fee_cents,
 	p.teacher_amount_cents, p.currency::text, p.provider, COALESCE(p.provider_payment_id,''),
-	p.status, p.created_at, p.processed_at`
+	p.status, p.created_at, p.processed_at, COALESCE(p.promo_code,''), p.discount_cents`
 
 func (s *PostgresStore) CreatePayment(p *Payment) (*Payment, error) {
 	ctx, cancel := s.ctx()
@@ -943,11 +1046,12 @@ func (s *PostgresStore) CreatePayment(p *Payment) (*Payment, error) {
 	}
 	row := s.pool.QueryRow(ctx,
 		`INSERT INTO payments (student_id, course_id, amount_cents, platform_fee_cents,
-		  teacher_amount_cents, currency, provider, provider_payment_id, status)
-		 VALUES ($1::uuid,$2::uuid,$3,$4,$5,$6,$7,$8,$9)
+		  teacher_amount_cents, currency, provider, provider_payment_id, status,
+		  promo_code, discount_cents)
+		 VALUES ($1::uuid,$2::uuid,$3,$4,$5,$6,$7,$8,$9,$10,$11)
 		 RETURNING `+paymentCols,
 		p.StudentID, p.CourseID, p.AmountCents, p.PlatformFeeCents, p.TeacherAmountCents,
-		currency, p.Provider, providerID, string(p.Status))
+		currency, p.Provider, providerID, string(p.Status), p.PromoCode, p.DiscountCents)
 	if res, err := scanPayment(row.Scan); err != nil {
 		if isUniqueViolation(err) {
 			return nil, ErrAlreadyExists
@@ -1141,20 +1245,35 @@ func (s *PostgresStore) CreateReview(studentID, courseID string, rating int, bod
 	return r, nil
 }
 
+// reviewCols — колонки Review в форме контракта T69 (teacherReply и
+// teacherReplyAt — аддитивные поля; NULL времени читается как nil → null).
+const reviewCols = `id::text, student_id::text, course_id::text, rating,
+	COALESCE(body,''), created_at, teacher_reply, teacher_reply_at`
+
+// scanReview собирает Review из строки выборки reviewCols.
+func scanReview(scan func(dest ...any) error) (*Review, error) {
+	r := &Review{}
+	var replyAt *time.Time
+	if err := scan(&r.ID, &r.StudentID, &r.CourseID, &r.Rating, &r.Body,
+		&r.CreatedAt, &r.TeacherReply, &replyAt); err != nil {
+		return nil, err
+	}
+	r.TeacherReplyAt = replyAt
+	return r, nil
+}
+
 func (s *PostgresStore) ListReviewsByCourse(courseID string) []*Review {
 	ctx, cancel := s.ctx()
 	defer cancel()
 	rows, err := s.pool.Query(ctx,
-		`SELECT id::text, student_id::text, course_id::text, rating, COALESCE(body,''), created_at
-		 FROM reviews WHERE course_id=$1::uuid ORDER BY created_at DESC`, courseID)
+		`SELECT `+reviewCols+` FROM reviews WHERE course_id=$1::uuid ORDER BY created_at DESC`, courseID)
 	if err != nil {
 		return nil
 	}
 	defer rows.Close()
 	var out []*Review
 	for rows.Next() {
-		r := &Review{}
-		if err := rows.Scan(&r.ID, &r.StudentID, &r.CourseID, &r.Rating, &r.Body, &r.CreatedAt); err == nil {
+		if r, err := scanReview(rows.Scan); err == nil {
 			out = append(out, r)
 		}
 	}
@@ -1172,6 +1291,83 @@ func (s *PostgresStore) RecalcCourseRating(courseID string) {
 	_, _ = s.pool.Exec(ctx,
 		`UPDATE courses SET avg_rating=$2, ratings_count=$3, updated_at=now() WHERE id=$1::uuid`,
 		courseID, avg, count)
+}
+
+// SetReviewReply устанавливает/заменяет ответ преподавателя на отзыв (T69).
+// Мусорный id (не UUID) трактуется как «отзыва нет» — как в DeleteReview,
+// чтобы не отдавать 500 на кривом значении пути.
+func (s *PostgresStore) SetReviewReply(courseID, reviewID, body string) (*Review, error) {
+	if !validUUID(reviewID) || !validUUID(courseID) {
+		return nil, ErrNotFound
+	}
+	ctx, cancel := s.ctx()
+	defer cancel()
+	row := s.pool.QueryRow(ctx,
+		`UPDATE reviews SET teacher_reply=$3, teacher_reply_at=now()
+		 WHERE id=$1::uuid AND course_id=$2::uuid
+		 RETURNING `+reviewCols, reviewID, courseID, body)
+	r, err := scanReview(row.Scan)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("не удалось сохранить ответ на отзыв: %w", err)
+	}
+	return r, nil
+}
+
+// ClearReviewReply очищает ответ преподавателя (T69): пустая строка и NULL
+// времени. Повторная очистка — успех; ErrNotFound только если отзыва нет.
+func (s *PostgresStore) ClearReviewReply(courseID, reviewID string) error {
+	if !validUUID(reviewID) || !validUUID(courseID) {
+		return ErrNotFound
+	}
+	ctx, cancel := s.ctx()
+	defer cancel()
+	tag, err := s.pool.Exec(ctx,
+		`UPDATE reviews SET teacher_reply='', teacher_reply_at=NULL
+		 WHERE id=$1::uuid AND course_id=$2::uuid`, reviewID, courseID)
+	if err != nil {
+		return fmt.Errorf("не удалось очистить ответ на отзыв: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+// ReviewRatingBreakdown — число отзывов курса по оценкам 1..5 (T69).
+// Ключи 1..5 всегда в карте; ошибка БД/кривой id — нулевая разбивка
+// (сигнатура без error, как у остальных агрегатов чтения).
+func (s *PostgresStore) ReviewRatingBreakdown(courseID string) map[int]int {
+	out := map[int]int{1: 0, 2: 0, 3: 0, 4: 0, 5: 0}
+	if !validUUID(courseID) {
+		return out
+	}
+	ctx, cancel := s.ctx()
+	defer cancel()
+	rows, err := s.pool.Query(ctx,
+		`SELECT rating, COUNT(*)::int FROM reviews
+		 WHERE course_id=$1::uuid GROUP BY rating`, courseID)
+	if err != nil {
+		log.Printf("postgres ReviewRatingBreakdown: %v", err)
+		return out
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var rating, n int
+		if err := rows.Scan(&rating, &n); err == nil && rating >= 1 && rating <= 5 {
+			out[rating] = n
+		}
+	}
+	return out
+}
+
+// validUUID — true для корректного UUID (с trim). Общий помощник для
+// методов отзывов T69 и DeleteReview-подобных путей.
+func validUUID(id string) bool {
+	_, err := uuid.Parse(strings.TrimSpace(id))
+	return err == nil
 }
 
 // ---- Settings ----
@@ -1463,4 +1659,132 @@ func (s *PostgresStore) CountContentByCourses(teacherID string) map[string]Conte
 		}
 	}
 	return out
+}
+
+// ---- T63: промокоды ----
+
+// promoCodeCols — порядок колонок promo_codes для scanPromoCode.
+const promoCodeCols = `id::text, course_id::text, code, discount_pct, max_uses,
+	used_count, expires_at, active, created_at`
+
+// scanPromoCode собирает промокод из строки выборки (T63).
+func scanPromoCode(scan func(dest ...any) error) (*PromoCode, error) {
+	pc := &PromoCode{}
+	if err := scan(&pc.ID, &pc.CourseID, &pc.Code, &pc.DiscountPct, &pc.MaxUses,
+		&pc.UsedCount, &pc.ExpiresAt, &pc.Active, &pc.CreatedAt); err != nil {
+		return nil, err
+	}
+	return pc, nil
+}
+
+// CreatePromoCode сохраняет промокод (T63). Код нормализуется к верхнему
+// регистру (как в in-memory Store), used_count стартует с 0, active=true.
+// Дубликат (course_id, code) — ErrAlreadyExists.
+func (s *PostgresStore) CreatePromoCode(p *PromoCode) (*PromoCode, error) {
+	code := strings.ToUpper(strings.TrimSpace(p.Code))
+	ctx, cancel := s.ctx()
+	defer cancel()
+	row := s.pool.QueryRow(ctx,
+		`INSERT INTO promo_codes (course_id, code, discount_pct, max_uses, expires_at, active)
+		 VALUES ($1::uuid,$2,$3,$4,$5,TRUE)
+		 RETURNING `+promoCodeCols,
+		p.CourseID, code, p.DiscountPct, p.MaxUses, p.ExpiresAt)
+	pc, err := scanPromoCode(row.Scan)
+	if err != nil {
+		if isUniqueViolation(err) {
+			return nil, ErrAlreadyExists
+		}
+		return nil, err
+	}
+	*p = *pc
+	return p, nil
+}
+
+// ListPromoCodesByCourse возвращает все коды курса (включая неактивные),
+// новые первыми; при равном created_at порядок стабилен по id — как в
+// in-memory Store. Ошибки БД логируются и дают пустой (не nil) список.
+func (s *PostgresStore) ListPromoCodesByCourse(courseID string) []*PromoCode {
+	ctx, cancel := s.ctx()
+	defer cancel()
+	rows, err := s.pool.Query(ctx,
+		`SELECT `+promoCodeCols+` FROM promo_codes
+		 WHERE course_id=$1::uuid ORDER BY created_at DESC, id ASC`, courseID)
+	if err != nil {
+		log.Printf("postgres ListPromoCodesByCourse: %v", err)
+		return []*PromoCode{}
+	}
+	defer rows.Close()
+	out := make([]*PromoCode, 0)
+	for rows.Next() {
+		if pc, err := scanPromoCode(rows.Scan); err == nil {
+			out = append(out, pc)
+		}
+	}
+	return out
+}
+
+// GetPromoCodeByID ищет промокод по id. Мусорный id (не UUID) трактуется
+// как «не найдено» — как в GetCourseByID.
+func (s *PostgresStore) GetPromoCodeByID(id string) (*PromoCode, bool) {
+	ctx, cancel := s.ctx()
+	defer cancel()
+	row := s.pool.QueryRow(ctx,
+		`SELECT `+promoCodeCols+` FROM promo_codes WHERE id=$1::uuid`, id)
+	pc, err := scanPromoCode(row.Scan)
+	if err != nil {
+		return nil, false
+	}
+	return pc, true
+}
+
+// FindPromoCode ищет промокод курса по коду (без учёта регистра: код
+// нормализуется к верхнему, как при создании).
+func (s *PostgresStore) FindPromoCode(courseID, code string) (*PromoCode, bool) {
+	code = strings.ToUpper(strings.TrimSpace(code))
+	ctx, cancel := s.ctx()
+	defer cancel()
+	row := s.pool.QueryRow(ctx,
+		`SELECT `+promoCodeCols+` FROM promo_codes
+		 WHERE course_id=$1::uuid AND code=$2 LIMIT 1`, courseID, code)
+	pc, err := scanPromoCode(row.Scan)
+	if err != nil {
+		return nil, false
+	}
+	return pc, true
+}
+
+// DeactivatePromoCode идемпотентно ставит active=false (повторный вызов —
+// тоже успех). ErrNotFound — промокода нет.
+func (s *PostgresStore) DeactivatePromoCode(id string) error {
+	if _, err := uuid.Parse(strings.TrimSpace(id)); err != nil {
+		return ErrNotFound
+	}
+	ctx, cancel := s.ctx()
+	defer cancel()
+	tag, err := s.pool.Exec(ctx,
+		`UPDATE promo_codes SET active=false WHERE id=$1::uuid`, id)
+	if err != nil {
+		return fmt.Errorf("не удалось деактивировать промокод: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+// IncrementPromoCodeUsage атомарно увеличивает used_count на 1. false —
+// промокода нет. Возврат средств счётчик не уменьшает (контракт T63).
+func (s *PostgresStore) IncrementPromoCodeUsage(id string) bool {
+	if _, err := uuid.Parse(strings.TrimSpace(id)); err != nil {
+		return false
+	}
+	ctx, cancel := s.ctx()
+	defer cancel()
+	tag, err := s.pool.Exec(ctx,
+		`UPDATE promo_codes SET used_count=used_count+1 WHERE id=$1::uuid`, id)
+	if err != nil {
+		log.Printf("postgres IncrementPromoCodeUsage: %v", err)
+		return false
+	}
+	return tag.RowsAffected() > 0
 }

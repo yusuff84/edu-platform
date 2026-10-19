@@ -298,8 +298,9 @@ func TestAdminConsoleCoursesList(t *testing.T) {
 
 	// Форма строки — ровно как в контракте, счётчики и email учителя.
 	// T54 (волна P7): в строку аддитивно добавлен coverPath (string|null).
+	// T65 (волна P8): аддитивно добавлен category (string).
 	published := courseItemByID(t, items, publishedID)
-	wantKeys(t, published, "id", "slug", "title", "coverPath", "teacherId", "teacherEmail",
+	wantKeys(t, published, "id", "slug", "title", "category", "coverPath", "teacherId", "teacherEmail",
 		"status", "priceCents", "createdAt", "updatedAt", "modulesCount", "lessonsCount",
 		"studentsCount")
 	if v, ok := published["coverPath"]; !ok || v != nil {
@@ -542,7 +543,14 @@ func TestAdminConsoleReviewsModeration(t *testing.T) {
 	foundA, foundB := false, false
 	for _, raw := range items {
 		row := raw.(map[string]any)
-		wantKeys(t, row, "id", "studentId", "studentEmail", "rating", "body", "createdAt")
+		// T69: teacherReply/teacherReplyAt добавлены аддитивно во все виды
+		// отзывов (контракт волны P8), поэтому ключей теперь 8.
+		wantKeys(t, row, "id", "studentId", "studentEmail", "rating", "body", "createdAt",
+			"teacherReply", "teacherReplyAt")
+		if row["teacherReply"] != "" || row["teacherReplyAt"] != nil {
+			t.Fatalf("без ответа teacherReply=%v teacherReplyAt=%v: ждали пусто/null",
+				row["teacherReply"], row["teacherReplyAt"])
+		}
 		switch row["studentId"] {
 		case studentAID:
 			foundA = true

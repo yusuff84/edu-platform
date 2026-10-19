@@ -31,6 +31,8 @@ func (a *App) RegisterMeExtraRoutes(r chi.Router) {
 	r.With(a.requireAuth).Get("/me/profile", a.GetMyProfile)
 	r.With(a.requireAuth).Patch("/me/profile", a.UpdateMyProfile)
 	r.With(a.requireAuth).Get("/me/payments", a.MyPayments)
+	// T67: сертификаты ученика рядом с другими /me-маршрутами.
+	r.With(a.requireAuth).Get("/me/certificates", a.MyCertificates)
 }
 
 // ---- GET /me/courses/{id}/progress ----

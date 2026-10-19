@@ -45,11 +45,12 @@ func (a *App) makeSlug(custom, title string) (string, bool) {
 }
 
 type createCourseRequest struct {
-	Title       string `json:"title"`
-	Description string `json:"description"`
-	Slug        string `json:"slug"`
-	PriceCents  int    `json:"priceCents"`
-	Currency    string `json:"currency"`
+	Title       string  `json:"title"`
+	Description string  `json:"description"`
+	Slug        string  `json:"slug"`
+	PriceCents  int     `json:"priceCents"`
+	Currency    string  `json:"currency"`
+	Category    *string `json:"category"` // T65: nil — other
 }
 
 // TeacherCreateCourse — POST /teacher/courses: черновик курса.
@@ -84,11 +85,22 @@ func (a *App) TeacherCreateCourse(w http.ResponseWriter, r *http.Request) {
 	if currency == "" {
 		currency = "RUB"
 	}
+	// T65: категория необязательна; без поля — other. Пустое/неизвестное
+	// значение — 400: API принимает только фиксированные слаги.
+	category := "other"
+	if req.Category != nil {
+		category = strings.TrimSpace(*req.Category)
+		if !validCourseCategory(category) {
+			writeErr(w, http.StatusBadRequest, "Неизвестная категория курса")
+			return
+		}
+	}
 	c := a.Store.CreateCourse(&repo.Course{
 		TeacherID:   u.ID,
 		Slug:        slug,
 		Title:       strings.TrimSpace(req.Title),
 		Description: strings.TrimSpace(req.Description),
+		Category:    category,
 		PriceCents:  req.PriceCents,
 		Currency:    currency,
 	})

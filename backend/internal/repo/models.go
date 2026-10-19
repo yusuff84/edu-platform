@@ -96,6 +96,10 @@ type Course struct {
 	Slug        string `json:"slug"`
 	Title       string `json:"title"`
 	Description string `json:"description"`
+	// Category — категория каталога (T65): один из слагов
+	// programming/design/data/marketing/ai/other. Валидация — в хендлерах;
+	// у старых курсов и при создании без поля — "other".
+	Category string `json:"category"`
 	// CoverPath — публичный путь обложки «/uploads/covers/<файл>» (T54).
 	// nil — обложки нет: в JSON отдаётся null (контракт волны P7:
 	// coverPath string|null во всех видах курса).
@@ -185,6 +189,29 @@ type Payment struct {
 	Status             PaymentStatus
 	CreatedAt          time.Time
 	ProcessedAt        *time.Time
+	// T63: промокод, применённый при покупке. Пустая строка — обычная
+	// покупка без скидки (аддитивные поля контракта, старые платежи
+	// читаются как "").
+	PromoCode string `json:"promoCode"`
+	// DiscountCents — размер скидки в копейках: полная цена минус
+	// фактически оплаченная сумма. 0 — скидки не было.
+	DiscountCents int `json:"discountCents"`
+}
+
+// PromoCode — промокод курса (T63): процентная скидка, лимит использований
+// и срок действия. Код хранится и сравнивается в верхнем регистре;
+// MaxUses = 0 — без ограничения. ExpiresAt = nil — без срока действия
+// (в JSON отдаётся null).
+type PromoCode struct {
+	ID          string     `json:"id"`
+	CourseID    string     `json:"courseId"`
+	Code        string     `json:"code"`
+	DiscountPct int        `json:"discountPct"`
+	MaxUses     int        `json:"maxUses"`
+	UsedCount   int        `json:"usedCount"`
+	ExpiresAt   *time.Time `json:"expiresAt"`
+	Active      bool       `json:"active"`
+	CreatedAt   time.Time  `json:"createdAt"`
 }
 
 type Review struct {
@@ -194,6 +221,12 @@ type Review struct {
 	Rating    int       `json:"rating"`
 	Body      string    `json:"body,omitempty"`
 	CreatedAt time.Time `json:"createdAt"`
+	// TeacherReply — публичный ответ преподавателя (T69). Контракт: всегда
+	// строка, пустая — ответа нет (не omitempty).
+	TeacherReply string `json:"teacherReply"`
+	// TeacherReplyAt — время последней установки/замены ответа (T69);
+	// nil — ответа нет (в JSON null). Очистка ответа сбрасывает в nil.
+	TeacherReplyAt *time.Time `json:"teacherReplyAt"`
 }
 
 type Session struct {
@@ -201,4 +234,37 @@ type Session struct {
 	UserID    string
 	CreatedAt time.Time
 	ExpiresAt time.Time
+}
+
+// Certificate — сертификат о завершении курса (T67). Number — публичный
+// идентификатор «EDU-<ГГГГ>-<8 hex ВЕРХНИМ регистром>»; пара (UserID,
+// CourseID) уникальна, поэтому повторное достижение 100% прогресса второй
+// сертификат не создаёт.
+type Certificate struct {
+	ID       string    `json:"id"`
+	UserID   string    `json:"userId"`
+	CourseID string    `json:"courseId"`
+	Number   string    `json:"number"`
+	IssuedAt time.Time `json:"issuedAt"`
+}
+
+// CertificateListItem — элемент GET /me/certificates (T67): номер, дата
+// выдачи и данные курса, новые сертификаты первыми.
+type CertificateListItem struct {
+	Number      string    `json:"number"`
+	IssuedAt    time.Time `json:"issuedAt"`
+	CourseID    string    `json:"courseId"`
+	CourseTitle string    `json:"courseTitle"`
+	CourseSlug  string    `json:"courseSlug"`
+}
+
+// CertificateDetails — публичная карточка GET /certificates/{number} (T67):
+// StudentName — displayName студента (пустая строка, если не задан; e-mail
+// наружу не отдаётся).
+type CertificateDetails struct {
+	Number      string    `json:"number"`
+	IssuedAt    time.Time `json:"issuedAt"`
+	StudentName string    `json:"studentName"`
+	CourseTitle string    `json:"courseTitle"`
+	CourseSlug  string    `json:"courseSlug"`
 }

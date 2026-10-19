@@ -1,0 +1,238 @@
+/* P8 (T64): промокоды — секция конструктора и блок чекаута на странице курса.
+   Импортируется только из Constructor.tsx и Course.tsx; общие css-файлы
+   (styles.css, catalog.css, constructor*.css) не меняются. Базовые элементы
+   (.panel, .input, .btn, .teach-note, .error) берутся из дизайн-системы. */
+
+/* ---------- Конструктор: форма и список промокодов ---------- */
+
+.promo-section .promo-form {
+  margin-top: 14px;
+  max-width: 520px;
+}
+
+/* Подсказки «0 — без ограничения» / «Пусто — бессрочно» — прямо под полем,
+   без лишнего воздуха перед следующим полем формы. */
+.promo-section .promo-form .ce-field-hint {
+  margin: 0;
+}
+
+.promo-list {
+  list-style: none;
+  margin: 18px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+}
+
+.promo-item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 16px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: var(--surface);
+}
+
+.promo-item-main {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+  min-width: 0;
+}
+
+.promo-code {
+  font-size: 15px;
+  letter-spacing: 0.04em;
+}
+
+.promo-discount {
+  font-weight: 800;
+  color: var(--brand);
+}
+
+.promo-meta {
+  color: var(--muted);
+  font-size: 13.5px;
+  font-weight: 600;
+}
+
+.promo-empty {
+  margin: 18px 0 0;
+}
+
+.promo-badge {
+  display: inline-block;
+  padding: 2px 9px;
+  border-radius: 999px;
+  font-size: 12.5px;
+  font-weight: 700;
+  border: 1px solid transparent;
+}
+
+.promo-badge-active {
+  background: var(--ok-bg);
+  color: var(--ok);
+  border-color: #b8dfba;
+}
+
+.promo-badge-inactive {
+  background: #eceff1;
+  color: #607d8b;
+  border-color: #cfd8dc;
+}
+
+.promo-badge-expired {
+  background: var(--danger-bg);
+  color: var(--danger);
+  border-color: #f3c1ba;
+}
+
+/* Истёкший/отключённый код остаётся в истории, но визуально приглушён. */
+.promo-item-inactive .promo-code,
+.promo-item-expired .promo-code {
+  color: var(--muted);
+}
+
+.promo-confirm {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding-top: 10px;
+  border-top: 1px dashed var(--line);
+  color: var(--muted);
+  font-size: 13.5px;
+  font-weight: 600;
+}
+
+.promo-off {
+  margin-top: 0;
+}
+
+/* ---------- Страница курса: промокод в чекауте ---------- */
+
+.checkout-promo {
+  display: grid;
+  gap: 10px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: #faf9f6;
+}
+
+.promo-toggle {
+  justify-self: start;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--brand);
+  font-family: var(--font);
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.promo-toggle:hover {
+  color: var(--brand-dark);
+}
+
+.promo-apply {
+  display: grid;
+  gap: 6px;
+}
+
+.promo-apply > label {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.promo-apply-row {
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
+}
+
+.promo-apply-row .input {
+  min-width: 0;
+  flex: 1;
+}
+
+.promo-apply-row .btn {
+  flex: none;
+  white-space: nowrap;
+}
+
+.promo-error {
+  margin: 0;
+}
+
+.promo-applied {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.promo-applied-line {
+  margin: 0;
+  color: var(--ok);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.promo-applied-line strong {
+  letter-spacing: 0.03em;
+}
+
+.promo-remove {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font-family: var(--font);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.promo-remove:hover {
+  color: var(--danger);
+}
+
+/* Итоговая цена: полная — зачёркнута и приглушена, итог — акцент. */
+.promo-price {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+}
+
+.promo-price-old {
+  color: var(--muted);
+  font-size: 18px;
+  font-weight: 700;
+  text-decoration: line-through;
+}
+
+@media (max-width: 620px) {
+  .promo-apply-row {
+    flex-wrap: wrap;
+  }
+
+  .promo-apply-row .btn {
+    width: 100%;
+  }
+}

@@ -37,6 +37,11 @@ func (a *App) MyCourses(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	enrolls := a.Store.ListEnrollmentsByStudent(u.ID)
+	// T67: номер сертификата в элементе /me/courses (пустая строка — нет).
+	certificates := make(map[string]string)
+	for _, cert := range a.Store.ListCertificatesByStudent(u.ID) {
+		certificates[cert.CourseID] = cert.Number
+	}
 	items := make([]map[string]any, 0, len(enrolls))
 	for _, e := range enrolls {
 		if e.Status != repo.EnrollmentActive {
@@ -49,6 +54,7 @@ func (a *App) MyCourses(w http.ResponseWriter, r *http.Request) {
 		percent, next := a.courseProgress(u.ID, c)
 		items = append(items, map[string]any{
 			"course": toCourseItem(c), "percent": percent, "nextLesson": next,
+			"certificateNumber": certificates[c.ID],
 		})
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"items": items, "total": len(items)})
@@ -108,6 +114,9 @@ func (a *App) CompleteLesson(w http.ResponseWriter, r *http.Request) {
 
 	finish := func() {
 		a.Store.CompleteLesson(u.ID, l.ID)
+		// T67: если этим завершением все уроки курса пройдены — выдаём
+		// сертификат (идемпотентно, повторный сертификат не создаётся).
+		a.issueCertificateIfCourseCompleted(u.ID, c)
 		percent, next := a.courseProgress(u.ID, c)
 		writeJSON(w, http.StatusOK, map[string]any{
 			"passed": true, "completed": true, "percent": percent, "nextLesson": next,

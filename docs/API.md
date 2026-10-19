@@ -46,10 +46,25 @@
 
 | Метод | Путь | Доступ | Тело / ответ |
 |---|---|---|---|
-| GET | `/api/v1/courses?q=&page=&limit=` | публичный | → `200` конверт `{items:[CourseItem],total,page,limit}` |
+| GET | `/api/v1/courses?q=&category=&price=&minRating=&sort=&page=&limit=` | публичный | → `200` конверт `{items:[CourseItem],total,page,limit}` |
+| GET | `/api/v1/categories` | публичный | → `200` `{items:[{slug,coursesCount}]}` — шесть категорий в фиксированном порядке: `programming, design, data, marketing, ai, other`; `coursesCount` — только `published` (T65) |
 | GET | `/api/v1/courses/{slug}` | публичный* | → `200` `{course, modules:[ModuleView]}`; *`draft` виден автору и админу, остальным 404 |
-| GET | `/api/v1/courses/{id}/reviews` | публичный | `{id}` — UUID или slug → `200` `{items:[Review],total,avgRating,ratingsCount}` |
+| GET | `/api/v1/courses/{id}/reviews?rating=1..5` | публичный | `{id}` — UUID или slug; `rating` необязателен и фильтрует `items`/`total` → `200` `{items:[Review],total,avgRating,ratingsCount,breakdown:{"1".."5"}}`; `avgRating`/`ratingsCount`/`breakdown` — по всем отзывам курса; иной `rating` → `400 «Оценка должна быть числом от 1 до 5»` |
 | POST | `/api/v1/courses/{id}/reviews` | студент с активной записью | `{rating:1..5, body}` → `201` `Review` |
+| GET | `/api/v1/certificates/{number}` | публичный | → `200` `{number,issuedAt,studentName,courseTitle,courseSlug}`; `studentName` — displayName студента (e-mail не отдаётся); `404 «Сертификат не найден»` |
+
+> Волна P8 (T65): `category` — слаг из `programming`, `design`, `data`,
+> `marketing`, `ai`, `other`. Необязателен при создании курса (по умолчанию
+> `other`), в `PATCH /api/v1/teacher/courses/{id}` без поля не меняется,
+> неизвестное или пустое значение — `400 «Неизвестная категория курса»`.
+> Поле `category` добавлено во все виды курса: каталог, страница курса,
+> списки и деталь teacher/admin. Серверные фильтры `GET /courses`:
+> `price=free|paid`, `minRating=3.5|4|4.5`, а также `sort` со значениями
+> `popular`, `new`, `rating`, `price_asc`, `price_desc` (по умолчанию
+> `popular`, вторичный ключ — `createdAt` desc); фильтры комбинируются с
+> `q/page/limit`, `total` считается до пагинации. Ошибки: `400 «Неизвестная
+> категория»`, «Недопустимый фильтр цены», «Недопустимый фильтр рейтинга»,
+> «Недопустимая сортировка».
 
 ### Настройки интерфейса (публичные)
 
@@ -61,14 +76,15 @@
 
 | Метод | Путь | Доступ | Тело / ответ |
 |---|---|---|---|
-| GET | `/api/v1/me/courses` | cookie | → `200` `{items:[{course,percent,nextLesson}],total}` |
+| GET | `/api/v1/me/courses` | cookie | → `200` `{items:[{course,percent,nextLesson,certificateNumber}],total}`; `certificateNumber` — пустая строка, если сертификата нет |
+| GET | `/api/v1/me/certificates` | cookie | → `200` `{items:[{number,issuedAt,courseId,courseTitle,courseSlug}]}` — новые первыми; сертификат выдаётся автоматически при первом достижении 100% прогресса (все уроки курса завершены) |
 | POST | `/api/v1/me/courses/{id}/lessons/{lessonId}/complete` | активная запись | `{quizAnswers?, code?, language?}` → `200 {passed,completed,percent,nextLesson}` или `{passed:false,message}`; для code-задач `502` при недоступном runner |
 
 ### Преподаватель (`teacher` — роли teacher/admin)
 
 | Метод | Путь | Тело / ответ |
 |---|---|---|
-| POST | `/api/v1/teacher/courses` | `{title, description, priceCents, slug?, currency?}` → `201` Course |
+| POST | `/api/v1/teacher/courses` | `{title, description, priceCents, category?, slug?, currency?}` → `201` Course |
 | GET | `/api/v1/teacher/courses` | → `200` `{items:[Course],total}` |
 | POST | `/api/v1/teacher/courses/{id}/modules` | `{title}` → `201` Module |
 | POST | `/api/v1/teacher/courses/{id}/lessons` | по `kind`: `{moduleId,title,kind,bodyMd?,videoUrl?,liveUrl?,startsAt?,quiz?,codeTask?}` → `201` Lesson |
@@ -93,6 +109,30 @@
 > PNG или WebP не больше 5 МБ». Поле `coverPath` (string|null) добавлено во
 > все виды курса: каталог `GET /courses`, страница `GET /courses/{slug}`,
 > списки учителя и админа.
+
+> Волна P8 (T69): ответ преподавателя на отзыв —
+> `PUT /api/v1/teacher/courses/{id}/reviews/{reviewId}/reply`
+> (`{"body":"…"}` после trim 3..2000 символов → `200 {"review":<Review>}`;
+> повторный PUT заменяет текст и обновляет `teacherReplyAt`) и
+> `DELETE …/reply` → `204` (ответа не было — тоже `204`). Ошибки: `403` —
+> чужой курс, `404 «Отзыв не найден»` (в т.ч. отзыв другого курса),
+> `400 «Ответ: от 3 до 2000 символов»`. В `Review` добавлены аддитивные
+> `teacherReply` (string, пустая — ответа нет) и `teacherReplyAt`
+> (string|null); они есть во всех видах отзывов (страница курса,
+> админ-список отзывов).
+
+> Волна P8 (T63): промокоды. `POST /api/v1/teacher/courses/{id}/promo-codes`
+> `{code, discountPct:1..90, maxUses?, expiresAt?}` → `201 {"promoCode": PromoCode}`
+> (код нормализуется к верхнему регистру; дубликат — `400`, архивный курс — `409`);
+> `GET …/promo-codes` → `200 {"items":[PromoCode]}` (новые первыми);
+> `DELETE …/promo-codes/{promoId}` → `204` (деактивация `active=false`,
+> повторный вызов — тоже `204`). `POST /api/v1/courses/{id}/promo/validate`
+> (только вошедший) `{code}` → `200 {code,discountPct,priceCents,finalPriceCents}`,
+> скидка округляется вниз до копеек; ошибки применения кода — `400` с текстами
+> контракта, бесплатный курс — `400`. `POST /api/v1/enrollments` принимает
+> необязательный `promoCode`: `amountCents` — со скидкой, в платеже и журнале
+> админа появляются аддитивные `promoCode` и `discountCents`, `usedCount`
+> увеличивается один раз при успешной оплате.
 
 > В бэклоге T13: `GET/PATCH/DELETE /teacher/courses[...]`, PATCH модулей/уроков,
 > reorder — в `Task/T13-integration-wiring.md`.

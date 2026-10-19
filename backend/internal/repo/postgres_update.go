@@ -21,7 +21,7 @@ import (
 // cover_path в SET НЕ входит принципиально (T54): PATCH карточки не обязан
 // знать о файле обложки, путь меняет только SetCourseCover ниже.
 func (s *PostgresStore) UpdateCourse(id string, u CourseUpdate) bool {
-	sets := make([]string, 0, 5)
+	sets := make([]string, 0, 6)
 	args := []any{id}
 	add := func(col string, v any) {
 		args = append(args, v)
@@ -38,6 +38,9 @@ func (s *PostgresStore) UpdateCourse(id string, u CourseUpdate) bool {
 	}
 	if u.PriceCents != nil {
 		add("price_cents", *u.PriceCents)
+	}
+	if u.Category != nil {
+		add("category", *u.Category)
 	}
 	sets = append(sets, "updated_at=now()")
 	ctx, cancel := s.ctx()

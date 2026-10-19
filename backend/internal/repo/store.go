@@ -36,10 +36,16 @@ type Store struct {
 	enrollIdx          map[string]string          // studentID|courseID -> enrollmentID
 	progress           map[string]*LessonProgress // studentID|lessonID -> progress
 	payments           map[string]*Payment
-	paymentsByProvider map[string]*Payment // providerPaymentID -> payment
+	paymentsByProvider map[string]*Payment   // providerPaymentID -> payment
+	promoCodes         map[string]*PromoCode // T63: id -> промокод
 	reviews            map[string]*Review
 	reviewIdx          map[string]string // studentID|courseID -> reviewID
 	sessions           map[string]*Session
+	// T67: сертификаты. certIdx — уникальная пара (userID|courseID),
+	// certByNumber — публичный номер.
+	certificates map[string]*Certificate // id -> certificate
+	certIdx      map[string]string       // userID|courseID -> certificate id
+	certByNumber map[string]string       // number -> certificate id
 	commissionPct      int
 	promoBarEnabled    bool
 }
@@ -58,9 +64,13 @@ func NewStore() *Store {
 		progress:           make(map[string]*LessonProgress),
 		payments:           make(map[string]*Payment),
 		paymentsByProvider: make(map[string]*Payment),
+		promoCodes:         make(map[string]*PromoCode),
 		reviews:            make(map[string]*Review),
 		reviewIdx:          make(map[string]string),
 		sessions:           make(map[string]*Session),
+		certificates:       make(map[string]*Certificate),
+		certIdx:            make(map[string]string),
+		certByNumber:       make(map[string]string),
 		commissionPct:      15,
 		promoBarEnabled:    true,
 	}
@@ -282,6 +292,11 @@ func (s *Store) CreateCourse(c *Course) *Course {
 	if c.Currency == "" {
 		c.Currency = "RUB"
 	}
+	// T65: без явной категории (или пустой) курс получает other — как
+	// NOT NULL DEFAULT 'other' в миграции 009. Валидация слага — в handler.
+	if strings.TrimSpace(c.Category) == "" {
+		c.Category = "other"
+	}
 	c.Status = CourseDraft
 	c.CreatedAt = now
 	c.UpdatedAt = now
@@ -332,6 +347,121 @@ func (s *Store) ListPublishedCourses(q string) []*Course {
 		out = append(out, c)
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].CreatedAt.After(out[j].CreatedAt) })
+	return out
+}
+
+// ListCatalogCourses возвращает опубликованные курсы с серверными фильтрами
+// каталога (T65): q, category, price, minRating; сортировка — по f.Sort,
+// вторичный ключ — createdAt по убыванию. Пагинацию применяет handler.
+//
+// popular — число АКТИВНЫХ записей; rating — avgRating; у minRating курсы
+// без отзывов (ratingsCount = 0) в выдачу не попадают. В сравнении участвуют
+// только published: остальные статусы отфильтрованы до сортировки.
+func (s *Store) ListCatalogCourses(f CatalogFilter) []*Course {
+	q := strings.ToLower(strings.TrimSpace(f.Q))
+	category := strings.TrimSpace(f.Category)
+
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	// Число активных записей нужно только для popular — не считаем зря.
+	active := make(map[string]int)
+	if f.Sort == "" || f.Sort == "popular" {
+		for _, e := range s.enrollments {
+			if e.Status == EnrollmentActive {
+				active[e.CourseID]++
+			}
+		}
+	}
+
+	out := make([]*Course, 0, len(s.courses))
+	for _, c := range s.courses {
+		if c.Status != CoursePublished {
+			continue
+		}
+		if q != "" && !strings.Contains(strings.ToLower(c.Title+" "+c.Description), q) {
+			continue
+		}
+		if category != "" && c.Category != category {
+			continue
+		}
+		switch f.Price {
+		case "free":
+			if c.PriceCents != 0 {
+				continue
+			}
+		case "paid":
+			if c.PriceCents <= 0 {
+				continue
+			}
+		}
+		if f.MinRating > 0 {
+			if c.RatingsCount == 0 || c.AvgRating < f.MinRating {
+				continue
+			}
+		}
+		out = append(out, c)
+	}
+
+	sortKey := f.Sort
+	if sortKey == "" {
+		sortKey = "popular"
+	}
+	sort.SliceStable(out, func(i, j int) bool {
+		return catalogCourseBefore(out[i], out[j], sortKey, active)
+	})
+	return out
+}
+
+// catalogCourseBefore — порядок курсов каталога (T65): первичный ключ по
+// sortKey, затем createdAt по убыванию (вторичный ключ контракта) и id по
+// убыванию — детерминированный порядок при полном совпадении ключей.
+func catalogCourseBefore(a, b *Course, sortKey string, active map[string]int) bool {
+	switch sortKey {
+	case "new":
+		if !a.CreatedAt.Equal(b.CreatedAt) {
+			return a.CreatedAt.After(b.CreatedAt)
+		}
+	case "rating":
+		if a.AvgRating != b.AvgRating {
+			return a.AvgRating > b.AvgRating
+		}
+	case "price_asc":
+		if a.PriceCents != b.PriceCents {
+			return a.PriceCents < b.PriceCents
+		}
+	case "price_desc":
+		if a.PriceCents != b.PriceCents {
+			return a.PriceCents > b.PriceCents
+		}
+	default: // popular (и страховка для неизвестного значения)
+		if active[a.ID] != active[b.ID] {
+			return active[a.ID] > active[b.ID]
+		}
+	}
+	if !a.CreatedAt.Equal(b.CreatedAt) {
+		return a.CreatedAt.After(b.CreatedAt)
+	}
+	return a.ID > b.ID
+}
+
+// CountPublishedCoursesByCategory считает published-курсы по категориям
+// (T65). В карту попадают только существующие категории; отсутствие слага
+// означает 0 (хендлер разворачивает фиксированный список).
+func (s *Store) CountPublishedCoursesByCategory() map[string]int {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	out := make(map[string]int)
+	for _, c := range s.courses {
+		if c.Status != CoursePublished {
+			continue
+		}
+		category := c.Category
+		if category == "" {
+			category = "other"
+		}
+		out[category]++
+	}
 	return out
 }
 
@@ -444,6 +574,14 @@ func (s *Store) DeleteCourse(id string) error {
 				delete(s.paymentsByProvider, p.ProviderPaymentID)
 			}
 			delete(s.payments, pid)
+		}
+	}
+	// T67: сертификаты за курс уходят каскадом (010_certificates.sql).
+	s.dropCertificatesByCourseLocked(id)
+	// T63: промокоды курса — зеркало ON DELETE CASCADE (008_promo_codes.sql).
+	for cid, pc := range s.promoCodes {
+		if pc.CourseID == id {
+			delete(s.promoCodes, cid)
 		}
 	}
 	return nil
@@ -1009,7 +1147,10 @@ func (s *Store) ListReviewsByCourse(courseID string) []*Review {
 	var out []*Review
 	for _, r := range s.reviews {
 		if r.CourseID == courseID {
-			out = append(out, r)
+			// T69: отзыв теперь изменяемый (ответ преподавателя), поэтому
+			// наружу уходит снимок — чтение после снятия лока не гоняется с PUT.
+			snapshot := *r
+			out = append(out, &snapshot)
 		}
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].CreatedAt.After(out[j].CreatedAt) })
@@ -1037,6 +1178,52 @@ func (s *Store) RecalcCourseRating(courseID string) {
 		return
 	}
 	c.AvgRating = math.Round(float64(sum)/float64(n)*10) / 10
+}
+
+// SetReviewReply устанавливает/заменяет ответ преподавателя на отзыв (T69).
+// ErrNotFound — отзыва с таким id в этом курсе нет (в том числе отзыв,
+// принадлежащий другому курсу). Наружу отдаётся снимок: живой указатель
+// после снятия лока читать нельзя.
+func (s *Store) SetReviewReply(courseID, reviewID, body string) (*Review, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	r, ok := s.reviews[reviewID]
+	if !ok || r.CourseID != courseID {
+		return nil, ErrNotFound
+	}
+	now := time.Now().UTC()
+	r.TeacherReply = body
+	r.TeacherReplyAt = &now
+	snapshot := *r
+	return &snapshot, nil
+}
+
+// ClearReviewReply очищает ответ преподавателя (T69); отсутствие ответа —
+// не ошибка (идемпотентно), ErrNotFound — только если отзыва нет в курсе.
+func (s *Store) ClearReviewReply(courseID, reviewID string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	r, ok := s.reviews[reviewID]
+	if !ok || r.CourseID != courseID {
+		return ErrNotFound
+	}
+	r.TeacherReply = ""
+	r.TeacherReplyAt = nil
+	return nil
+}
+
+// ReviewRatingBreakdown — число отзывов курса по каждой оценке (T69).
+// Ключи 1..5 присутствуют всегда, чтобы handler отдавал стабильную форму.
+func (s *Store) ReviewRatingBreakdown(courseID string) map[int]int {
+	out := map[int]int{1: 0, 2: 0, 3: 0, 4: 0, 5: 0}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	for _, r := range s.reviews {
+		if r.CourseID == courseID && r.Rating >= 1 && r.Rating <= 5 {
+			out[r.Rating]++
+		}
+	}
+	return out
 }
 
 // ---- Settings ----
@@ -1163,4 +1350,102 @@ func (s *Store) AdminCourseDetail(courseID string) (*AdminCourseDetailData, bool
 		}
 	}
 	return d, true
+}
+
+// ---- T63: промокоды ----
+
+// CreatePromoCode сохраняет промокод (T63). Дубликат (courseId, code) —
+// ErrAlreadyExists: правило уникальности значений контракта (400 у handler).
+// Новый код всегда активен, usedCount стартует с нуля.
+func (s *Store) CreatePromoCode(p *PromoCode) (*PromoCode, error) {
+	code := strings.ToUpper(strings.TrimSpace(p.Code))
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, cur := range s.promoCodes {
+		if cur.CourseID == p.CourseID && cur.Code == code {
+			return nil, ErrAlreadyExists
+		}
+	}
+	pc := &PromoCode{
+		ID:          uuid.NewString(),
+		CourseID:    p.CourseID,
+		Code:        code,
+		DiscountPct: p.DiscountPct,
+		MaxUses:     p.MaxUses,
+		UsedCount:   0,
+		ExpiresAt:   cloneTimePtr(p.ExpiresAt),
+		Active:      true,
+		CreatedAt:   time.Now().UTC(),
+	}
+	s.promoCodes[pc.ID] = pc
+	*p = *pc
+	return p, nil
+}
+
+// ListPromoCodesByCourse возвращает все коды курса (включая неактивные —
+// история), новые первыми. При равном createdAt порядок стабилен по id —
+// так же сортирует Postgres-реализация.
+func (s *Store) ListPromoCodesByCourse(courseID string) []*PromoCode {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	out := make([]*PromoCode, 0)
+	for _, pc := range s.promoCodes {
+		if pc.CourseID == courseID {
+			out = append(out, pc)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].CreatedAt.Equal(out[j].CreatedAt) {
+			return out[i].ID < out[j].ID
+		}
+		return out[i].CreatedAt.After(out[j].CreatedAt)
+	})
+	return out
+}
+
+// GetPromoCodeByID ищет промокод по id.
+func (s *Store) GetPromoCodeByID(id string) (*PromoCode, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	pc, ok := s.promoCodes[id]
+	return pc, ok
+}
+
+// FindPromoCode ищет промокод курса по коду (без учёта регистра).
+func (s *Store) FindPromoCode(courseID, code string) (*PromoCode, bool) {
+	code = strings.ToUpper(strings.TrimSpace(code))
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	for _, pc := range s.promoCodes {
+		if pc.CourseID == courseID && pc.Code == code {
+			return pc, true
+		}
+	}
+	return nil, false
+}
+
+// DeactivatePromoCode идемпотентно выключает код (active=false), сохраняя
+// запись для истории. ErrNotFound — промокода с таким id нет.
+func (s *Store) DeactivatePromoCode(id string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	pc, ok := s.promoCodes[id]
+	if !ok {
+		return ErrNotFound
+	}
+	pc.Active = false
+	return nil
+}
+
+// IncrementPromoCodeUsage атомарно увеличивает usedCount на 1. false —
+// промокода нет. Возврат средств счётчик не уменьшает (контракт T63).
+func (s *Store) IncrementPromoCodeUsage(id string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	pc, ok := s.promoCodes[id]
+	if !ok {
+		return false
+	}
+	pc.UsedCount++
+	return true
 }

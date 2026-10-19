@@ -122,9 +122,17 @@ func NewRouter(app *App) http.Handler {
 		r.Get("/auth/yandex/callback", app.YandexAuthCallback)
 
 		r.Get("/courses", app.ListCourses)
+		// T65: публичный список категорий — фиксированные шесть слагов
+		// и число published-курсов (регистрируется до /courses/{slug}).
+		r.Get("/categories", app.ListCategories)
 		r.Get("/courses/{slug}", app.GetCourse)
+		// T67: публичная проверка сертификата по номеру (без авторизации).
+		// Статический сегмент /certificates не пересекается с /courses.
+		app.RegisterCertificateRoutes(r)
 		r.Get("/courses/{id}/reviews", app.ListReviews)
 		r.With(app.requireAuth).Post("/courses/{id}/reviews", app.CreateReview)
+		// T63: проверка промокода на странице курса — только вошедший.
+		r.With(app.requireAuth).Post("/courses/{id}/promo/validate", app.ValidatePromoCode)
 
 		// Пост-P7: публичные настройки интерфейса (тогл промо-баннера) —
 		// читаются шапкой без авторизации, поэтому живут вне /admin
@@ -151,11 +159,17 @@ func NewRouter(app *App) http.Handler {
 			// перенос урока). T22: ученики курса и статистика для учителя.
 			app.RegisterTeacherLifecycleRoutes(r)
 			app.RegisterTeacherStudentsRoutes(r)
+			// T69: ответ преподавателя на отзыв —
+			// PUT/DELETE /courses/{id}/reviews/{reviewId}/reply.
+			app.RegisterTeacherReviewReplyRoutes(r)
 			// T54: обложка курса — POST/DELETE /courses/{id}/cover (multipart).
 			// Лимит тела 1 МБ из decodeJSON multipart не задевает (он действует
 			// только на JSON-декодер); у хендлеров обложки свой лимит ≥6 МБ
 			// через http.MaxBytesReader — см. teacher_cover.go.
 			app.RegisterTeacherCoverRoutes(r)
+			// T63: промокоды курса — POST/GET /courses/{id}/promo-codes,
+			// DELETE /courses/{id}/promo-codes/{promoId} (handler/promo_codes.go).
+			app.RegisterTeacherPromoRoutes(r)
 		})
 
 		r.Route("/admin", func(r chi.Router) {

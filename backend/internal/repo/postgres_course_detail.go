@@ -39,7 +39,7 @@ func (s *PostgresStore) AdminCourseDetail(courseID string) (*AdminCourseDetailDa
 
 	// Запрос 1: колонки courseColsJoined (та же форма, что у scanCourse
 	// postgres_store.go) сканируются вручную, дальше идут дополнительные.
-	var teacherID, currency, status, comment string
+	var teacherID, category, currency, status, comment string
 	var cover *string
 	var avg float64
 	var ratings int
@@ -62,7 +62,7 @@ func (s *PostgresStore) AdminCourseDetail(courseID string) (*AdminCourseDetailDa
 		LEFT JOIN users u ON u.id = c.teacher_id
 		WHERE c.id = $1::uuid`, courseID).Scan(
 		&d.Course.ID, &teacherID, &d.Course.Slug, &d.Course.Title, &d.Course.Description,
-		&cover, &d.Course.PriceCents, &currency, &status, &avg, &ratings, &comment,
+		&category, &cover, &d.Course.PriceCents, &currency, &status, &avg, &ratings, &comment,
 		&created, &updated,
 		&d.TeacherEmail,
 		&d.Counts.Modules, &d.Counts.Lessons,
@@ -78,6 +78,10 @@ func (s *PostgresStore) AdminCourseDetail(courseID string) (*AdminCourseDetailDa
 
 	// Нормализация полей курса — зеркало scanCourse (postgres_store.go).
 	d.Course.TeacherID = teacherID
+	d.Course.Category = category
+	if strings.TrimSpace(d.Course.Category) == "" {
+		d.Course.Category = "other"
+	}
 	d.Course.CoverPath = cover
 	d.Course.Currency = strings.TrimSpace(currency)
 	if d.Course.Currency == "" {

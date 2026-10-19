@@ -7,20 +7,29 @@
 
 import type {
   AdminSettings,
+  CategoryStat,
+  CertificatePublic,
   CompleteLessonInput,
   CompleteResult,
   Course,
   CourseDetail,
   CourseItem,
+  CourseMinRatingFilter,
+  CoursePriceFilter,
+  CourseReviewsPage,
+  CourseSort,
   CreateLessonInput,
   EnrollmentResult,
   Invite,
   Module,
   Lesson,
+  MyCertificate,
   MyCourse,
   Paged,
   PaymentJournalPage,
   PaymentStatus,
+  PromoCode,
+  PromoValidation,
   Provider,
   PublicSettings,
   ModerationDecision,
@@ -31,13 +40,19 @@ import type {
 // Реэкспорт типов: страницы импортируют типы из '../api/client' без правок.
 export type {
   AdminSettings,
+  CategoryStat,
+  CertificatePublic,
   CodeTask,
   CodeTest,
   CompleteLessonInput,
   CompleteResult,
   Course,
+  CourseCategory,
   CourseDetail,
   CourseItem,
+  CourseMinRatingFilter,
+  CoursePriceFilter,
+  CourseSort,
   CourseStatus,
   CreateLessonInput,
   EnrollmentResult,
@@ -46,6 +61,7 @@ export type {
   LessonKind,
   Module,
   ModerationDecision,
+  MyCertificate,
   MyCourse,
   NextLesson,
   Paged,
@@ -53,12 +69,15 @@ export type {
   PaymentJournalPage,
   PaymentStatus,
   PaymentTotals,
+  PromoCode,
+  PromoValidation,
   Provider,
   PublicSettings,
   QuizData,
   QuizQuestion,
   QuizQuestionInput,
   Review,
+  ReviewBreakdown,
   Role,
   User,
 } from './types';
@@ -157,12 +176,33 @@ export function me(): Promise<User> {
 
 export function listCourses(params?: {
   q?: string;
+  /** T65: слаг категории; пустое значение не отправляется. */
+  category?: string;
+  /** T65: free | paid; пустое значение не отправляется. */
+  price?: CoursePriceFilter;
+  /** T65: 3.5 | 4 | 4.5; пустое значение не отправляется. */
+  minRating?: CourseMinRatingFilter;
+  /** T65: popular | new | rating | price_asc | price_desc. */
+  sort?: CourseSort;
   page?: number;
   limit?: number;
 }): Promise<Paged<CourseItem>> {
   return apiFetch<Paged<CourseItem>>(
-    `/courses${buildQuery({ q: params?.q, page: params?.page, limit: params?.limit })}`,
+    `/courses${buildQuery({
+      q: params?.q,
+      category: params?.category,
+      price: params?.price,
+      minRating: params?.minRating,
+      sort: params?.sort,
+      page: params?.page,
+      limit: params?.limit,
+    })}`,
   );
+}
+
+/** T65: категории каталога; конверт { items } распаковывается в массив. */
+export function getCategories(): Promise<CategoryStat[]> {
+  return apiFetch<{ items: CategoryStat[] }>('/categories').then((res) => res.items);
 }
 
 /** Страница курса: конверт { course, modules } распаковывается в CourseDetail. */
@@ -352,16 +392,97 @@ export function getPublicSettings(): Promise<PublicSettings> {
 export function enroll(
   courseId: string,
   provider: Provider = 'mock',
+  promoCode?: string,
 ): Promise<EnrollmentResult> {
+  // P8 (T63): promoCode — необязательное аддитивное поле; пустое не отправляем,
+  // иначе backend проверит его как обычный код и ответит 400.
+  const body: Record<string, string> = { courseId, provider };
+  if (promoCode && promoCode.trim() !== '') body.promoCode = promoCode.trim();
   return apiFetch<EnrollmentResult>('/enrollments', {
     method: 'POST',
-    body: JSON.stringify({ courseId, provider }),
+    body: JSON.stringify(body),
   });
+}
+
+// ---------- P8: промокоды (T63/T64) ----------
+
+/**
+ * Создание промокода (POST /teacher/courses/{id}/promo-codes).
+ * Конверт ответа { promoCode } распаковывается в PromoCode.
+ * maxUses/expiresAt необязательны: не переданные поля в тело не попадают
+ * (backend включает DisallowUnknownFields, а expiresAt=null валит RFC3339).
+ */
+export function createPromoCode(
+  courseId: string,
+  payload: {
+    code: string;
+    discountPct: number;
+    /** 0 — без ограничения (значение backend по умолчанию). */
+    maxUses?: number;
+    /** RFC3339 в будущем; null/undefined — бессрочно. */
+    expiresAt?: string | null;
+  },
+): Promise<PromoCode> {
+  const body: Record<string, string | number> = {
+    code: payload.code,
+    discountPct: payload.discountPct,
+  };
+  if (payload.maxUses !== undefined) body.maxUses = payload.maxUses;
+  if (payload.expiresAt) body.expiresAt = payload.expiresAt;
+  return apiFetch<{ promoCode: PromoCode }>(
+    `/teacher/courses/${courseId}/promo-codes`,
+    { method: 'POST', body: JSON.stringify(body) },
+  ).then((res) => res.promoCode);
+}
+
+/** Список промокодов курса: конверт { items } → массив (по createdAt убыв.). */
+export function listPromoCodes(courseId: string): Promise<PromoCode[]> {
+  return apiFetch<{ items: PromoCode[] }>(
+    `/teacher/courses/${courseId}/promo-codes`,
+  ).then((res) => res.items);
+}
+
+/** Деактивация промокода (DELETE, 204; повторный вызов идемпотентен). */
+export function deactivatePromoCode(
+  courseId: string,
+  promoId: string,
+): Promise<void> {
+  return apiFetch<void>(
+    `/teacher/courses/${courseId}/promo-codes/${promoId}`,
+    { method: 'DELETE' },
+  );
+}
+
+/** Проверка промокода на странице курса (любой вошедший пользователь). */
+export function validatePromoCode(
+  courseId: string,
+  code: string,
+): Promise<PromoValidation> {
+  return apiFetch<PromoValidation>(
+    `/courses/${courseId}/promo/validate`,
+    { method: 'POST', body: JSON.stringify({ code }) },
+  );
 }
 
 /** Мои курсы: конверт { items, total } → массив (MyCourse уже плоский). */
 export function myCourses(): Promise<MyCourse[]> {
   return apiFetch<{ items: MyCourse[]; total: number }>('/me/courses').then(
+    (res) => res.items,
+  );
+}
+
+// ---------- Сертификаты ----------
+
+/** Публичный сертификат по номеру (без авторизации). 404 — сертификата нет. */
+export function getCertificate(number: string): Promise<CertificatePublic> {
+  return apiFetch<CertificatePublic>(
+    `/certificates/${encodeURIComponent(number)}`,
+  );
+}
+
+/** Мои сертификаты: конверт { items } → массив, новые первыми. */
+export function myCertificates(): Promise<MyCertificate[]> {
+  return apiFetch<{ items: MyCertificate[] }>('/me/certificates').then(
     (res) => res.items,
   );
 }
@@ -412,6 +533,48 @@ export function createReview(
     method: 'POST',
     body: JSON.stringify({ rating: input.rating, body: input.body }),
   });
+}
+
+/**
+ * T69: страница отзывов курса вместе с конвертом (avgRating/ratingsCount/
+ * breakdown). `rating` необязателен; при фильтре items/total — по оценке,
+ * статистика в конверте всё равно по всем отзывам.
+ */
+export function getCourseReviews(
+  courseId: string,
+  params?: { rating?: number },
+): Promise<CourseReviewsPage> {
+  return apiFetch<CourseReviewsPage>(
+    `/courses/${encodeURIComponent(courseId)}/reviews${buildQuery({
+      rating: params?.rating,
+    })}`,
+  );
+}
+
+/** T69: ответ преподавателя на отзыв (PUT, владелец курса/admin). */
+export function replyToReview(
+  courseId: string,
+  reviewId: string,
+  body: string,
+): Promise<Review> {
+  return apiFetch<{ review: Review }>(
+    `/teacher/courses/${encodeURIComponent(courseId)}/reviews/${encodeURIComponent(reviewId)}/reply`,
+    {
+      method: 'PUT',
+      body: JSON.stringify({ body }),
+    },
+  ).then((res) => res.review);
+}
+
+/** T69: удаление ответа преподавателя; 204, в том числе если ответа не было. */
+export function deleteReviewReply(
+  courseId: string,
+  reviewId: string,
+): Promise<void> {
+  return apiFetch<void>(
+    `/teacher/courses/${encodeURIComponent(courseId)}/reviews/${encodeURIComponent(reviewId)}/reply`,
+    { method: 'DELETE' },
+  );
 }
 
 // ---------- Утилиты ----------

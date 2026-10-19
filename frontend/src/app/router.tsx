@@ -30,6 +30,8 @@ const AdminCourseDetail = lazy(() => import('../pages/AdminCourseDetail'));
 const AdminEnrollments = lazy(() => import('../pages/AdminEnrollments'));
 const CourseStudents = lazy(() => import('../pages/CourseStudents'));
 const Profile = lazy(() => import('../pages/Profile'));
+// T68: публичная страница сертификата — редкая, отдельный чанк.
+const Certificate = lazy(() => import('../pages/Certificate'));
 // В Cabinets.tsx нет default-экспорта — берём именованный TeacherCab.
 const TeacherCab = lazy(async () => {
   const m = await import('../pages/Cabinets');
@@ -226,6 +228,8 @@ export const router = createBrowserRouter([
     children: [
       { path: '/', element: <Catalog /> },
       { path: '/courses/:slug', element: <Course /> },
+      // T68: сертификат публичный — доступен без входа, можно делиться ссылкой.
+      { path: '/certificates/:number', element: <Certificate /> },
       { path: '/login', element: <Login /> },
       { path: '/register', element: <Register /> },
       // Кабинеты и обучение — за гвардами (RouteGuards.tsx, query ['me']).

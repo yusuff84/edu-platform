@@ -3,9 +3,26 @@ import type { CourseItem } from '../api/client';
 import { formatPrice } from '../api/client';
 import { coverUrl } from '../api/teacherCover';
 import { t } from '../i18n/t';
+import type { RuKey } from '../i18n/t';
 import '../styles/catalog.css';
 
 const COVERS = ['cover-py', 'cover-html', 'cover-js', 'cover-sql', 'cover-fig', 'cover-linux'];
+
+/** T66: подписи категорий курса (контракт T65, ключи p8.cat.*). */
+const CATEGORY_LABEL: Record<string, RuKey> = {
+  programming: 'p8.cat.programming',
+  design: 'p8.cat.design',
+  data: 'p8.cat.data',
+  marketing: 'p8.cat.marketing',
+  ai: 'p8.cat.ai',
+  other: 'p8.cat.other',
+};
+
+/** Название категории по слагу; неизвестный слаг показываем как есть. */
+function categoryLabel(slug: string): string {
+  const key = CATEGORY_LABEL[slug];
+  return key ? t(key) : slug;
+}
 
 export function coverFor(key: string): string {
   let h = 0;
@@ -71,6 +88,9 @@ export default function CourseCard({ course }: { course: CourseItem }): JSX.Elem
           {meta && <small>{meta}</small>}
         </span>
       </Link>
+      {course.category && (
+        <span className="catalog-category-badge">{categoryLabel(course.category)}</span>
+      )}
       <p className="muted">{desc}</p>
       <div className="card-row">
         <Stars value={course.avgRating ?? 0} />

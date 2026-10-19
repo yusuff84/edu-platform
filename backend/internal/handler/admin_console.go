@@ -123,6 +123,7 @@ type adminCourseItem struct {
 	ID            string            `json:"id"`
 	Slug          string            `json:"slug"`
 	Title         string            `json:"title"`
+	Category      string            `json:"category"` // T65
 	CoverPath     *string           `json:"coverPath"`
 	TeacherID     string            `json:"teacherId"`
 	TeacherEmail  string            `json:"teacherEmail"`
@@ -210,8 +211,12 @@ func (a *App) AdminListCourses(w http.ResponseWriter, r *http.Request) {
 			emails[c.TeacherID] = email
 		}
 		cc := counts[c.ID]
+		category := c.Category
+		if category == "" {
+			category = "other"
+		}
 		out = append(out, adminCourseItem{
-			ID: c.ID, Slug: c.Slug, Title: c.Title, CoverPath: c.CoverPath,
+			ID: c.ID, Slug: c.Slug, Title: c.Title, Category: category, CoverPath: c.CoverPath,
 			TeacherID: c.TeacherID, TeacherEmail: email, Status: c.Status,
 			PriceCents: c.PriceCents, CreatedAt: c.CreatedAt, UpdatedAt: c.UpdatedAt,
 			ModulesCount: cc.Modules, LessonsCount: cc.Lessons, StudentsCount: cc.Students,
@@ -300,6 +305,9 @@ type adminReviewItem struct {
 	Rating       int       `json:"rating"`
 	Body         string    `json:"body"`
 	CreatedAt    time.Time `json:"createdAt"`
+	// T69: аддитивные поля ответа преподавателя (пустая строка/null — нет).
+	TeacherReply   string     `json:"teacherReply"`
+	TeacherReplyAt *time.Time `json:"teacherReplyAt"`
 }
 
 type adminReviewListResponse struct {
@@ -327,6 +335,7 @@ func (a *App) AdminCourseReviews(w http.ResponseWriter, r *http.Request) {
 		items = append(items, adminReviewItem{
 			ID: rv.ID, StudentID: rv.StudentID, StudentEmail: email,
 			Rating: rv.Rating, Body: rv.Body, CreatedAt: rv.CreatedAt,
+			TeacherReply: rv.TeacherReply, TeacherReplyAt: rv.TeacherReplyAt,
 		})
 	}
 	writeJSON(w, http.StatusOK, adminReviewListResponse{Items: items})

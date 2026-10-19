@@ -60,10 +60,10 @@ func (s *PostgresStore) CloneCourseAs(courseID, teacherID string) (*Course, erro
 	// status='draft', avg_rating=0, ratings_count=0, moderation_comment=NULL,
 	// created_at/updated_at=now() — значения по умолчанию схемы.
 	nc, err := scanCourse(tx.QueryRow(ctx,
-		`INSERT INTO courses (teacher_id, slug, title, description, cover_path, price_cents, currency, status)
-		 VALUES ($1::uuid,$2,$3,$4,$5,$6,$7,'draft')
+		`INSERT INTO courses (teacher_id, slug, title, description, category, cover_path, price_cents, currency, status)
+		 VALUES ($1::uuid,$2,$3,$4,$5,$6,$7,$8,'draft')
 		 RETURNING `+courseCols,
-		owner, slug, copyTitle(src.Title), src.Description, src.CoverPath,
+		owner, slug, copyTitle(src.Title), src.Description, src.Category, src.CoverPath,
 		src.PriceCents, src.Currency).Scan)
 	if err != nil {
 		return nil, fmt.Errorf("копирование курса: %w", err)

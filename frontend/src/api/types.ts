@@ -30,6 +30,28 @@ export interface Paged<T> {
   limit: number;
 }
 
+// ---------- Каталог: фильтры (T65/T66) ----------
+
+/** Категория курса — фиксированный список слагов контракта P8. */
+export type CourseCategory = 'programming' | 'design' | 'data' | 'marketing' | 'ai' | 'other';
+
+/** Фильтр цены каталога: бесплатные / платные. */
+export type CoursePriceFilter = 'free' | 'paid';
+
+/** Допустимые значения фильтра минимального рейтинга (как строки запроса). */
+export type CourseMinRatingFilter = '3.5' | '4' | '4.5';
+
+/** Сортировка каталога (по умолчанию popular). */
+export type CourseSort = 'popular' | 'new' | 'rating' | 'price_asc' | 'price_desc';
+
+/** Статистика категории из GET /categories. */
+export interface CategoryStat {
+  /** Слаг категории из фиксированного списка. */
+  slug: string;
+  /** Число опубликованных курсов (может быть 0). */
+  coursesCount: number;
+}
+
 // ---------- Пользователь ----------
 
 export interface User {
@@ -56,6 +78,8 @@ export interface CourseItem {
   avgRating: number;
   /** Именно ratingsCount, не reviewsCount. */
   ratingsCount: number;
+  /** T65: категория курса (слаг фиксированного списка); аддитивное поле. */
+  category?: string;
   /**
    * T54: путь к обложке "/uploads/covers/<имя>" (аддитивно с волны P7).
    * null/"" — обложки нет; плитки без обложки рисуются как раньше.
@@ -177,6 +201,28 @@ export interface Review {
   /** Текст отзыва называется body, не text (omitempty). */
   body?: string;
   createdAt: string;
+  /** T69: ответ преподавателя; пустая строка/отсутствие — ответа нет. */
+  teacherReply?: string;
+  /** T69: когда ответ оставлен или обновлён; null — ответа нет. */
+  teacherReplyAt?: string | null;
+}
+
+/** T69: разбивка оценок 5→1 по всем отзывам курса (ключи — строки "1".."5"). */
+export type ReviewBreakdown = Record<'1' | '2' | '3' | '4' | '5', number>;
+
+/**
+ * T69: конверт GET /courses/{id}/reviews целиком.
+ * avgRating/ratingsCount/breakdown считаются по всем отзывам и не зависят
+ * от фильтра rating; items/total — по фильтру.
+ */
+export interface CourseReviewsPage {
+  items: Review[];
+  total: number;
+  page: number;
+  limit: number;
+  avgRating: number;
+  ratingsCount: number;
+  breakdown: ReviewBreakdown;
 }
 
 // ---------- Обучение ----------
@@ -194,6 +240,11 @@ export interface MyCourse {
   course: CourseItem;
   percent: number;
   nextLesson: NextLesson | null;
+  /**
+   * T67/T68: номер сертификата по курсу (аддитивное поле волны P8).
+   * Пустая строка или отсутствие — сертификат ещё не выдан.
+   */
+  certificateNumber?: string;
 }
 
 /** Результат завершения урока (POST .../complete). Ключ — passed, не accepted. */
@@ -210,6 +261,29 @@ export interface CompleteResult {
   total?: number;
 }
 
+// ---------- Сертификаты ----------
+
+/** Публичный сертификат (GET /certificates/{number}, без авторизации). */
+export interface CertificatePublic {
+  number: string;
+  /** RFC3339. */
+  issuedAt: string;
+  /** displayName студента; пустая строка, если имя не задано. */
+  studentName: string;
+  courseTitle: string;
+  courseSlug: string;
+}
+
+/** Мой сертификат (GET /me/certificates, конверт распакован клиентом). */
+export interface MyCertificate {
+  number: string;
+  /** RFC3339. */
+  issuedAt: string;
+  courseId: string;
+  courseTitle: string;
+  courseSlug: string;
+}
+
 // ---------- Покупка ----------
 
 /** Результат создания записи на курс (POST /enrollments). */
@@ -222,6 +296,33 @@ export interface EnrollmentResult {
   status: PaymentStatus;
   /** true — курс бесплатный и активен сразу. */
   enrollmentActive: boolean;
+}
+
+// ---------- Промокоды (P8, T63/T64) ----------
+
+/** Промокод курса (модель PromoCode контракта P8). */
+export interface PromoCode {
+  id: string;
+  courseId: string;
+  /** Хранится и сравнивается в верхнем регистре. */
+  code: string;
+  /** Скидка в процентах, 1..90. */
+  discountPct: number;
+  /** 0 — без ограничения. */
+  maxUses: number;
+  usedCount: number;
+  /** RFC3339 или null — бессрочный. */
+  expiresAt: string | null;
+  active: boolean;
+  createdAt: string;
+}
+
+/** Результат проверки промокода (POST /courses/{id}/promo/validate). */
+export interface PromoValidation {
+  code: string;
+  discountPct: number;
+  priceCents: number;
+  finalPriceCents: number;
 }
 
 // ---------- Админ ----------
