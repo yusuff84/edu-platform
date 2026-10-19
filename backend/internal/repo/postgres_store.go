@@ -343,7 +343,10 @@ func (s *PostgresStore) AcceptInvite(inv *TeacherInvite) {
 
 func scanCourse(scan func(dest ...any) error) (*Course, error) {
 	c := &Course{}
-	var teacherID, cover, currency, status, comment string
+	var teacherID, currency, status, comment string
+	// cover_path читается как есть (NULLABLE): NULL → nil указатель → null
+	// в JSON/видах (T54). COALESCE тут не нужен, пусто — это отсутствие обложки.
+	var cover *string
 	var avg float64
 	var count int
 	var created, updated time.Time
@@ -367,7 +370,7 @@ func scanCourse(scan func(dest ...any) error) (*Course, error) {
 }
 
 const courseCols = `id::text, teacher_id::text, slug, title, description,
-	COALESCE(cover_path,''), price_cents, currency::text, status,
+	cover_path, price_cents, currency::text, status,
 	COALESCE(avg_rating,0)::float8, ratings_count, COALESCE(moderation_comment,''),
 	created_at, updated_at`
 

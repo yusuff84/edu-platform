@@ -1,11 +1,10 @@
-/* Стили раздела «Записи на курсы» супер-админки (T49).
+/* Стили раздела «Записи на курсы» супер-админки (T49; экспорт CSV — T59; клетки имени/почты — T62).
    Импортируются только из pages/AdminEnrollments.tsx; общий styles.css и
    admin.css не изменяются — здесь только селекторы с префиксом .ae-.
    Базовые классы (.panel, .muted, .error, .btn, .btn-sm, .input, .progress,
    .progress-bar, .sr-only) — из styles.css. Вёрстка таблицы повторяет
-   вылеченную таблицу пользователей (T52): длинные email переносятся,
-   названия курсов обрезаются с многоточием, колонка действий не заезжает
-   за край карточки. */
+   вылеченную таблицу пользователей (T52); T62: имя/email ученика —
+   односторонняя строка с многоточием (замер: вылезание из ячейки). */
 
 main.ae-admin {
   max-width: 1200px;
@@ -50,6 +49,22 @@ main.ae-admin {
 
 .ae-filters > .btn {
   margin-top: 0;
+}
+
+/* ---------- Экспорт CSV (T59) ---------- */
+
+/* Группа «Экспорт CSV» в ряду фильтров: подпись — p7.enroll.exportCsv,
+   под ней кнопка выгрузки (csvExport.css): кнопка встаёт по нижней границе,
+   как у соседних полей. */
+.ae-export__label {
+  font-weight: 600;
+}
+
+/* Сообщение под кнопкой выгрузки переносится по словам и не раздувает
+   ряд фильтров на узком экране. */
+.ae-export .ce-msg {
+  white-space: normal;
+  max-width: 100%;
 }
 
 /* ---------- Итог и уведомления ---------- */
@@ -130,8 +145,13 @@ main.ae-admin {
 
 /* ---------- Ячейки таблицы ---------- */
 
-/* Ученик: имя (обрезается с многоточием) + email (переносится по символам),
-   длинные адреса не растягивают таблицу (как в вылеченной T52 таблице). */
+/* Ученик: имя + email — каждая в одну строку с многоточием (T62: замер
+   координатора — email 309–321px вылезал из ячейки 253px). Ширина прочно
+   ограничена на двух уровнях: (1) сам элемент — max-width: 14rem
+   (жёсткая гарантия: содержимое никогда не рисуется дальше 224px от левого
+   края ячейки, независимо от причуд авторазметки таблицы; title в разметке
+   показывает полное значение), (2) трек minmax(0, 1fr) + td max-width 15rem
+   не даёт колонке размножаться до текста. Классы ячеек T49/T52 сохранены. */
 .ae-td-student {
   white-space: normal;
   min-width: 11rem;
@@ -140,12 +160,15 @@ main.ae-admin {
 
 .ae-student {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 0.1rem;
   min-width: 0;
+  max-width: 100%;
 }
 
 .ae-student__name {
   display: block;
+  min-width: 0;
   max-width: 14rem;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -154,12 +177,14 @@ main.ae-admin {
 
 .ae-student__email {
   display: block;
+  min-width: 0;
   max-width: 14rem;
   color: #666;
   font-size: 0.85rem;
   font-weight: 400;
-  overflow-wrap: anywhere;
-  word-break: break-word;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* Курс: длинное название переносится, а не растягивает таблицу. */
@@ -325,5 +350,11 @@ main.ae-admin {
   .ae-student__email {
     max-width: none;
     text-align: right;
+    /* T62: в карточном режиме на телефонах переносим текст как раньше,
+       односторонняя строка с многоточием — только для десктопной таблицы. */
+    white-space: normal;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+    overflow: visible;
   }
 }

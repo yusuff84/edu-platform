@@ -662,6 +662,132 @@ Query: `q` (поиск), `page`, `limit`.
 
 ---
 
+## Эндпоинты волны P7 (T53–T55) — ЗАМОРОЖЕНО до запуска агентов
+
+Все пути ниже — от `/api/v1`. Коды те же: `400` — валидация, `403` — нет прав,
+`404` — нет сущности, `409` — конфликт состояния. Бэкенд приводится к этим
+формам (T53–T55), фронтенд (T56–T59) пишется строго под них.
+
+### T53 — жизненный цикл учителя и жёсткая валидация
+
+#### `POST /teacher/courses/{id}/unpublish` — снять с публикации (учитель)
+
+Владелец курса или админ (права — как у `archive`/`withdraw` из T21; админ
+может пользоваться и существующим админским
+`POST /admin/courses/{id}/unpublish`, T25). Тело не требуется. Семантика:
+`published → draft`.
+Ответ `200`: `{"course": <Course>}` — как у архивных действий T21.
+
+Ошибки: `404` — «Курс не найден»; `403` — чужой курс; `409` — «Снять с
+публикации можно только опубликованный курс» (статус не `published`).
+
+#### `PATCH /teacher/courses/{id}/lessons/{lessonId}` — `startsAt` в двух форматах
+
+Дополнительно к текущим правилам PATCH: поле `startsAt` у `live`-урока
+принимается и в RFC3339 (как POST), и в datetime-local
+(`ГГГГ-ММ-ДДТЧЧ:ММ`, без зоны); вторая форма трактуется как UTC. Пустое
+`startsAt` → `400`, как было. Права/коды — без изменений.
+
+#### Валидация quiz на бэкенде
+
+`POST /teacher/courses/{id}/lessons` (kind `quiz`) и `PATCH` того же урока
+проверяют `quiz.questions`:
+- текст вопроса непустой после TrimSpace;
+- `options`: не менее двух, каждый непустой;
+- ровно один правильный вариант (`correctIndex` в границах списка).
+Иначе `400 «Некорректный тест: <причина>»` (тексты в свободной форме).
+Существующие уроки, сохранённые раньше, не рестриктурируются.
+
+#### Чистка мёртвого кода
+
+В `handler/teacher.go` удаляется мёртвый построчный дубль регистрации
+`GET /teacher/courses` (реальная регистрация остаётся только через
+`RegisterTeacherCRUDRoutes`); внешний контракт не меняется — это лишь
+очистка кода.
+
+### T54 — обложка курса (cover)
+
+#### `POST /teacher/courses/{id}/cover` (multipart/form-data)
+
+Владелец курса или admin (монтаж внутри `r.Route("/teacher")` — среди teacher-
+маршрутов). Поле формы: `file` (обязательное). Допустимые типы по байта тела
+(`http.DetectContentType`): `image/jpeg | image/png | image/webp`; размер
+≤ `5 * 1024 * 1024` байт; иначе `400 «Обложка: допустимы JPEG, PNG или WebP
+не больше 5 МБ»`.
+
+Успех `201`: файл сохраняется через локальное хранилище (`storage.SaveLocal`)
+в `/uploads/covers/…` с путём, привязанным к курсу (повторная загрузка —
+перезаписывает файл), поле `cover_path` обновляется; ответ:
+`{"coverPath":"/uploads/covers/<имя>"}`.
+
+Ошибки: `400` — нет файла / плохой тип / слишком большой; `401/403`; `404` —
+«Курс не найден»; `409` — «Курс в архиве: обложка заморожена» (статус
+`archived`).
+
+#### `DELETE /teacher/courses/{id}/cover`
+
+Владелец/admin. Успех `204` (обложки не было — тем же `204`): `cover_path`
+становится `NULL` (физический файл удалять не обязательно). `409` — archived;
+`404` — неизвестный курс.
+
+#### `coverPath` в публичных и служебных ответах (аддитивно)
+
+Поле `coverPath` (JSON-имя `coverPath`, значение `string | null`):
+
+- `GET /courses` (каталог) — в каждом элементе;
+- `GET /courses/{slug}` (публичная страница) — в объекте `course`;
+- `GET /teacher/courses` и `GET /teacher/courses/{id}`;
+- `GET /admin/courses` (список T48) и новый `GET /admin/courses/{id}` (T55).
+
+Хранение: колонка `cover_path TEXT` в `courses` (миграция `007_cover.sql` —
+продолжение нумерации goose). Раздача `/uploads/*` уже существует.
+
+### T55 — `GET /admin/courses/{id}` — детали курса для админа
+
+Только admin. Ответ `200`:
+
+```json
+{
+  "course":  { "<элемент GET /admin/courses плюс coverPath>": null },
+  "modules": [
+    { "id": "uuid", "title": "Модуль", "position": 1,
+      "lessons": [ { "id": "uuid", "title": "Урок", "kind": "video_text", "position": 1 } ] }
+  ],
+  "stats": { "studentsCount": 0, "activeCount": 0, "reviewsCount": 0,
+    "avgRating": 0, "paymentsCount": 0, "paidTotalCents": 0 }
+}
+```
+
+- `course.teacherEmail` — как в списке T25; `course` содержит `coverPath`;
+- `modules` — сортировка по `position`, уроки внутри — по `position`; уроки
+  отдаются ТОЛЬКО метаданные (id/title/kind/position), тела уроков нет;
+- `stats.studentsCount` — все записи (любой статус); `activeCount` — только
+  `active`; `paymentsCount`/`paidTotalCents` — только платежи `succeeded`;
+- `avgRating`/`reviewsCount` — как в публичной карточке курса.
+Ошибки: `401` — не вошёл; `403` — не админ; `404` — «Курс не найден».
+
+Отзывы по курсу остаются прежними: `GET /admin/courses/{id}/reviews` и
+`DELETE /admin/reviews/{id}` (T25) — без изменений.
+
+### Новые ключи i18n (ru.json) — заморозка
+
+Словарь дополняется ТОЛЬКО следующими ключами (фронтенд-агенты не добавляют
+своих; не хватает — «писать в отчёт», не править словарь):
+
+- `p7.constructor.*`: slugLabel, slugHint, slugInvalid, checklistTitle,
+  checklistReady, checklistModule, checklistLesson, checklistLessonFields,
+  deleteHint, deleteBlocked, unpublish, unpublishConfirm, unpublished;
+- `p7.cover.*`: label, hint, upload, replace, remove, saved, removed,
+  typeError, alt;
+- `p7.adminCourse.*`: back, info, program, students, reviews, stats,
+  studentsCount, lessonsCount, reviewsCount, paidTotal, openPublic,
+  openStudents, notFound;
+- `p7.stats.*`: quickLinks, linksUsers, linksCourses, linksEnrollments,
+  linksJournal, linksQueue;
+- `p7.enroll.*`: exportCsv, exportDone.
+
+---
+
 ## Отступления (осознанные и разрешённые)
 
 | Отступление | Кто | Почему |

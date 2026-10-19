@@ -22,11 +22,17 @@
 // карточка заморожена (PATCH → 409, T33) — вместо кнопки правки подсказка
 // teach.cardArchivedHint.
 //
+// T56: у формы создания и правки карточки появился slug (валидация regex на
+// клиенте), перед «Отправить на модерацию» рендерится чеклист готовности
+// (модули/уроки/содержимое), у опубликованного курса есть снятие с публикации
+// (T53) с inline-подтверждением (нативный confirm недопустим — стиль T49/T52),
+// а «Удалить курс» активна только в черновике (не-draft блокируется на клиенте).
+//
 // Все тела запросов собираются только из полей, относящихся к kind урока:
 // backend включает DisallowUnknownFields() — лишнее поле = 400.
 
-import { useState } from 'react';
-import type { FormEvent } from 'react';
+import { useRef, useState } from 'react';
+import type { ChangeEvent, FormEvent } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
@@ -49,11 +55,21 @@ import {
   duplicateCourse,
   moveLesson as moveLessonToModule,
   unarchiveCourse,
+  unpublishTeacherCourse,
   withdrawCourse,
 } from '../api/teacherExtra';
 // T36: детали курса конструктора — из api/teacherStudents.ts (client.ts не наш,
 // добавление туда getTeacherCourseDetail принадлежит соседней волне).
 import { getTeacherCourseDetail } from '../api/teacherStudents';
+// T57: обложка курса (T54) — отдельный multipart-модуль рядом с api-клиентом.
+import {
+  COVER_ACCEPT,
+  COVER_MAX_BYTES,
+  COVER_TYPES,
+  coverUrl,
+  removeCover,
+  uploadCover,
+} from '../api/teacherCover';
 import LessonPreview from '../components/LessonPreview';
 import type { LessonPreviewData } from '../components/LessonPreview';
 import { t } from '../i18n/t';
@@ -139,13 +155,17 @@ interface ReorderItem {
 
 function patchCourseCard(
   courseId: string,
-  body: { title?: string; description?: string; priceCents?: number },
+  body: { title?: string; description?: string; priceCents?: number; slug?: string },
 ): Promise<Course> {
   // Тело только из переданных полей: пустые не шлём, чтобы не затереть данные.
   const b: Record<string, unknown> = {};
   if (body.title !== undefined) b.title = body.title;
   if (body.description !== undefined) b.description = body.description;
   if (body.priceCents !== undefined) b.priceCents = body.priceCents;
+  // T56: slug правится в карточке вместе с прочими метаданными (draft|review|
+  // published — как вся карточка; в архиве форма просто не показывается).
+  // Пустое значение не отправляем — поле "как было".
+  if (body.slug !== undefined && body.slug !== '') b.slug = body.slug;
   return crudFetch<Course>(`/teacher/courses/${courseId}`, {
     method: 'PATCH',
     body: JSON.stringify(b),
@@ -202,10 +222,21 @@ function reorderLessons(courseId: string, items: ReorderItem[]): Promise<void> {
 
 // ---------- Схема создания курса ----------
 
+// T56: slug курса — латиница, цифры и дефис, без дефисов по краям (замороженный
+// regex из ТЗ). Минимальной длины на клиенте не требуем — точное правило длины
+// остаётся за backend (T41); пустое значение разрешено — slug сгенерируется.
+const SLUG_RE = /^[a-z0-9](?:[a-z0-9-]{1,118}[a-z0-9])?$/;
+
 const courseSchema = z.object({
   title: z.string().min(3, 'Название слишком короткое'),
   description: z.string().min(10, 'Описание слишком короткое'),
   priceRub: z.coerce.number().min(0, 'Цена не может быть отрицательной'),
+  // T56: slug необязателен. Пусто (или пробелы) — разрешено, остальное валидно
+  // по SLUG_RE; сообщение об ошибке — из замороженного ключа словаря.
+  slug: z.string().refine(
+    (v) => v.trim() === '' || SLUG_RE.test(v.trim()),
+    t('p7.constructor.slugInvalid'),
+  ),
 });
 
 type CourseForm = z.infer<typeof courseSchema>;
@@ -535,6 +566,41 @@ function buildLessonPatchBody(d: LessonDraft): Record<string, unknown> {
   return body;
 }
 
+// ---------- T56: чеклист готовности урока ----------
+
+/**
+ * Содержимое урока заполнено по правилам его типа:
+ *  - video_text: текст ИЛИ ссылка на видео (достаточно одного);
+ *  - live: дата эфира и ссылка на эфир;
+ *  - quiz: вопросы корректны (текст, ≥2 непустых варианта, правильный в границах);
+ *  - code: язык выбран и есть хотя бы один тест.
+ * Считается по данным GET /teacher/courses/{id} — уже загруженной программе.
+ */
+function lessonReady(l: Lesson): boolean {
+  switch (l.kind) {
+    case 'video_text':
+      return Boolean(l.bodyMd?.trim() || l.videoUrl?.trim());
+    case 'live':
+      return Boolean(l.startsAt?.trim() && l.liveUrl?.trim());
+    case 'quiz': {
+      const qs = l.quiz?.questions ?? [];
+      return (
+        qs.length > 0 &&
+        qs.every(
+          (q) =>
+            q.text.trim() !== '' &&
+            q.options.filter((o) => o.trim() !== '').length >= 2 &&
+            q.correct !== undefined &&
+            q.correct >= 0 &&
+            q.correct < q.options.length,
+        )
+      );
+    }
+    case 'code':
+      return Boolean(l.codeTask?.language && l.codeTask.tests.length >= 1);
+  }
+}
+
 // ---------- Утилиты ----------
 
 /** Текст ошибки запроса: сеть / API / прочее. */
@@ -571,13 +637,27 @@ export default function Constructor(): JSX.Element {
   const [notice, setNotice] = useState<{ text: string; kind: 'ok' | 'error' } | null>(null);
 
   // ---------- Форма создания курса (/teach/new) ----------
-  const { register, handleSubmit, formState } = useForm<CourseForm>({
+  const { register, handleSubmit, formState, watch } = useForm<CourseForm>({
     resolver: zodResolver(courseSchema),
-    defaultValues: { title: '', description: '', priceRub: 0 },
+    defaultValues: { title: '', description: '', priceRub: 0, slug: '' },
   });
 
+  // T56: slug проверяем «на лету» — кнопка «Создать курс» выключена, пока
+  // значение не пройдёт SLUG_RE (пустое поле разрешено: backend сгенерирует
+  // slug из названия, T41). Порядок фокуса при ошибках — как на форме.
+  const slugValue = watch('slug');
+  const slugReady = slugValue.trim() === '' || SLUG_RE.test(slugValue.trim());
+
   function onInvalidCourse(errs: FieldErrors<CourseForm>): void {
-    focusField(errs.title ? 'course-title' : errs.description ? 'course-desc' : 'course-price');
+    focusField(
+      errs.title
+        ? 'course-title'
+        : errs.description
+          ? 'course-desc'
+          : errs.slug
+            ? 'course-slug'
+            : 'course-price',
+    );
   }
 
   // ---------- Данные ----------
@@ -605,12 +685,25 @@ export default function Constructor(): JSX.Element {
   // { course, modules } (T36: тот же ответ, что и у экрана «Ученики курса»).
   const lessonsTotal = modules.reduce((n, m) => n + m.lessons.length, 0);
 
+  // ---------- T56: чеклист готовности к отправке на модерацию ----------
+  // Три пункта по ТЗ: ≥1 модуль, ≥1 урок и корректное содержимое каждого урока.
+  const checklistModule = modules.length > 0;
+  const checklistLesson = lessonsTotal > 0;
+  const checklistFields = modules.every((m) => m.lessons.every(lessonReady));
+  const checklistDone = checklistModule && checklistLesson && checklistFields;
+
   // ---------- T19: локальное состояние CRUD ----------
 
   // Правка карточки курса (T13 PATCH /teacher/courses/{id}): в любом статусе,
   // кроме архива (T36/T33 — там карточка заморожена и PATCH отвечает 409).
+  // T56: в карточке редактируется и slug (draft|review|published).
   const [cardEditing, setCardEditing] = useState(false);
-  const [cardDraft, setCardDraft] = useState({ title: '', description: '', priceRub: 0 });
+  const [cardDraft, setCardDraft] = useState({
+    title: '',
+    description: '',
+    priceRub: 0,
+    slug: '',
+  });
 
   // Переименование модуля (T13 PATCH .../modules/{moduleID}): в любом статусе.
   const [renamingModuleId, setRenamingModuleId] = useState<string | null>(null);
@@ -630,6 +723,8 @@ export default function Constructor(): JSX.Element {
         title: v.title,
         description: v.description,
         priceCents: Math.round(v.priceRub * 100),
+        // T56: пустой slug не отправляем — backend сгенерирует из названия (T41).
+        slug: v.slug.trim() || undefined,
       }),
     onSuccess: (c) => {
       void qc.invalidateQueries({ queryKey: ['teaching'] });
@@ -673,6 +768,7 @@ export default function Constructor(): JSX.Element {
         title: cardDraft.title.trim(),
         description: cardDraft.description.trim(),
         priceCents: Math.round(cardDraft.priceRub * 100),
+        slug: cardDraft.slug.trim(),
       }),
     onSuccess: () => {
       setCardEditing(false);
@@ -689,6 +785,7 @@ export default function Constructor(): JSX.Element {
       title: course.title,
       description: course.description,
       priceRub: course.priceCents / 100,
+      slug: course.slug,
     });
     setCardEditing(true);
   }
@@ -703,8 +800,72 @@ export default function Constructor(): JSX.Element {
       setNotice({ text: 'Проверьте поля карточки: название от 3 символов, описание от 10, цена не меньше 0', kind: 'error' });
       return;
     }
+    // T56: slug в карточке валидируем как в форме создания (пусто — оставляем
+    // прежнее значение, backend его не меняет).
+    const cardSlug = cardDraft.slug.trim();
+    if (cardSlug !== '' && !SLUG_RE.test(cardSlug)) {
+      setNotice({ text: t('p7.constructor.slugInvalid'), kind: 'error' });
+      focusField('card-slug');
+      return;
+    }
     cardMutation.mutate();
   }
+
+  // ---------- T57: обложка курса (T54) ----------
+
+  // hidden input[type=file] дергается кнопками «Загрузить/Заменить обложку».
+  const coverInputRef = useRef<HTMLInputElement | null>(null);
+  // Инлайн-подтверждение удаления (стиль T49: Подтвердить/Отмена, не confirm()).
+  const [coverConfirm, setCoverConfirm] = useState(false);
+
+  const uploadCoverMutation = useMutation({
+    mutationFn: (file: File) => uploadCover(course?.id ?? '', file),
+    onSuccess: () => {
+      setNotice({ text: t('p7.cover.saved'), kind: 'ok' });
+      // Обложка попадает во вью конструктора и в список своих курсов —
+      // обновляем оба кэша (refetch курса после мутации).
+      void qc.invalidateQueries({ queryKey: ['teach-course'] });
+      void qc.invalidateQueries({ queryKey: ['teaching'] });
+    },
+    onError: (e: unknown) => setNotice({ text: errText(e), kind: 'error' }),
+  });
+
+  const removeCoverMutation = useMutation({
+    mutationFn: () => removeCover(course?.id ?? ''),
+    onSuccess: () => {
+      setCoverConfirm(false);
+      setNotice({ text: t('p7.cover.removed'), kind: 'ok' });
+      void qc.invalidateQueries({ queryKey: ['teach-course'] });
+      void qc.invalidateQueries({ queryKey: ['teaching'] });
+    },
+    onError: (e: unknown) => setNotice({ text: errText(e), kind: 'error' }),
+  });
+
+  /**
+   * Выбор файла обложки: тип и размер проверяем ДО запроса (контракт T54 —
+   * JPEG/PNG/WebP, ≤5 МБ), несоответствие показывает p7.cover.typeError
+   * без похода на сервер. value сбрасывается, чтобы один и тот же файл можно
+   * было выбрать повторно (после замены или ошибки).
+   */
+  function onCoverFileChange(e: ChangeEvent<HTMLInputElement>): void {
+    const file = e.target.files?.[0] ?? null;
+    e.target.value = '';
+    if (!file) return;
+    if (!COVER_TYPES.includes(file.type) || file.size > COVER_MAX_BYTES) {
+      setNotice({ text: t('p7.cover.typeError'), kind: 'error' });
+      return;
+    }
+    uploadCoverMutation.mutate(file);
+  }
+
+  function openCoverDialog(): void {
+    coverInputRef.current?.click();
+  }
+
+  // T57: в архиве менять обложку нельзя (бэкенд ответил бы 409) — глушим кнопки;
+  // во время мутаций тоже.
+  const coverBusy = uploadCoverMutation.isPending || removeCoverMutation.isPending;
+  const coverDisabled = cardFrozen || coverBusy;
 
   // ---------- T19: переименование модуля ----------
 
@@ -738,7 +899,14 @@ export default function Constructor(): JSX.Element {
     onError: (e: unknown) => setNotice({ text: errText(e), kind: 'error' }),
   });
 
-  function onDeleteCourse(courseId: string): void {
+  function onDeleteCourse(courseId: string, status?: CourseStatus): void {
+    // T56: backend удалит только черновик (иначе 409) — не-draft блокируем на
+    // клиенте сообщением. Кнопка неактивна, это страховка на случай вызова
+    // из обработчиков, где статус мог не доехать до рендера.
+    if (status && status !== 'draft') {
+      setNotice({ text: t('p7.constructor.deleteBlocked'), kind: 'error' });
+      return;
+    }
     if (window.confirm(MSG_DELETE)) deleteCourseMutation.mutate(courseId);
   }
 
@@ -894,6 +1062,36 @@ export default function Constructor(): JSX.Element {
 
   function onWithdrawCourse(): void {
     if (window.confirm(t('teach.confirmWithdraw'))) withdrawMutation.mutate();
+  }
+
+  // ---------- T53/T56: снятие курса с публикации ----------
+  // Подтверждение — inline-модалка (нативный confirm недопустим, стиль T49/T52).
+  const [confirmUnpublish, setConfirmUnpublish] = useState(false);
+
+  const unpublishMutation = useMutation({
+    mutationFn: () => unpublishTeacherCourse(course?.id ?? ''),
+    onSuccess: () => {
+      setConfirmUnpublish(false);
+      setNotice({ text: t('p7.constructor.unpublished'), kind: 'ok' });
+      // Курс вернулся в draft — обновляем его конверт и список «Мои курсы».
+      void qc.invalidateQueries({ queryKey: ['teach-course'] });
+      void qc.invalidateQueries({ queryKey: ['teaching'] });
+    },
+    onError: (e: unknown) => {
+      // Ошибку показываем глобальным notice — модалку закрываем, иначе оверлей
+      // перекрывает уведомление в низу страницы.
+      setConfirmUnpublish(false);
+      setNotice({ text: errText(e), kind: 'error' });
+    },
+  });
+
+  function onUnpublishCourse(): void {
+    setConfirmUnpublish(true);
+  }
+
+  function onCancelUnpublish(): void {
+    // Во время запроса окно не закрываем, чтобы не потерять индикацию.
+    if (!unpublishMutation.isPending) setConfirmUnpublish(false);
   }
 
   // ---------- T28: перенос урока в другой модуль (T21 move) ----------
@@ -1153,7 +1351,25 @@ export default function Constructor(): JSX.Element {
             <input id="course-price" className="input" type="number" min={0} {...register('priceRub')} />
             {formState.errors.priceRub && <p className="error">{formState.errors.priceRub.message}</p>}
 
-            <button type="submit" className="btn btn-primary" disabled={createMutation.isPending}>
+            {/* T56: slug необязателен; валидируем на лету, кнопка создания
+                выключена, пока значение не пройдёт проверку. */}
+            <label htmlFor="course-slug">{t('p7.constructor.slugLabel')}</label>
+            <input
+              id="course-slug"
+              className="input"
+              {...register('slug')}
+              aria-invalid={slugReady ? undefined : true}
+            />
+            {!slugReady && (
+              <p className="error">{t('p7.constructor.slugInvalid')}</p>
+            )}
+            <p className="teach-note ce-field-hint">{t('p7.constructor.slugHint')}</p>
+
+            <button
+              type="submit"
+              className="btn btn-primary"
+              disabled={createMutation.isPending || !slugReady}
+            >
               {createMutation.isPending ? t('teach.saving') : t('teach.save')}
             </button>
           </form>
@@ -1210,20 +1426,30 @@ export default function Constructor(): JSX.Element {
                           {t('teach.submitReview')}
                         </button>
                       )}
-                      {c.status === 'draft' && (
-                        <button
-                          type="button"
-                          className="teach-danger"
-                          onClick={() => onDeleteCourse(c.id)}
-                          disabled={
-                            deleteCourseMutation.isPending &&
-                            deleteCourseMutation.variables === c.id
-                          }
-                        >
-                          {t('common.delete')}
-                        </button>
-                      )}
+                      {/* T56: «Удалить» видна всегда; активна только для черновика
+                          (backend удаления чистит только его). Для не-draft —
+                          подпись deleteHint, попытка блокируется на клиенте. */}
+                      <button
+                        type="button"
+                        className="teach-danger"
+                        onClick={() => onDeleteCourse(c.id, c.status)}
+                        disabled={
+                          c.status !== 'draft' ||
+                          (deleteCourseMutation.isPending &&
+                            deleteCourseMutation.variables === c.id)
+                        }
+                        title={
+                          c.status !== 'draft' ? t('p7.constructor.deleteHint') : undefined
+                        }
+                      >
+                        {t('common.delete')}
+                      </button>
                     </div>
+                    {c.status !== 'draft' && (
+                      <p className="teach-note ce-delete-hint">
+                        {t('p7.constructor.deleteHint')}
+                      </p>
+                    )}
                   </li>
                   );
                 })}
@@ -1323,7 +1549,66 @@ export default function Constructor(): JSX.Element {
                     {t('teach.publicPage')}
                   </a>
                 )}
+                {/* T53/T56: курс в статусе published можно вернуть в черновик. */}
+                {course.status === 'published' && (
+                  <button
+                    type="button"
+                    className="teach-danger"
+                    onClick={onUnpublishCourse}
+                    disabled={unpublishMutation.isPending}
+                  >
+                    {unpublishMutation.isPending
+                      ? t('teach.saving')
+                      : t('p7.constructor.unpublish')}
+                  </button>
+                )}
               </div>
+
+              {/* T53/T56: inline-модалка подтверждения снятия с публикации
+                  (нативный confirm не используется — стиль T49/T52). Закрытие:
+                  «Отмена», клик мимо окна или Esc; во время запроса окно
+                  остаётся открытым. */}
+              {confirmUnpublish && course.status === 'published' && (
+                <div
+                  className="ce-modal"
+                  onMouseDown={(e) => {
+                    if (e.target === e.currentTarget) onCancelUnpublish();
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Escape') onCancelUnpublish();
+                  }}
+                >
+                  <div
+                    className="ce-modal__box"
+                    role="dialog"
+                    aria-modal="true"
+                    aria-labelledby="ce-unpublish-title"
+                  >
+                    <h2 id="ce-unpublish-title">{t('p7.constructor.unpublish')}</h2>
+                    <p className="ce-modal-text">{t('p7.constructor.unpublishConfirm')}</p>
+                    <div className="teach-card-actions">
+                      <button
+                        type="button"
+                        autoFocus
+                        disabled={unpublishMutation.isPending}
+                        onClick={onCancelUnpublish}
+                      >
+                        {t('common.cancel')}
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn-primary"
+                        disabled={unpublishMutation.isPending}
+                        onClick={() => unpublishMutation.mutate()}
+                      >
+                        {unpublishMutation.isPending
+                          ? t('teach.saving')
+                          : t('common.confirm')}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* Комментарий модератора: цикл «отклонили → исправил». */}
               {course.status === 'draft' && course.moderationComment && (
@@ -1377,6 +1662,25 @@ export default function Constructor(): JSX.Element {
                         setCardDraft((p) => ({ ...p, priceRub: Number(e.target.value) }))
                       }
                     />
+                    {/* T56: slug правится в карточке (draft|review|published —
+                        как и вся карточка; в архиве форма не показывается).
+                        Валидация та же, что и в форме создания. */}
+                    <label htmlFor="card-slug">{t('p7.constructor.slugLabel')}</label>
+                    <input
+                      id="card-slug"
+                      className="input"
+                      value={cardDraft.slug}
+                      onChange={(e) => setCardDraft((p) => ({ ...p, slug: e.target.value }))}
+                      aria-invalid={
+                        cardDraft.slug.trim() !== '' && !SLUG_RE.test(cardDraft.slug.trim())
+                          ? true
+                          : undefined
+                      }
+                    />
+                    {cardDraft.slug.trim() !== '' && !SLUG_RE.test(cardDraft.slug.trim()) && (
+                      <p className="error">{t('p7.constructor.slugInvalid')}</p>
+                    )}
+                    <p className="teach-note ce-field-hint">{t('p7.constructor.slugHint')}</p>
                     <div className="teach-card-actions">
                       <button
                         type="submit"
@@ -1391,33 +1695,139 @@ export default function Constructor(): JSX.Element {
                     </div>
                   </form>
                 ) : (
-                  <div className="teach-card-actions">
-                    {!cardFrozen && (
-                      <button type="button" onClick={startCardEdit}>
-                        Редактировать карточку
+                  <>
+                    <div className="teach-card-actions">
+                      {!cardFrozen && (
+                        <button type="button" onClick={startCardEdit}>
+                          Редактировать карточку
+                        </button>
+                      )}
+                      {/* T56: «Удалить курс» видна всегда, но активна только для
+                          черновика; попытка удаления другого статуса блокируется
+                          в onDeleteCourse (сообщение deleteBlocked). */}
+                      <button
+                        type="button"
+                        className="teach-danger"
+                        onClick={() => onDeleteCourse(course.id, course.status)}
+                        disabled={course.status !== 'draft' || deleteCourseMutation.isPending}
+                        title={
+                          course.status !== 'draft' ? t('p7.constructor.deleteHint') : undefined
+                        }
+                      >
+                        {t('common.delete')} курс
                       </button>
+                    </div>
+                    {course.status !== 'draft' && (
+                      <p className="teach-note ce-delete-hint">
+                        {t('p7.constructor.deleteHint')}
+                      </p>
                     )}
-                    <button
-                      type="button"
-                      className="teach-danger"
-                      onClick={() => onDeleteCourse(course.id)}
-                      disabled={deleteCourseMutation.isPending}
-                    >
-                      {t('common.delete')} курс
-                    </button>
-                  </div>
+                  </>
                 )}
               </section>
 
-              {/* Отправка на модерацию — только для черновика. */}
+              {/* T57: обложка курса (T54) — превью и загрузка/замена/удаление.
+                  Тип и размер проверяем на клиенте (p7.cover.typeError) без
+                  запроса; в архиве кнопки глушим — бэкенд и так вернёт 409. */}
+              <section className="teach-section panel tc-cover">
+                <h2>{t('p7.cover.label')}</h2>
+                <p className="teach-note">{t('p7.cover.hint')}</p>
+                {course.coverPath && (
+                  <img
+                    className="tc-cover-img"
+                    src={coverUrl(course.coverPath)}
+                    alt={t('p7.cover.alt')}
+                  />
+                )}
+                <input
+                  ref={coverInputRef}
+                  type="file"
+                  className="tc-cover-input"
+                  accept={COVER_ACCEPT}
+                  disabled={coverDisabled}
+                  onChange={onCoverFileChange}
+                />
+                <div className="teach-card-actions tc-cover-actions">
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    onClick={openCoverDialog}
+                    disabled={coverDisabled}
+                  >
+                    {uploadCoverMutation.isPending
+                      ? t('teach.saving')
+                      : course.coverPath
+                        ? t('p7.cover.replace')
+                        : t('p7.cover.upload')}
+                  </button>
+                  {course.coverPath && coverConfirm && (
+                    <span className="tc-cover-confirm">
+                      <span>{t('p7.cover.remove')}</span>
+                      <button
+                        type="button"
+                        className="teach-danger"
+                        onClick={() => removeCoverMutation.mutate()}
+                        disabled={coverDisabled}
+                      >
+                        {removeCoverMutation.isPending ? t('teach.saving') : t('common.confirm')}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setCoverConfirm(false)}
+                        disabled={coverDisabled}
+                      >
+                        {t('common.cancel')}
+                      </button>
+                    </span>
+                  )}
+                  {course.coverPath && !coverConfirm && (
+                    <button
+                      type="button"
+                      className="teach-danger"
+                      onClick={() => setCoverConfirm(true)}
+                      disabled={coverDisabled}
+                    >
+                      {t('p7.cover.remove')}
+                    </button>
+                  )}
+                </div>
+              </section>
+
+              {/* Отправка на модерацию — только для черновика. Рядом — чеклист
+                  готовности (T56): пока не закрыты все пункты, кнопка выключена. */}
               {editable ? (
                 <div className="teach-section panel">
+                  <div className="ce-checklist">
+                    <p className="ce-checklist-title">
+                      {t('p7.constructor.checklistTitle')}
+                    </p>
+                    <ul className="ce-checklist-list">
+                      <li className={checklistModule ? 'ce-check-done' : 'ce-check-todo'}>
+                        <span aria-hidden="true">{checklistModule ? '✓' : '✗'}</span>
+                        {t('p7.constructor.checklistModule')}
+                      </li>
+                      <li className={checklistLesson ? 'ce-check-done' : 'ce-check-todo'}>
+                        <span aria-hidden="true">{checklistLesson ? '✓' : '✗'}</span>
+                        {t('p7.constructor.checklistLesson')}
+                      </li>
+                      <li className={checklistFields ? 'ce-check-done' : 'ce-check-todo'}>
+                        <span aria-hidden="true">{checklistFields ? '✓' : '✗'}</span>
+                        {t('p7.constructor.checklistLessonFields')}
+                      </li>
+                    </ul>
+                    {checklistDone && (
+                      <p className="teach-success ce-checklist-ready" role="status">
+                        {t('p7.constructor.checklistReady')}
+                      </p>
+                    )}
+                  </div>
                   <div className="teach-card-actions">
                     <button
                       type="button"
                       className="btn btn-primary"
                       onClick={onSubmitForReview}
-                      disabled={submitMutation.isPending}
+                      disabled={!checklistDone || submitMutation.isPending}
+                      title={!checklistDone ? t('p7.constructor.checklistTitle') : undefined}
                     >
                       {submitMutation.isPending ? t('teach.saving') : t('teach.submitReview')}
                     </button>
@@ -1727,7 +2137,8 @@ export default function Constructor(): JSX.Element {
                             onChange={(e) => setLessonField('template', e.target.value)}
                           />
 
-                          <div id="code-tests" className="teach-focusable" tabIndex={-1}>
+                          {/* T62: класс для типографики заголовка «Тесты» (ce-tests-box). */}
+                          <div id="code-tests" className="teach-focusable ce-tests-box" tabIndex={-1}>
                             <h3>Тесты</h3>
                             {lesson.tests.map((x, ti) => (
                               <div key={ti} className="teach-test-box">

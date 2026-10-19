@@ -3,9 +3,11 @@
 // (пользователи, курсы, платежи, записи, отзывы). Все денежные суммы приходят
 // в копейках и показываются ТОЛЬКО через formatMoney.
 import { useQuery } from '@tanstack/react-query';
+import { Link } from 'react-router-dom';
 import { ApiError, formatMoney } from '../api/client';
 import { getAdminStats } from '../api/adminConsole';
 import { t } from '../i18n/t';
+import type { RuKey } from '../i18n/t';
 // Стили экранов консоли изолированы в styles/adminConsole.css (префикс .ac-).
 import '../styles/adminConsole.css';
 
@@ -27,6 +29,21 @@ function formatRating(value: number): string {
     maximumFractionDigits: 1,
   });
 }
+
+/**
+ * T59: быстрые переходы из сводки в разделы супер-админки. Пользователи,
+ * курсы и записи — отдельные страницы; журнал платежей и очередь модерации —
+ * секции /admin, у Admin.tsx есть якоря (section id="journal"/"queue"),
+ * поэтому ведём по ним: после перезагрузки /admin#queue браузер отскроллит
+ * к нужной секции (html { scroll-behavior: smooth } из styles.css).
+ */
+const QUICK_LINKS: Array<{ label: RuKey; to: string }> = [
+  { label: 'p7.stats.linksUsers', to: '/admin/users' },
+  { label: 'p7.stats.linksCourses', to: '/admin/courses' },
+  { label: 'p7.stats.linksEnrollments', to: '/admin/enrollments' },
+  { label: 'p7.stats.linksJournal', to: '/admin#journal' },
+  { label: 'p7.stats.linksQueue', to: '/admin#queue' },
+];
 
 /** Строка «подпись — значение» внутри карточки сводки. */
 function StatRow({ label, value }: { label: string; value: string | number }): JSX.Element {
@@ -65,6 +82,24 @@ export default function AdminStats(): JSX.Element {
               {t('adminStats.refresh')}
             </button>
           </div>
+
+          {/* T59: быстрые переходы — статические ссылки, показываются сразу,
+              независимо от загрузки/ошибки GET /admin/stats; цифры ниже не менялись. */}
+          <section className="ac-links" aria-labelledby="ac-links-title">
+            <h2 id="ac-links-title" className="ac-links__title">
+              {t('p7.stats.quickLinks')}
+            </h2>
+            <nav className="ac-grid ac-links__grid" aria-label={t('p7.stats.quickLinks')}>
+              {QUICK_LINKS.map((link) => (
+                <Link key={link.to} to={link.to} className="ac-card ac-link">
+                  <span className="ac-link__label">{t(link.label)}</span>
+                  <span className="ac-link__arrow" aria-hidden="true">
+                    →
+                  </span>
+                </Link>
+              ))}
+            </nav>
+          </section>
 
           {stats.isLoading && (
             <div className="ac-grid" aria-busy="true">

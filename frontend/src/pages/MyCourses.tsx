@@ -35,11 +35,11 @@ export default function MyCourses(): JSX.Element {
   if (query.isLoading) {
     return (
       <div className="wrap">
-        <div className="page">
+        <main className="page">
           <div className="panel">
             <p role="status">{t('my.loading')}</p>
           </div>
-        </div>
+        </main>
       </div>
     );
   }
@@ -48,7 +48,7 @@ export default function MyCourses(): JSX.Element {
   if (query.isError) {
     return (
       <div className="wrap">
-        <div className="page">
+        <main className="page">
           <div className="panel">
             <p role="alert" className="error">
               {t('error.network')}
@@ -57,7 +57,7 @@ export default function MyCourses(): JSX.Element {
               {t('common.retry')}
             </button>
           </div>
-        </div>
+        </main>
       </div>
     );
   }
@@ -66,7 +66,7 @@ export default function MyCourses(): JSX.Element {
   if (items.length === 0) {
     return (
       <div className="wrap">
-        <div className="page">
+        <main className="page">
           <h1>{t('cabinet.studentTitle')}</h1>
           <div className="empty">
             <p>{t('my.empty')}</p>
@@ -76,7 +76,7 @@ export default function MyCourses(): JSX.Element {
               </Link>
             </p>
           </div>
-        </div>
+        </main>
       </div>
     );
   }
@@ -93,7 +93,7 @@ export default function MyCourses(): JSX.Element {
 
   return (
     <div className="wrap">
-      <div className="page">
+      <main className="page">
         <h1>{t('cabinet.studentTitle')}</h1>
         <div className="cab-stats">
           <div>
@@ -202,7 +202,7 @@ export default function MyCourses(): JSX.Element {
             );
           })}
         </div>
-      </div>
+      </main>
     </div>
   );
 }

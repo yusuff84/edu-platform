@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom';
 import type { CourseItem } from '../api/client';
 import { formatPrice } from '../api/client';
+import { coverUrl } from '../api/teacherCover';
 import { t } from '../i18n/t';
 import '../styles/catalog.css';
 
@@ -48,7 +49,22 @@ export default function CourseCard({ course }: { course: CourseItem }): JSX.Elem
   return (
     <article>
       <Link className="tile" to={`/courses/${course.slug}`} aria-label={course.title}>
-        <div className={`cover ${coverFor(course.slug || course.id)}`} />
+        {/* T57: есть coverPath (T54) — подложку рисует настоящий кадр; из-за
+            градиента-подложки и onError плитка не «ломается», если файл
+            недоступен (показывается прежний вид). */}
+        <div className={`cover ${coverFor(course.slug || course.id)}`}>
+          {course.coverPath && (
+            <img
+              className="tile-cover-img"
+              src={coverUrl(course.coverPath)}
+              alt=""
+              loading="lazy"
+              onError={(e) => {
+                e.currentTarget.style.display = 'none';
+              }}
+            />
+          )}
+        </div>
         <span className="tag">Курс</span>
         <span className="tile-title">
           {course.title}

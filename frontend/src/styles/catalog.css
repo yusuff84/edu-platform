@@ -1,23 +1,29 @@
 /* T04 — стили каталога, страницы курса и отзывов.
    Импортируются из моих компонентов (Catalog, Course, CourseCard, Reviews).
-   Общий styles.css не трогаем; переопределения — только внутри своих блоков. */
+   Общий styles.css не трогаем; переопределения — только внутри своих блоков.
 
-/* ---------- Каталог: поиск ---------- */
+   T61 — контент каталога обёрнут в <main className="page catalog-page">:
+   выбор правил этой задачи скоупится корнем .catalog-page, глобальные
+   классы (.tile, .hero, .grid … из styles.css) не меняются. */
 
-.catalog-search {
-  display: flex;
-  gap: 0.5rem;
-  align-items: flex-end;
-  margin: 1rem 0;
+/* ---------- Каталог: обёртка и возвращённый вид ---------- */
+
+/* main.page по умолчанию даёт 30px сверху / 48px снизу (styles.css):
+   hero этого каталога — полнокровный блок на всю ширину и должен остаться
+   заподлицо с шапкой, нижний отступ дают сами секции. */
+.catalog-page {
+  padding: 0;
 }
 
-.catalog-search input {
-  flex: 1;
-  margin-top: 0;
+/* Ссылка «консультант» в блоке дипломов остаётся в цвете блока: появление
+   общего обёрточного селектора `.page p a` (styles.css) красит её в синий —
+   возвращаем задуманный вид (hover по-прежнему фирменный красный). */
+.catalog-page .diploma p a {
+  color: inherit;
 }
 
-.catalog-search button {
-  margin-top: 0;
+.catalog-page .diploma p a:hover {
+  color: var(--brand);
 }
 
 /* ---------- Каталог: скелетоны загрузки ---------- */
@@ -58,6 +64,105 @@
 .catalog-pager button:disabled {
   cursor: default;
   opacity: 0.5;
+}
+
+/* ---------- Каталог: ритм секций ---------- */
+
+/* Промо-блоки шли с «разношаговыми» 44/56/52px — выровнены на единый шаг
+   48px (hero и .cta оставлены крупными намеренно: это финальный акцент
+   перед лид-формой). */
+.catalog-page .support {
+  padding-top: 48px;
+}
+
+.catalog-page .dreams {
+  padding-top: 48px;
+}
+
+.catalog-page .diploma {
+  padding-top: 48px;
+}
+
+.catalog-page .lead-zone {
+  margin-top: 48px;
+}
+
+/* Мусорные боковые поля 2px у счётчика «Найдено…» (от выравнивания с сеткой). */
+.catalog-page .count-line {
+  margin-left: 0;
+  margin-right: 0;
+}
+
+/* ---------- Каталог: карточки ---------- */
+
+/* Ряд карточек одной высоты: карточка — колонка, цена прижимается к низу
+   (короткие описания больше не делают соседние карточки разными). */
+.page .grid > * {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+/* Плитка в колонке не сжимается: высота 300px как в styles.css,
+   равную высоту ряда даёт растяжение самой карточки в grid. */
+.page .grid .tile {
+  flex: none;
+  height: 300px;
+}
+
+/* Строки звёзд/отзывов и цена: один ритм между ними. */
+.page .grid .card-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 0 0;
+}
+
+/* Цена — последняя строка карточки: у короткого описания подтягивается вниз. */
+.page .grid .card-row:last-child {
+  margin-top: auto;
+}
+
+/* Превью описания под плиткой: не переполняет колонку, держит высоту блока. */
+.page .grid > p {
+  margin: 12px 0 4px;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+
+/* Длинные названия курса — максимум 3 строки с многоточием
+   (на узких экранах плиток меньше — даём 4 строки). */
+.catalog-page .tile-title {
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+
+/* ---------- Каталог: скелетоны повторяют сетку карточек ---------- */
+
+/* Было auto-fill minmax(260px) — на широких экранах 4 колонки против 3 карточек. */
+.catalog-page .catalog-skeletons {
+  grid-template-columns: repeat(3, 1fr);
+}
+
+@media (max-width: 960px) {
+  .catalog-page .catalog-skeletons {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (max-width: 620px) {
+  .catalog-page .catalog-skeletons {
+    grid-template-columns: 1fr;
+  }
+
+  .catalog-page .tile-title {
+    -webkit-line-clamp: 4;
+  }
 }
 
 /* ---------- Страница курса ---------- */
@@ -121,4 +226,37 @@
 
 .review-form textarea {
   margin-top: 0.25rem;
+}
+
+/* ---------- T57: обложка курса (T54, coverPath) ---------- */
+
+/* Публичная страница курса: кадр-хиро над заголовком шапки. Отсутствие
+   обложки ничего не меняет — img просто не рендерится. */
+.cover-hero {
+  display: block;
+  width: 100%;
+  height: 200px;
+  object-fit: cover;
+  border-radius: 12px;
+  margin-bottom: 14px;
+}
+
+/* Публичная страница курса: реальная обложка в вилке покупки
+   (вместо клише-градиента cover-*, который остаётся у курсов без обложки). */
+.cover-buy {
+  display: block;
+  width: 100%;
+  height: 150px;
+  object-fit: cover;
+  border-radius: 12px;
+}
+
+/* Мини-превью на плитке каталога: кадр заполняет существующую обложку
+   плитки (градиент-подложка под ним — страховка от «битой пикчю»). */
+.tile-cover-img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }

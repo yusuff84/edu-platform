@@ -65,6 +65,11 @@ type StoreAPI interface {
 	TouchCourse(id string)
 	// UpdateCourse — частичное обновление карточки (PATCH, T13/бэклог T06).
 	UpdateCourse(id string, u CourseUpdate) bool
+	// SetCourseCover — записать/сбросить путь обложки курса (T54):
+	// POST/DELETE /teacher/courses/{id}/cover. cover == nil — сброс
+	// (cover_path=NULL). false — курса нет/ошибка записи. Отдельно от
+	// UpdateCourse, чтобы правка карточки никогда не затирала обложку.
+	SetCourseCover(id string, cover *string) bool
 	// DeleteCourse удаляет курс и всё, что на него ссылается (уроки, записи,
 	// прогресс, отзывы, платежи — каскад; T19). ErrNotFound — курса нет.
 	// Ограничение «только draft» накладывает handler: каскадное удаление
@@ -172,6 +177,14 @@ type StoreAPI interface {
 	// CourseContentCounts — курсы → (модули, уроки, ученики) одним вызовом
 	// (T25, без N+1 в списке курсов).
 	CourseContentCounts() map[string]ContentCounts
+
+	// ---- T55: детали курса для админа ----
+
+	// AdminCourseDetail — карточка курса «одним экраном» (T55) одним вызовом:
+	// курс (с cover_path) + email автора, программа (модули по position,
+	// уроки каждого модуля по position — только метаданные) и статистика
+	// (все записи, активные, отзывы, успешные платежи). false — курса нет.
+	AdminCourseDetail(courseID string) (*AdminCourseDetailData, bool)
 }
 
 // PaymentFilter — параметры журнала платежей для админки (US6, T31).
@@ -228,6 +241,44 @@ type ContentCounts struct {
 	// Students — число АКТИВНЫХ учеников курса (revoked/refunded доступ
 	// отозван и в счёт не идёт).
 	Students int
+}
+
+// AdminCourseDetailStats — статистика курса в карточке админа (T55).
+//
+// StudentsCount/ActiveCount записей и PaymentsCount/PaidTotalCents берутся
+// по прямым COUNT/SUM; AvgRating/ReviewsCount повторяют публичную карточку
+// курса (COALESCE(avg_rating,0)/ratings_count из courses — это единый
+// источник обоих срезов, пересчёт от сырых отзывов совпадает с ним,
+// т.к. RecalcCourseRating выполняется на каждом изменении отзывов).
+type AdminCourseDetailStats struct {
+	StudentsCount int // ВСЕ записи на курс (any статус: active/refunded/revoked)
+	ActiveCount   int // записи в статусе active
+	ReviewsCount  int // отзывы курса (= ratings_count курса)
+	AvgRating     float64
+	PaymentsCount int // платежи курса в статусе succeeded
+	PaidTotalCents int // сумма amount_cents успешных платежей курса
+}
+
+// AdminCourseDetailData — всё содержимое карточки курса админа (T55)
+// одним вызовом хранилища: без N+1 в хендлере и без повторных взятий лока
+// (in-memory) или лишних скан-запросов (Postgres).
+//
+// Modules/Lessons — программа курса: модули по position, уроки каждого
+// модуля по position. Lessons[moduleID] — слайс для модуля; модуль без
+// уроков в карту не попадает (хендлер отдаёт пустой массив lessons).
+type AdminCourseDetailData struct {
+	// Course — снимок курса; CoverPath внутри (колонка cover_path из
+	// 001_init.sql; T54 добавляет только эндпоинты загрузки).
+	Course       Course
+	TeacherEmail string    // email автора; "" — автор не найден
+	Modules      []*Module // по position (не nil — пустой слайс, если модулей нет)
+	Lessons      map[string][]*Lesson // moduleId → уроки по position (не nil)
+	// Counts — счётчики в форме элемента GET /admin/courses (T25):
+	// Students — только активные записи.
+	Counts ContentCounts
+	// Stats — статистика карточки T55: StudentsCount — ВСЕ записи
+	// (в отличие от Counts.Students), ActiveCount — только active.
+	Stats AdminCourseDetailStats
 }
 
 // StudentProgress — агрегат по одному ученику курса (T22).

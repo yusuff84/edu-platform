@@ -68,6 +68,26 @@
 | POST | `/api/v1/teacher/courses/{id}/lessons` | по `kind`: `{moduleId,title,kind,bodyMd?,videoUrl?,liveUrl?,startsAt?,quiz?,codeTask?}` → `201` Lesson |
 | POST | `/api/v1/teacher/courses/{id}/submit` | пустое → `200` Course (`status:review`) |
 
+> Волна P7 (T53): `POST /api/v1/teacher/courses/{id}/unpublish` — тело
+> не требуется, `published → draft`, ответ `200` `{course}`; `409 «Снять с
+> публикации можно только опубликованный курс»`, `403` — чужой курс, `404` —
+> курса нет. PATCH урока принимает `startsAt` в RFC3339 **или** datetime-local
+> `ГГГГ-ММ-ДДТЧЧ:ММ` (строка без зоны трактуется как UTC; мусор — `400`).
+> Тест (`kind:"quiz"`) валидируется на бэкенде: текст вопроса после TrimSpace,
+> не менее двух непустых вариантов, правильный ответ (`correct` или
+> `correctIndex`) указан и попадает в границы списка, иначе
+> `400 «Некорректный тест: …»`.
+
+> Волна P7 (T54): обложка курса — `POST /api/v1/teacher/courses/{id}/cover`
+> (multipart, поле `file`; тип по байтам через `http.DetectContentType`,
+> только JPEG/PNG/WebP, ≤5 МБ) → `201 {"coverPath":"/uploads/covers/<имя>"}`,
+> повторная загрузка перезаписывает файл; `DELETE …/cover` → `204` сбрасывает
+> `cover_path` (отсутствие обложки — тот же `204`). Ошибки: `404` нет курса,
+> `409` «Курс в архиве: обложка заморожена», `400` «Обложка: допустимы JPEG,
+> PNG или WebP не больше 5 МБ». Поле `coverPath` (string|null) добавлено во
+> все виды курса: каталог `GET /courses`, страница `GET /courses/{slug}`,
+> списки учителя и админа.
+
 > В бэклоге T13: `GET/PATCH/DELETE /teacher/courses[...]`, PATCH модулей/уроков,
 > reorder — в `Task/T13-integration-wiring.md`.
 
@@ -78,6 +98,7 @@
 | POST | `/api/v1/admin/invites` | `{email}` → `201 {id,email,token,tokenPrefix,expiresAt}`; **токен показывается один раз** |
 | GET | `/api/v1/admin/courses/review` | → `200` `{items:[Course],total}` |
 | POST | `/api/v1/admin/courses/{id}/moderate` | `{decision:"approve\|reject", comment?}` → `200` Course; `comment` обязателен при `reject` |
+| GET | `/api/v1/admin/courses/{id}` | → `200` `{course:<элемент GET /admin/courses + coverPath>, modules:[{id,title,position,lessons:[{id,title,kind,position}]}], stats:{studentsCount,activeCount,reviewsCount,avgRating,paymentsCount,paidTotalCents}}` (T55; `404` «Курс не найден») |
 | GET | `/api/v1/admin/payments?page=&limit=&status=&courseId=` | → `200` `{items:[PaymentJournalItem],total,page,limit,totals}` (US6, T07) |
 | GET | `/api/v1/admin/settings` | → `200 {commissionPct}` (US6, T07) |
 | PUT | `/api/v1/admin/settings` | `{commissionPct:0..90}` → `200 {commissionPct}` (US6, T07) |

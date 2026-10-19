@@ -56,6 +56,11 @@ export interface CourseItem {
   avgRating: number;
   /** Именно ratingsCount, не reviewsCount. */
   ratingsCount: number;
+  /**
+   * T54: путь к обложке "/uploads/covers/<имя>" (аддитивно с волны P7).
+   * null/"" — обложки нет; плитки без обложки рисуются как раньше.
+   */
+  coverPath?: string | null;
 }
 
 /** Полный курс (repo.Course, JSON-теги backend). */
@@ -65,8 +70,11 @@ export interface Course {
   slug: string;
   title: string;
   description: string;
-  /** Путь к обложке; отсутствует, если обложки нет (omitempty). */
-  coverPath?: string;
+  /**
+   * T54: путь к обложке "/uploads/covers/<имя>"; отсутствует или null,
+   * если обложки нет (omitempty на бэкенде после DELETE → пусто).
+   */
+  coverPath?: string | null;
   priceCents: number;
   currency: string;
   status: CourseStatus;

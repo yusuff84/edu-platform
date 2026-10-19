@@ -154,6 +154,61 @@
   }
 }
 
+/* ---------- Сводка: быстрые переходы (T59) ---------- */
+
+/* Сетка ссылок-карточек поверх .ac-grid: пять коротких карточек —
+   minmax подобран так, чтобы на широкой странице они вставали в один ряд. */
+.ac-links {
+  margin-bottom: 1rem;
+}
+
+/* Заголовок блока — как у карточек сводки (ac-card__title). */
+.ac-links__title {
+  margin: 0 0 0.5rem;
+  font-size: 18px;
+}
+
+.ac-links__grid {
+  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+  gap: 0.6rem;
+}
+
+/* Ссылка-карточка: обводка тянется из .ac-card; подчёркивание .page a
+   отключаем, чтобы карточка читалась как переход, а не как текст. */
+.ac-link {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+  color: var(--fg);
+  text-decoration: none;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.ac-link:hover,
+.ac-link:focus-visible {
+  background: #f3f1ec; /* как .ac-chip:hover */
+}
+
+.ac-link:hover .ac-link__arrow,
+.ac-link:focus-visible .ac-link__arrow {
+  color: var(--fg);
+}
+
+.ac-link__arrow {
+  color: var(--muted);
+  font-weight: 400;
+}
+
+/* На узком экране подписи («Записи на курсы», «Очередь модерации»)
+   переносятся, карточка не обрезается. */
+@media (max-width: 720px) {
+  .ac-link {
+    white-space: normal;
+  }
+}
+
 /* ---------- Курсы: фильтры ---------- */
 
 .ac-toolbar {

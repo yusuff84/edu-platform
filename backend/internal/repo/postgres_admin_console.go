@@ -72,7 +72,7 @@ func (s *PostgresStore) AdminOverview() AdminTotals {
 // запросов с JOIN users (T48: фильтр teacherEmail): без префиксов колонки
 // id/created_at неоднозначны (есть и в users).
 const courseColsJoined = `c.id::text, c.teacher_id::text, c.slug, c.title, c.description,
-	COALESCE(c.cover_path,''), c.price_cents, c.currency::text, c.status,
+	c.cover_path, c.price_cents, c.currency::text, c.status,
 	COALESCE(c.avg_rating,0)::float8, c.ratings_count, COALESCE(c.moderation_comment,''),
 	c.created_at, c.updated_at`
 

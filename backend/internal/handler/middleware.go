@@ -24,6 +24,7 @@ import (
 	"edu-platform/backend/internal/config"
 	"edu-platform/backend/internal/payments"
 	"edu-platform/backend/internal/repo"
+	"edu-platform/backend/internal/storage"
 )
 
 // App — общие зависимости обработчиков.
@@ -36,6 +37,11 @@ type App struct {
 	// Создаётся один раз в NewRouter из Config; тесты подменяют поле до
 	// сборки роутера.
 	YandexAuth auth.AuthProvider
+
+	// Storage — хранилище файлов для обложек (T54). nil → LocalStore в
+	// каталоге ./uploads — тот же каталог, что раздаёт маршрут /uploads/*.
+	// Тесты подставляют свою реализацию, чтобы не писать на диск.
+	Storage storage.ObjectStore
 
 	// Лениво создаваемые rate-limiter'ы по имени группы (T10).
 	limitersMu   sync.Mutex
@@ -123,7 +129,9 @@ func NewRouter(app *App) http.Handler {
 		r.Route("/teacher", func(r chi.Router) {
 			r.Use(app.requireAuth, app.requireRole(repo.RoleTeacher, repo.RoleAdmin))
 			r.Post("/courses", app.TeacherCreateCourse)
-			r.Get("/courses", app.TeacherListCourses)
+			// GET /teacher/courses регистрируется одна — в
+			// RegisterTeacherCRUDRoutes (teacher_crud.go, T19): мёртвый дубль
+			// регистрации сюда больше не возвращается (чистка T53).
 			r.Post("/courses/{id}/modules", app.TeacherCreateModule)
 			r.Post("/courses/{id}/lessons", app.TeacherCreateLesson)
 			r.Post("/courses/{id}/submit", app.TeacherSubmitCourse)
@@ -138,6 +146,11 @@ func NewRouter(app *App) http.Handler {
 			// перенос урока). T22: ученики курса и статистика для учителя.
 			app.RegisterTeacherLifecycleRoutes(r)
 			app.RegisterTeacherStudentsRoutes(r)
+			// T54: обложка курса — POST/DELETE /courses/{id}/cover (multipart).
+			// Лимит тела 1 МБ из decodeJSON multipart не задевает (он действует
+			// только на JSON-декодер); у хендлеров обложки свой лимит ≥6 МБ
+			// через http.MaxBytesReader — см. teacher_cover.go.
+			app.RegisterTeacherCoverRoutes(r)
 		})
 
 		r.Route("/admin", func(r chi.Router) {
@@ -151,6 +164,11 @@ func NewRouter(app *App) http.Handler {
 			r.Post("/courses/{id}/moderate", app.AdminModerateCourse)
 			app.RegisterAdminUsersRoutes(r) // T24: /admin/users — управление пользователями
 			app.RegisterAdminConsoleRoutes(r)
+			// T55: детали курса GET /admin/courses/{id} — программа, статистика
+			// и карточка «одним экраном» (handler/admin_course_detail.go).
+			// Регистрируется после очереди модерации: статический сегмент
+			// "review" в chi приоритетнее {id}, очередь не перехватывается.
+			r.Get("/courses/{id}", app.AdminCourseDetail)
 			// T07 (журнал платежей и настройки) сюда НЕ подключать: метод
 			// RegisterAdminPaymentsRoutes регистрирует АБСОЛЮТНЫЕ пути
 			// /admin/payments и /admin/settings (см. handler/admin_payments.go),
@@ -404,9 +422,9 @@ type rlBucket struct {
 type rateLimiter struct {
 	mu       sync.Mutex
 	buckets  map[string]*rlBucket
-	capacity float64        // максимум токенов (= perMin)
-	refill   float64        // токенов в секунду
-	ttl      time.Duration  // неактивность ведра после которой удаляем
+	capacity float64       // максимум токенов (= perMin)
+	refill   float64       // токенов в секунду
+	ttl      time.Duration // неактивность ведра после которой удаляем
 	now      func() time.Time
 }
 

@@ -34,6 +34,39 @@
   font-size: 13px;
 }
 
+/* ---------- /me (MyCourses): метрики и карточки в одном стиле ---------- */
+
+/* T61: карточки-метрики («Курсов / Средний прогресс / Завершено») — та же тень
+   и радиус, что у панелей записей ниже: один «холст» на страницу. */
+.cab-stats > div {
+  box-shadow: var(--shadow-sm);
+}
+
+/* Карточка записи на курс — колонка: длинное название/прогресс растяжимы,
+   а кнопки прижаты к низу — ряды карточек ровные по нижней кромке. */
+.enrolled-grid > .panel {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.enrolled-grid .panel h3 {
+  min-width: 0;
+}
+
+/* Название курса — максимум 2 строки с многоточием, сетку не ломает. */
+.enrolled-grid .panel h3 a {
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.enrolled-grid .btn-row {
+  margin-top: auto;
+  padding-top: 10px;
+}
+
 /* ---------- Профиль: карточка аккаунта ---------- */
 
 .pf-card {
@@ -63,6 +96,14 @@
   margin: 4px 0 0;
   font-weight: 600;
   overflow-wrap: anywhere;
+}
+
+/* T61: EMAIL не «разворачивает» карточку профиля — одна строка с многоточием
+   (РОЛЬ/ДАТА короткие, многоточие фактически нужно только email). */
+.pf-email {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* ---------- Профиль: форма отображаемого имени ---------- */

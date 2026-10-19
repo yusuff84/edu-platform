@@ -297,9 +297,14 @@ func TestAdminConsoleCoursesList(t *testing.T) {
 	}
 
 	// Форма строки — ровно как в контракте, счётчики и email учителя.
+	// T54 (волна P7): в строку аддитивно добавлен coverPath (string|null).
 	published := courseItemByID(t, items, publishedID)
-	wantKeys(t, published, "id", "slug", "title", "teacherId", "teacherEmail", "status",
-		"priceCents", "createdAt", "updatedAt", "modulesCount", "lessonsCount", "studentsCount")
+	wantKeys(t, published, "id", "slug", "title", "coverPath", "teacherId", "teacherEmail",
+		"status", "priceCents", "createdAt", "updatedAt", "modulesCount", "lessonsCount",
+		"studentsCount")
+	if v, ok := published["coverPath"]; !ok || v != nil {
+		t.Fatalf("у курса без обложки coverPath=%v (ok=%v), ждали null", v, ok)
+	}
 	if published["teacherEmail"] != "teacher@example.com" {
 		t.Fatalf("teacherEmail=%v: %s", published["teacherEmail"], rec.Body.String())
 	}

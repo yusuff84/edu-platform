@@ -1,8 +1,9 @@
 // T49: раздел «Записи на курсы» супер-админки (/admin/enrollments).
 // Список всех записей (GET /admin/enrollments, T25) с поиском по ученику
 // (debounce ~300 мс), фильтрами курса и статуса, пагинацией; ручной
-// отзыв/возврат доступа к курсу (T16). Стили изолированы в
-// styles/adminEnrollments.css; styles.css и admin.css не изменяются.
+// отзыв/возврат доступа к курсу (T16). T59: экспорт всей выборки в CSV
+// (общий компонент CsvExportButton T40) рядом с фильтрами. Стили изолированы
+// в styles/adminEnrollments.css; styles.css и admin.css не изменяются.
 import { useEffect, useMemo, useState } from 'react';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { QueryClient } from '@tanstack/react-query';
@@ -21,6 +22,9 @@ import type {
 import { listAdminCourses } from '../api/adminConsole';
 import { t } from '../i18n/t';
 import type { RuKey } from '../i18n/t';
+// T59: общий компонент выгрузки CSV (T40) — используется как есть,
+// по текущему props API (filename/headers/loadRows), без правок компонента.
+import CsvExportButton, { csvDateStamp, exportTruncated } from '../components/CsvExportButton';
 import '../styles/adminEnrollments.css';
 
 // ---------- Константы ----------
@@ -30,6 +34,14 @@ const SEARCH_DEBOUNCE_MS = 300;
 
 /** Размер страницы (контракт T25: limit по умолчанию 20). */
 const PAGE_LIMIT = 20;
+
+/** Размер страницы выгрузки CSV (T40): 100 строк за запрос. */
+const EXPORT_PAGE_LIMIT = 100;
+
+/** Потолок выгрузки CSV: не более 50 страниц (5000 строк) за один клик —
+ *  те же константы, что в AdminUsers/AdminCourses (T40) и журнале (T43);
+ *  сообщение admin.exportTruncated («первые 5000») остаётся правдой. */
+const EXPORT_MAX_PAGES = 50;
 
 /** Справочник курсов для фильтра: первые 100 (потолок limit) — см. отчёт T49. */
 const COURSE_OPTIONS_LIMIT = 100;
@@ -234,6 +246,68 @@ export default function AdminEnrollments(): JSX.Element {
     setPage(1);
   }
 
+  // ---- Выгрузка CSV: вся выборка по текущим фильтрам (T59, компонент T40) ----
+  // Идём постранично (limit=100) до total, но не более 50 страниц: защита от
+  // бесконечной выгрузки; усечённая выборка честно считается T43-хелпером.
+  // Значения — те же поля, что в таблице; createdAt выгружается как есть
+  // (ISO от бэкенда), чтобы дату сортировать в Excel. Статус — словарной
+  // подписью, как в выгрузках пользователей/курсов (T40).
+  async function loadExportRows(): Promise<{
+    rows: Array<Array<string | number | null>>;
+    truncated: boolean;
+  }> {
+    try {
+      const rows: Array<Array<string | number | null>> = [];
+      let total = 0;
+      for (let pageNumber = 1; pageNumber <= EXPORT_MAX_PAGES; pageNumber += 1) {
+        const res = await listAdminEnrollments({
+          q: q || undefined,
+          courseId: courseId || undefined,
+          status: status || undefined,
+          page: pageNumber,
+          limit: EXPORT_PAGE_LIMIT,
+        });
+        if (pageNumber === 1) total = res.total;
+        for (const row of res.items) {
+          rows.push([
+            row.id,
+            row.studentEmail,
+            row.studentName,
+            row.courseTitle,
+            row.courseId,
+            t(STATUS_LABEL[row.status]),
+            `${row.completedLessons}/${row.totalLessons} (${clampPercent(row.percent)}%)`,
+            row.createdAt,
+          ]);
+        }
+        // Неполная страница — данных больше нет.
+        if (res.items.length < EXPORT_PAGE_LIMIT || rows.length >= res.total) break;
+      }
+      // Экранный тост: файл создан → «Файл скачан»; пусто/ошибка — мелкое
+      // сообщение рисует сам компонент T40 под кнопкой (exportEmpty/текст
+      // ошибки), чтобы страница не показывала два противоречащих уведомления.
+      setNotice(rows.length > 0 ? t('p7.enroll.exportDone') : '');
+      return { rows, truncated: exportTruncated(total, rows.length) };
+    } catch (e: unknown) {
+      setNotice('');
+      throw e;
+    }
+  }
+
+  // Заголовки CSV: ключи — из таблицы страницы и списка пользователей; «ID»,
+  // «ID курса» и «Создан» подписываем прямо в CSV — это данные, а не
+  // интерфейс (как «Slug»/«Создан» в AdminCourses, T40).
+  const exportHeaders = [
+    'ID',
+    t('adminUsers.colEmail'),
+    t('adminUsers.colName'),
+    t('adminEnrollments.colCourse'),
+    'ID курса',
+    t('adminEnrollments.colStatus'),
+    t('adminEnrollments.colProgress'),
+    'Создан',
+  ];
+
   // ---- Состояния ожидания по строкам (для блокировки кнопок) ----
   const revokePendingId = revokeMutation.isPending
     ? revokeMutation.variables?.id
@@ -323,6 +397,21 @@ export default function AdminEnrollments(): JSX.Element {
               >
                 {t('adminEnrollments.reset')}
               </button>
+
+              {/* ---------- T59: выгрузка всей выборки по текущим фильтрам ---------- */}
+              {/* Подпись группы — замороженный ключ p7.enroll.exportCsv; сама
+                  кнопка и её мелкие сообщения — неизменяемый компонент T40,
+                  ярлык которого admin.exportCsv. */}
+              <div className="ae-field ae-export">
+                <span className="ae-export__label">
+                  {t('p7.enroll.exportCsv')}
+                </span>
+                <CsvExportButton
+                  filename={`enrollments-${csvDateStamp()}.csv`}
+                  headers={exportHeaders}
+                  loadRows={() => loadExportRows()}
+                />
+              </div>
             </div>
 
             {/* ---------- Итог по фильтру и уведомление об успехе ---------- */}

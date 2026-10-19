@@ -1,7 +1,9 @@
 package handler
 
 // T21 — жизненный цикл курса в конструкторе: дубликат, архивация, возврат
-// из архива, отзыв с модерации, перенос урока между модулями.
+// из архива, отзыв с модерации, перенос урока между модулями. T53 (волна P7) —
+// снятие с публикации руками автора: published → draft, как у админского
+// POST /admin/courses/{id}/unpublish (T25).
 //
 // Маршруты регистрируются RegisterTeacherLifecycleRoutes внутри
 // r.Route("/teacher", ...) в middleware.go — так же, как
@@ -23,12 +25,15 @@ import (
 	"edu-platform/backend/internal/repo"
 )
 
-// RegisterTeacherLifecycleRoutes вешает маршруты T21 на /teacher-роутер.
+// RegisterTeacherLifecycleRoutes вешает маршруты T21 и T53 на /teacher-роутер.
 func (a *App) RegisterTeacherLifecycleRoutes(r chi.Router) {
 	r.Post("/courses/{id}/duplicate", a.TeacherDuplicateCourse)
 	r.Post("/courses/{id}/archive", a.TeacherArchiveCourse)
 	r.Post("/courses/{id}/unarchive", a.TeacherUnarchiveCourse)
 	r.Post("/courses/{id}/withdraw", a.TeacherWithdrawCourse)
+	// T53: публикацию снимает автор (или админ) — раньше учитель не мог
+	// убрать опубликованный курс с публикации.
+	r.Post("/courses/{id}/unpublish", a.TeacherUnpublishCourse)
 	r.Post("/courses/{id}/lessons/{lessonId}/move", a.TeacherMoveLesson)
 }
 
@@ -143,6 +148,29 @@ func (a *App) TeacherWithdrawCourse(w http.ResponseWriter, r *http.Request) {
 func (a *App) respondFreshCourse(w http.ResponseWriter, courseID string) {
 	updated, _ := a.Store.GetCourseByID(courseID)
 	writeJSON(w, http.StatusOK, map[string]any{"course": updated})
+}
+
+// ---- unpublish (T53) ----
+
+// TeacherUnpublishCourse — POST /courses/{id}/unpublish: published → draft
+// (200 {"course":{...}}), права и модель ошибок — как у archive/withdraw T21.
+// У админа есть и отдельный POST /admin/courses/{id}/unpublish (T25).
+// 409 — курс не опубликован; 404/403 — как везде. Тело запроса игнорируется,
+// пустые тела допустимы (как у archive/withdraw).
+func (a *App) TeacherUnpublishCourse(w http.ResponseWriter, r *http.Request) {
+	_, c, ok := a.ownCourse(w, r)
+	if !ok {
+		return
+	}
+	if c.Status != repo.CoursePublished {
+		writeErr(w, http.StatusConflict, "Снять с публикации можно только опубликованный курс")
+		return
+	}
+	if !a.Store.SetCourseStatus(c.ID, repo.CourseDraft, c.ModerationComment) {
+		writeErr(w, http.StatusInternalServerError, "Не удалось снять курс с публикации")
+		return
+	}
+	a.respondFreshCourse(w, c.ID)
 }
 
 // ---- move ----
