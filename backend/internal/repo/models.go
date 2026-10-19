@@ -91,12 +91,15 @@ type TeacherInvite struct {
 }
 
 type Course struct {
-	ID                string       `json:"id"`
-	TeacherID         string       `json:"teacherId"`
-	Slug              string       `json:"slug"`
-	Title             string       `json:"title"`
-	Description       string       `json:"description"`
-	CoverPath         string       `json:"coverPath,omitempty"`
+	ID          string `json:"id"`
+	TeacherID   string `json:"teacherId"`
+	Slug        string `json:"slug"`
+	Title       string `json:"title"`
+	Description string `json:"description"`
+	// CoverPath — публичный путь обложки «/uploads/covers/<файл>» (T54).
+	// nil — обложки нет: в JSON отдаётся null (контракт волны P7:
+	// coverPath string|null во всех видах курса).
+	CoverPath         *string      `json:"coverPath"`
 	PriceCents        int          `json:"priceCents"`
 	Currency          string       `json:"currency"`
 	Status            CourseStatus `json:"status"`

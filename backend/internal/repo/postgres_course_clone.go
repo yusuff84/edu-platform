@@ -63,7 +63,7 @@ func (s *PostgresStore) CloneCourseAs(courseID, teacherID string) (*Course, erro
 		`INSERT INTO courses (teacher_id, slug, title, description, cover_path, price_cents, currency, status)
 		 VALUES ($1::uuid,$2,$3,$4,$5,$6,$7,'draft')
 		 RETURNING `+courseCols,
-		owner, slug, copyTitle(src.Title), src.Description, nilIfEmpty(src.CoverPath),
+		owner, slug, copyTitle(src.Title), src.Description, src.CoverPath,
 		src.PriceCents, src.Currency).Scan)
 	if err != nil {
 		return nil, fmt.Errorf("копирование курса: %w", err)

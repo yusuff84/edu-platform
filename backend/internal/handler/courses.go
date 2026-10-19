@@ -15,6 +15,7 @@ type courseItem struct {
 	Slug         string            `json:"slug"`
 	Title        string            `json:"title"`
 	Description  string            `json:"description"`
+	CoverPath    *string           `json:"coverPath"`
 	PriceCents   int               `json:"priceCents"`
 	Currency     string            `json:"currency"`
 	Status       repo.CourseStatus `json:"status,omitempty"`
@@ -25,6 +26,7 @@ type courseItem struct {
 func toCourseItem(c *repo.Course) courseItem {
 	return courseItem{
 		ID: c.ID, Slug: c.Slug, Title: c.Title, Description: c.Description,
+		CoverPath:  c.CoverPath,
 		PriceCents: c.PriceCents, Currency: c.Currency,
 		AvgRating: c.AvgRating, RatingsCount: c.RatingsCount,
 	}

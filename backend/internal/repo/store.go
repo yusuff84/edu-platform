@@ -384,6 +384,22 @@ func (s *Store) TouchCourse(id string) {
 	s.mu.Unlock()
 }
 
+// SetCourseCover записывает путь обложки курса (T54): cover != nil — новый
+// путь «/uploads/covers/<файл>», nil — сброс (обложки нет). false — курса нет.
+// Отдельный метод принципиален: UpdateCourse (PATCH карточки) cover_path
+// не затрагивает, обложка меняется только загрузкой/удалением файла.
+func (s *Store) SetCourseCover(id string, cover *string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	c, ok := s.courses[id]
+	if !ok {
+		return false
+	}
+	c.CoverPath = cloneStringPtr(cover)
+	c.UpdatedAt = time.Now().UTC()
+	return true
+}
+
 // DeleteCourse удаляет курс и всё, что на него ссылается (уроки, прогресс,
 // записи, отзывы, платежи) — зеркало ON DELETE CASCADE из 001_init.sql (T19).
 // Ограничение «только draft» накладывает handler: каскадное удаление

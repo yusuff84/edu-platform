@@ -53,7 +53,7 @@ func (s *Store) CloneCourseAs(courseID, teacherID string) (*Course, error) {
 		Slug:        s.freeCopySlugLocked(src.Slug),
 		Title:       copyTitle(src.Title),
 		Description: src.Description,
-		CoverPath:   src.CoverPath,
+		CoverPath:   cloneStringPtr(src.CoverPath),
 		PriceCents:  src.PriceCents,
 		Currency:    src.Currency,
 		Status:      CourseDraft,
@@ -171,6 +171,16 @@ func cloneTimePtr(t *time.Time) *time.Time {
 		return nil
 	}
 	v := *t
+	return &v
+}
+
+// cloneStringPtr копия *string по значению: правка обложки копии курса не
+// должна алиасить указатель исходного (и наоборот).
+func cloneStringPtr(s *string) *string {
+	if s == nil {
+		return nil
+	}
+	v := *s
 	return &v
 }
 

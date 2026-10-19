@@ -17,6 +17,9 @@ import (
 // параметр больше, чем есть в запросе — Postgres отвечает ошибкой bind и
 // PATCH любой карточки курса на Postgres превращается в 500. В in-memory
 // ветке (update.go) баг не проявляется, поэтому ловится только здесь.
+//
+// cover_path в SET НЕ входит принципиально (T54): PATCH карточки не обязан
+// знать о файле обложки, путь меняет только SetCourseCover ниже.
 func (s *PostgresStore) UpdateCourse(id string, u CourseUpdate) bool {
 	sets := make([]string, 0, 5)
 	args := []any{id}
@@ -42,6 +45,23 @@ func (s *PostgresStore) UpdateCourse(id string, u CourseUpdate) bool {
 	tag, err := s.pool.Exec(ctx,
 		"UPDATE courses SET "+strings.Join(sets, ", ")+" WHERE id=$1::uuid",
 		args...)
+	if err != nil {
+		return false
+	}
+	return tag.RowsAffected() > 0
+}
+
+// SetCourseCover записывает путь обложки курса (T54): cover != nil — новый
+// путь «/uploads/covers/<файл>», nil — сброс (cover_path=NULL). false —
+// курса нет или БД недоступна (существование курса handler уже проверил
+// через GetCourseByID, поэтому сюда доходят только реальные ошибки записи).
+// updated_at двигаем, как у любой другой правки курса.
+func (s *PostgresStore) SetCourseCover(id string, cover *string) bool {
+	ctx, cancel := s.ctx()
+	defer cancel()
+	tag, err := s.pool.Exec(ctx,
+		`UPDATE courses SET cover_path=$2, updated_at=now() WHERE id=$1::uuid`,
+		id, cover)
 	if err != nil {
 		return false
 	}
