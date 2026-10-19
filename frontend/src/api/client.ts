@@ -21,6 +21,8 @@ import type {
   Paged,
   PaymentJournalPage,
   PaymentStatus,
+  PromoCode,
+  PromoValidation,
   Provider,
   ModerationDecision,
   Review,
@@ -52,6 +54,8 @@ export type {
   PaymentJournalPage,
   PaymentStatus,
   PaymentTotals,
+  PromoCode,
+  PromoValidation,
   Provider,
   QuizData,
   QuizQuestion,
@@ -333,11 +337,76 @@ export function updateAdminSettings(commissionPct: number): Promise<AdminSetting
 export function enroll(
   courseId: string,
   provider: Provider = 'mock',
+  promoCode?: string,
 ): Promise<EnrollmentResult> {
+  // P8 (T63): promoCode — необязательное аддитивное поле; пустое не отправляем,
+  // иначе backend проверит его как обычный код и ответит 400.
+  const body: Record<string, string> = { courseId, provider };
+  if (promoCode && promoCode.trim() !== '') body.promoCode = promoCode.trim();
   return apiFetch<EnrollmentResult>('/enrollments', {
     method: 'POST',
-    body: JSON.stringify({ courseId, provider }),
+    body: JSON.stringify(body),
   });
+}
+
+// ---------- P8: промокоды (T63/T64) ----------
+
+/**
+ * Создание промокода (POST /teacher/courses/{id}/promo-codes).
+ * Конверт ответа { promoCode } распаковывается в PromoCode.
+ * maxUses/expiresAt необязательны: не переданные поля в тело не попадают
+ * (backend включает DisallowUnknownFields, а expiresAt=null валит RFC3339).
+ */
+export function createPromoCode(
+  courseId: string,
+  payload: {
+    code: string;
+    discountPct: number;
+    /** 0 — без ограничения (значение backend по умолчанию). */
+    maxUses?: number;
+    /** RFC3339 в будущем; null/undefined — бессрочно. */
+    expiresAt?: string | null;
+  },
+): Promise<PromoCode> {
+  const body: Record<string, string | number> = {
+    code: payload.code,
+    discountPct: payload.discountPct,
+  };
+  if (payload.maxUses !== undefined) body.maxUses = payload.maxUses;
+  if (payload.expiresAt) body.expiresAt = payload.expiresAt;
+  return apiFetch<{ promoCode: PromoCode }>(
+    `/teacher/courses/${courseId}/promo-codes`,
+    { method: 'POST', body: JSON.stringify(body) },
+  ).then((res) => res.promoCode);
+}
+
+/** Список промокодов курса: конверт { items } → массив (по createdAt убыв.). */
+export function listPromoCodes(courseId: string): Promise<PromoCode[]> {
+  return apiFetch<{ items: PromoCode[] }>(
+    `/teacher/courses/${courseId}/promo-codes`,
+  ).then((res) => res.items);
+}
+
+/** Деактивация промокода (DELETE, 204; повторный вызов идемпотентен). */
+export function deactivatePromoCode(
+  courseId: string,
+  promoId: string,
+): Promise<void> {
+  return apiFetch<void>(
+    `/teacher/courses/${courseId}/promo-codes/${promoId}`,
+    { method: 'DELETE' },
+  );
+}
+
+/** Проверка промокода на странице курса (любой вошедший пользователь). */
+export function validatePromoCode(
+  courseId: string,
+  code: string,
+): Promise<PromoValidation> {
+  return apiFetch<PromoValidation>(
+    `/courses/${courseId}/promo/validate`,
+    { method: 'POST', body: JSON.stringify({ code }) },
+  );
 }
 
 /** Мои курсы: конверт { items, total } → массив (MyCourse уже плоский). */

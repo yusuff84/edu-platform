@@ -1,12 +1,23 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import type { FormEvent } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { CourseStatus } from '../api/client';
-import { ApiError, enroll, formatPrice, getCourse, me, myCourses } from '../api/client';
+import type { CourseStatus, PromoValidation } from '../api/client';
+import {
+  ApiError,
+  enroll,
+  formatMoney,
+  formatPrice,
+  getCourse,
+  me,
+  myCourses,
+  validatePromoCode,
+} from '../api/client';
 import { coverUrl } from '../api/teacherCover';
 import Reviews from '../components/Reviews';
 import { t } from '../i18n/t';
 import '../styles/catalog.css';
+import '../styles/promo.css';
 
 /** Человеческая подпись статуса курса (для баннера автора/админа). */
 function statusLabel(status: CourseStatus): string {
@@ -39,6 +50,11 @@ export default function Course(): JSX.Element {
   const qc = useQueryClient();
   const [message, setMessage] = useState('');
   const [openModuleId, setOpenModuleId] = useState<string | null>(null);
+  // P8: чекаут с промокодом (только платный курс, вошедший студент без записи).
+  const [promoOpen, setPromoOpen] = useState(false);
+  const [promoInput, setPromoInput] = useState('');
+  const [promoValidation, setPromoValidation] = useState<PromoValidation | null>(null);
+  const [promoError, setPromoError] = useState('');
   // После T01 getCourse распаковывает конверт { course, modules } в CourseDetail.
   const courseQuery = useQuery({
     queryKey: ['course', slug],
@@ -56,7 +72,8 @@ export default function Course(): JSX.Element {
   });
 
   const buyMutation = useMutation({
-    mutationFn: (courseId: string) => enroll(courseId, 'mock'),
+    mutationFn: (vars: { courseId: string; promoCode?: string }) =>
+      enroll(vars.courseId, 'mock', vars.promoCode),
     onSuccess: (res) => {
       setMessage('');
       void qc.invalidateQueries({ queryKey: ['my-courses'] });
@@ -73,10 +90,49 @@ export default function Course(): JSX.Element {
         setMessage(t('course.alreadyBought'));
         void qc.invalidateQueries({ queryKey: ['my-courses'] });
       } else {
+        // Ошибки промокода сервер объясняет текстом (400) — показываем как есть.
         setMessage(e instanceof Error ? e.message : t('common.error'));
       }
     },
   });
+
+  // Проверка промокода до покупки: итоговая цена приходит с сервера.
+  const promoMutation = useMutation({
+    mutationFn: (code: string) => validatePromoCode(courseQuery.data?.id ?? '', code),
+    onSuccess: (res) => {
+      setPromoValidation(res);
+      setPromoError('');
+      setMessage('');
+    },
+    onError: (e: unknown) => {
+      setPromoValidation(null);
+      setPromoError(e instanceof Error ? e.message : t('common.error'));
+    },
+  });
+
+  function onPromoApply(e: FormEvent): void {
+    e.preventDefault();
+    const code = promoInput.trim();
+    if (!code) return;
+    promoMutation.mutate(code);
+  }
+
+  function onPromoRemove(): void {
+    setPromoValidation(null);
+    setPromoInput('');
+    setPromoError('');
+  }
+
+  // При переходе между курсами slug меняется, а компонент остаётся тем же:
+  // применённый промокод относится только к предыдущему курсу — сбрасываем.
+  const courseId = courseQuery.data?.id;
+  useEffect(() => {
+    setPromoOpen(false);
+    setPromoInput('');
+    setPromoValidation(null);
+    setPromoError('');
+    setMessage('');
+  }, [courseId]);
 
   if (courseQuery.isLoading)
     return (
@@ -147,6 +203,10 @@ export default function Course(): JSX.Element {
     setOpenModuleId(isOpen(id, index) ? ALL_CLOSED : id);
   // T57: обложка из T54 («/uploads/covers/<имя>»); нет обложки — прежний вид.
   const coverSrc = coverUrl(course.coverPath);
+  // P8: промо-блок — только платный курс, вошедший студент без активной
+  // записи. Бесплатный курс сохраняет прежнее поведение (без промокодов).
+  const showPromo =
+    Boolean(user) && !owned && !myQuery.isLoading && course.priceCents > 0;
 
   return (
     <div className="wrap">
@@ -282,7 +342,83 @@ export default function Course(): JSX.Element {
                 style={{ height: 150, borderRadius: 12 }}
               />
             )}
-            <div className="price">{formatPrice(course.priceCents)}</div>
+            {promoValidation ? (
+              <div className="price promo-price">
+                <s className="promo-price-old">
+                  {formatPrice(promoValidation.priceCents)}
+                </s>{' '}
+                <span>{formatPrice(promoValidation.finalPriceCents)}</span>
+              </div>
+            ) : (
+              <div className="price">{formatPrice(course.priceCents)}</div>
+            )}
+
+            {/* P8: промокод в чекауте — тоггл, проверка кода и снятие скидки. */}
+            {showPromo && (
+              <div className="checkout-promo">
+                {!promoValidation && (
+                  <>
+                    <button
+                      type="button"
+                      className="promo-toggle"
+                      onClick={() => {
+                        setPromoOpen((v) => !v);
+                        setPromoError('');
+                      }}
+                      aria-expanded={promoOpen}
+                      aria-controls="checkout-promo-form"
+                    >
+                      {t('p8.checkout.promoToggle')}
+                    </button>
+                    {promoOpen && (
+                      <form
+                        id="checkout-promo-form"
+                        className="promo-apply"
+                        onSubmit={onPromoApply}
+                        noValidate
+                      >
+                        <label htmlFor="checkout-promo-code">
+                          {t('p8.checkout.promoLabel')}
+                        </label>
+                        <div className="promo-apply-row">
+                          <input
+                            id="checkout-promo-code"
+                            className="input"
+                            value={promoInput}
+                            onChange={(e) => setPromoInput(e.target.value)}
+                            autoComplete="off"
+                          />
+                          <button
+                            type="submit"
+                            className="btn"
+                            disabled={!promoInput.trim() || promoMutation.isPending}
+                          >
+                            {t('p8.checkout.apply')}
+                          </button>
+                        </div>
+                        {promoError && (
+                          <p className="error promo-error" role="alert">
+                            {promoError}
+                          </p>
+                        )}
+                      </form>
+                    )}
+                  </>
+                )}
+                {promoValidation && (
+                  <div className="promo-applied">
+                    <p className="promo-applied-line" role="status">
+                      <span aria-hidden="true">✓</span> {t('p8.checkout.applied')}:{' '}
+                      <strong>{promoValidation.code}</strong> (−{promoValidation.discountPct}%)
+                    </p>
+                    <button type="button" className="promo-remove" onClick={onPromoRemove}>
+                      {t('p8.checkout.remove')}
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+
             {!user && !meQuery.isLoading && (
               <p className="muted">{t('course.loginToBuy')}</p>
             )}
@@ -290,14 +426,21 @@ export default function Course(): JSX.Element {
               <button
                 type="button"
                 className="btn btn-primary"
-                onClick={() => buyMutation.mutate(course.id)}
+                onClick={() =>
+                  buyMutation.mutate({
+                    courseId: course.id,
+                    promoCode: promoValidation?.code,
+                  })
+                }
                 disabled={buyMutation.isPending}
               >
                 {buyMutation.isPending
                   ? t('course.buying')
                   : course.priceCents === 0
                     ? t('course.enrollFree')
-                    : t('course.buy')}
+                    : promoValidation
+                      ? `${t('p8.checkout.buyFor')} ${formatMoney(promoValidation.finalPriceCents)}`
+                      : t('course.buy')}
               </button>
             )}
             {owned && (

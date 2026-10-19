@@ -224,6 +224,33 @@ export interface EnrollmentResult {
   enrollmentActive: boolean;
 }
 
+// ---------- Промокоды (P8, T63/T64) ----------
+
+/** Промокод курса (модель PromoCode контракта P8). */
+export interface PromoCode {
+  id: string;
+  courseId: string;
+  /** Хранится и сравнивается в верхнем регистре. */
+  code: string;
+  /** Скидка в процентах, 1..90. */
+  discountPct: number;
+  /** 0 — без ограничения. */
+  maxUses: number;
+  usedCount: number;
+  /** RFC3339 или null — бессрочный. */
+  expiresAt: string | null;
+  active: boolean;
+  createdAt: string;
+}
+
+/** Результат проверки промокода (POST /courses/{id}/promo/validate). */
+export interface PromoValidation {
+  code: string;
+  discountPct: number;
+  priceCents: number;
+  finalPriceCents: number;
+}
+
 // ---------- Админ ----------
 
 /** Приглашение учителя (POST /admin/invites). Токен показывается один раз! */
