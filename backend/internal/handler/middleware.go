@@ -123,6 +123,9 @@ func NewRouter(app *App) http.Handler {
 
 		r.Get("/courses", app.ListCourses)
 		r.Get("/courses/{slug}", app.GetCourse)
+		// T67: публичная проверка сертификата по номеру (без авторизации).
+		// Статический сегмент /certificates не пересекается с /courses.
+		app.RegisterCertificateRoutes(r)
 		r.Get("/courses/{id}/reviews", app.ListReviews)
 		r.With(app.requireAuth).Post("/courses/{id}/reviews", app.CreateReview)
 
