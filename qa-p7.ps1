@@ -250,8 +250,9 @@ $inviteToken2 = if ($r.Status -eq 201 -and $r.Json.token) { $r.Json.token } else
 
 # регистрация участников
 $teacher = New-Session
+# register отвечает 201 Created (в исходной версии скрипта ошибочно ждали 200).
 $r = Invoke-Auth -Method POST -Path "/api/v1/auth/register" -Body @{ email = $teacherEmail; password = $password; inviteToken = $inviteToken1 } -Session $teacher
-Invoke-Check "I3. Учитель зарегистрирован по приглашению (teacher)" ($r.Status -eq 200 -and $r.Json.role -eq "teacher") $r.Body
+Invoke-Check "I3. Учитель зарегистрирован по приглашению (teacher)" ($r.Status -eq 201 -and $r.Json.role -eq "teacher") $r.Body
 
 $other = New-Session
 if ($inviteToken2) {
@@ -260,7 +261,7 @@ if ($inviteToken2) {
 
 $student = New-Session
 $r = Invoke-Auth -Method POST -Path "/api/v1/auth/register" -Body @{ email = $studentEmail; password = $password } -Session $student
-Invoke-Check "I4. Ученик зарегистрирован (student)" ($r.Status -eq 200 -and $r.Json.role -eq "student") $r.Body
+Invoke-Check "I4. Ученик зарегистрирован (student)" ($r.Status -eq 201 -and $r.Json.role -eq "student") $r.Body
 
 # ============================================================================
 # Раздел A — жизненный цикл учителя (T53)
@@ -324,8 +325,9 @@ if ($lessonLiveId) {
 $r = Invoke-Api -Method POST -Path "/api/v1/teacher/courses/$courseA/submit" -Session $teacher
 Invoke-Check "A13. Курс отправлен на модерацию" ($r.Status -eq 200 -and $r.Json.status -eq "review") $r.Body
 
+# moderate отвечает 200 и голым Course (без конверта {course}; поведение T25).
 $r = Invoke-Api -Method POST -Path "/api/v1/admin/courses/$courseA/moderate" -Body @{ decision = "approve" } -Session $admin
-Invoke-Check "A14. Одобрение модерации (published)" ($r.Status -eq 200 -and $r.Json.course.status -eq "published") $r.Body
+Invoke-Check "A14. Одобрение модерации (published)" ($r.Status -eq 200 -and $r.Json.status -eq "published") $r.Body
 
 # удаление опубликованного -> 409
 $r = Invoke-Api -Method DELETE -Path "/api/v1/teacher/courses/$courseA" -Session $teacher
@@ -374,8 +376,19 @@ Invoke-Check "B2. Загрузка PNG -> 201 + coverPath" ($r.Status -eq 201 -a
 $r = Invoke-Multipart -Path "/api/v1/teacher/courses/$courseB/cover" -FileBytes $pngBytes -Session $teacher
 Invoke-Check "B3. Повторная загрузка -> 201" ($r.Status -eq 201) $r.Body
 
-# fetch публичной страницы — coverPath
-$r = Invoke-Api -Method GET -Path "/api/v1/courses/$courseB" -Session $student
+# курс B публикуется: публичная страница и каталог видны только у published,
+# а курс без контента на модерацию не отправляется (нужен модуль + урок).
+$r = Invoke-Api -Method POST -Path "/api/v1/teacher/courses/$courseB/modules" -Body @{ title = "Модуль B" } -Session $teacher
+$moduleB = $r.Json.id
+$r = Invoke-Api -Method POST -Path "/api/v1/teacher/courses/$courseB/lessons" -Body @{ moduleId = $moduleB; title = "Урок B1"; kind = "video_text"; videoUrl = "https://example.test/b.mp4"; bodyMd = "Тема B." } -Session $teacher
+Invoke-Check "B3a. Контент курса B создан" ($r.Status -eq 201) $r.Body
+$r = Invoke-Api -Method POST -Path "/api/v1/teacher/courses/$courseB/submit" -Session $teacher
+Invoke-Check "B3b. Курс B отправлен на модерацию" ($r.Status -eq 200 -and $r.Json.status -eq "review") $r.Body
+$r = Invoke-Api -Method POST -Path "/api/v1/admin/courses/$courseB/moderate" -Body @{ decision = "approve" } -Session $admin
+Invoke-Check "B3c. Курс B одобрен (published)" ($r.Status -eq 200 -and $r.Json.status -eq "published") $r.Body
+
+# fetch публичной страницы — coverPath (страница ищет курс по slug)
+$r = Invoke-Api -Method GET -Path "/api/v1/courses/p7-cover-$sfx" -Session $student
 Invoke-Check "B4. Публичная страница отдаёт coverPath" ($r.Status -eq 200 -and $r.Json.course.coverPath) $r.Body
 $coverPathSaved = $r.Json.course.coverPath
 
@@ -385,7 +398,7 @@ $found = $false
 if ($r.Json -and $r.Json.items) {
     foreach ($itemObj in $r.Json.items) { if ($itemObj.id -eq $courseB -and $itemObj.coverPath) { $found = $true; break } }
 }
-Invoke-Check "B5. Каталог отдаёт coverPath в карточке" ($found -or $r.Status -eq 200) $r.Body
+Invoke-Check "B5. Каталог отдаёт coverPath в карточке" ($r.Status -eq 200 -and $found) $r.Body
 
 # плохой тип
 $txtBytes = [System.Text.Encoding]::ASCII.GetBytes("это не изображение")
@@ -418,10 +431,15 @@ $r = Invoke-Api -Method DELETE -Path "/api/v1/teacher/courses/$courseB/cover" -S
 Invoke-Check "B12. DELETE обложки в архиве -> 409" ($r.Status -eq 409) $r.Body
 Invoke-Api -Method POST -Path "/api/v1/teacher/courses/$courseB/unarchive" -Session $teacher | Out-Null
 
+# unarchive возвращает курс в draft — для публичной проверки B14 публикуем снова
+$r = Invoke-Api -Method POST -Path "/api/v1/teacher/courses/$courseB/submit" -Session $teacher
+$r = Invoke-Api -Method POST -Path "/api/v1/admin/courses/$courseB/moderate" -Body @{ decision = "approve" } -Session $admin
+Invoke-Check "B12a. Курс B повторно опубликован" ($r.Status -eq 200 -and $r.Json.status -eq "published") $r.Body
+
 # удаление обложки
 $r = Invoke-Api -Method DELETE -Path "/api/v1/teacher/courses/$courseB/cover" -Session $teacher
 Invoke-Check "B13. DELETE обложки -> 204" ($r.Status -eq 204) $r.Body
-$r = Invoke-Api -Method GET -Path "/api/v1/courses/$courseB" -Session $student
+$r = Invoke-Api -Method GET -Path "/api/v1/courses/p7-cover-$sfx" -Session $student
 Invoke-Check "B14. После удаления coverPath = null" ($r.Status -eq 200 -and $null -eq $r.Json.course.coverPath) $r.Body
 $coverPathSaved = $null
 
@@ -442,6 +460,12 @@ $moduleC = $mods.Json.modules[0].id
 
 Invoke-Api -Method POST -Path "/api/v1/teacher/courses/$courseC/lessons" -Body @{ moduleId = $moduleC; title = "Урок 1"; kind = "video_text"; bodyMd = "Тема 1." } -Session $teacher | Out-Null
 Invoke-Api -Method POST -Path "/api/v1/teacher/courses/$courseC/lessons" -Body @{ moduleId = $moduleC; title = "Урок 2"; kind = "quiz"; quiz = @{ questions = @( @{ text = "1+2?"; options = @("3", "4"); correctIndex = 0 } ) } } -Session $teacher | Out-Null
+
+# публикация курса C: запись (C2) и отзыв (C4) возможны только на published
+$r = Invoke-Api -Method POST -Path "/api/v1/teacher/courses/$courseC/submit" -Session $teacher
+Invoke-Check "C1a. Курс C отправлен на модерацию" ($r.Status -eq 200 -and $r.Json.status -eq "review") $r.Body
+$r = Invoke-Api -Method POST -Path "/api/v1/admin/courses/$courseC/moderate" -Body @{ decision = "approve" } -Session $admin
+Invoke-Check "C1b. Курс C одобрен (published)" ($r.Status -eq 200 -and $r.Json.status -eq "published") $r.Body
 
 # покупка (mock)
 $r = Invoke-Auth -Method POST -Path "/api/v1/enrollments" -Body @{ courseId = $courseC; provider = "mock" } -Session $student
