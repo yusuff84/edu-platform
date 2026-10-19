@@ -68,6 +68,16 @@
 | POST | `/api/v1/teacher/courses/{id}/lessons` | по `kind`: `{moduleId,title,kind,bodyMd?,videoUrl?,liveUrl?,startsAt?,quiz?,codeTask?}` → `201` Lesson |
 | POST | `/api/v1/teacher/courses/{id}/submit` | пустое → `200` Course (`status:review`) |
 
+> Волна P7 (T54): обложка курса — `POST /api/v1/teacher/courses/{id}/cover`
+> (multipart, поле `file`; тип по байтам через `http.DetectContentType`,
+> только JPEG/PNG/WebP, ≤5 МБ) → `201 {"coverPath":"/uploads/covers/<имя>"}`,
+> повторная загрузка перезаписывает файл; `DELETE …/cover` → `204` сбрасывает
+> `cover_path` (отсутствие обложки — тот же `204`). Ошибки: `404` нет курса,
+> `409` «Курс в архиве: обложка заморожена», `400` «Обложка: допустимы JPEG,
+> PNG или WebP не больше 5 МБ». Поле `coverPath` (string|null) добавлено во
+> все виды курса: каталог `GET /courses`, страница `GET /courses/{slug}`,
+> списки учителя и админа.
+
 > В бэклоге T13: `GET/PATCH/DELETE /teacher/courses[...]`, PATCH модулей/уроков,
 > reorder — в `Task/T13-integration-wiring.md`.
 

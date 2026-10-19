@@ -65,6 +65,11 @@ type StoreAPI interface {
 	TouchCourse(id string)
 	// UpdateCourse — частичное обновление карточки (PATCH, T13/бэклог T06).
 	UpdateCourse(id string, u CourseUpdate) bool
+	// SetCourseCover — записать/сбросить путь обложки курса (T54):
+	// POST/DELETE /teacher/courses/{id}/cover. cover == nil — сброс
+	// (cover_path=NULL). false — курса нет/ошибка записи. Отдельно от
+	// UpdateCourse, чтобы правка карточки никогда не затирала обложку.
+	SetCourseCover(id string, cover *string) bool
 	// DeleteCourse удаляет курс и всё, что на него ссылается (уроки, записи,
 	// прогресс, отзывы, платежи — каскад; T19). ErrNotFound — курса нет.
 	// Ограничение «только draft» накладывает handler: каскадное удаление

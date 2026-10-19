@@ -123,6 +123,7 @@ type adminCourseItem struct {
 	ID            string            `json:"id"`
 	Slug          string            `json:"slug"`
 	Title         string            `json:"title"`
+	CoverPath     *string           `json:"coverPath"`
 	TeacherID     string            `json:"teacherId"`
 	TeacherEmail  string            `json:"teacherEmail"`
 	Status        repo.CourseStatus `json:"status"`
@@ -210,7 +211,7 @@ func (a *App) AdminListCourses(w http.ResponseWriter, r *http.Request) {
 		}
 		cc := counts[c.ID]
 		out = append(out, adminCourseItem{
-			ID: c.ID, Slug: c.Slug, Title: c.Title,
+			ID: c.ID, Slug: c.Slug, Title: c.Title, CoverPath: c.CoverPath,
 			TeacherID: c.TeacherID, TeacherEmail: email, Status: c.Status,
 			PriceCents: c.PriceCents, CreatedAt: c.CreatedAt, UpdatedAt: c.UpdatedAt,
 			ModulesCount: cc.Modules, LessonsCount: cc.Lessons, StudentsCount: cc.Students,
