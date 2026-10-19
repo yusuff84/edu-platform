@@ -2,7 +2,9 @@
    Импортируется только из pages/CourseStudents.tsx; общий styles.css не изменяется.
    Базовые классы (.wrap, .page, .panel, .empty, .btn, .input, .muted, .error,
    полоса .progress/.progress-bar, оформление таблиц и ячеек) берутся из styles.css —
-   здесь только раскладка страницы и её специфичные элементы. */
+   здесь только раскладка страницы и её специфичные элементы.
+   T62: плитки метрик одной высоты, поиск+таблица одним блоком (.cs-list-panel),
+   имя/email ученика — односторонняя строка с многоточием (как в админ-записях). */
 
 /* ---------- Шапка ---------- */
 
@@ -56,11 +58,18 @@
 .cs-stats {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(155px, 1fr));
+  /* T62: все ряды одной высоты — плитки не «прыгают», когда длинная подпись
+     («Средний прогресс») переносится на вторую строку. */
+  grid-auto-rows: 1fr;
   gap: 12px;
   margin: 18px 0 20px;
 }
 
 .cs-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: var(--r-md);
@@ -70,13 +79,29 @@
 .cs-stat b {
   display: block;
   font-size: 22px;
+  line-height: 1.2;
   letter-spacing: -0.02em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .cs-stat span {
   color: var(--muted);
-  font-size: 13px;
+  font-size: 12.5px;
+  line-height: 1.4;
   font-weight: 700;
+}
+
+/* ---------- Поиск + таблица: единый блок-карточка (T62) ---------- */
+
+/* Обёртка в CourseStudents.tsx — только разметка, без логики. */
+.cs-list-panel {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  padding: 16px 18px 18px;
+  box-shadow: var(--shadow-sm);
 }
 
 /* ---------- Поиск ---------- */
@@ -109,12 +134,17 @@
   margin-top: 0;
 }
 
-/* ---------- Таблица (раскладка по образцу .admin-table из admin.css) ---------- */
+/* Пустое состояние внутри блока поиска+таблицы — чуть компактнее. */
+.cs-list-panel > .cs-empty {
+  padding: 40px 16px;
+}
+
+/* Таблица (раскладка по образцу .admin-table из admin.css) */
 
 .cs-table-wrap {
   overflow-x: auto;
   border: 1px solid var(--line);
-  border-radius: var(--r-md);
+  border-radius: var(--r-sm);
   background: var(--surface);
   -webkit-overflow-scrolling: touch;
 }
@@ -143,19 +173,39 @@
   background: #fafbfc;
 }
 
+/* Ученик (T62): имя + email — каждая в одну строку с многоточием, как в
+   таблице админ-записей: жёсткий cap max-width: 14rem на элементе гарантирует,
+   что текст не нарисуется за пределами ячейки ни при какой авторазметке
+   таблицы; трек minmax(0, 1fr) и td max-width: 15rem не дают колонке
+   растягиваться до текста. Полное значение — по title-атрибуту в разметке. */
 .cs-td-student {
   white-space: normal;
   min-width: 12rem;
+  max-width: 15rem;
 }
 
 .cs-student {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 2px;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.cs-student b {
+  max-width: 14rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .cs-student .muted {
   font-size: 12.5px;
+  color: var(--muted);
+  max-width: 14rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* ---------- Прогресс: полоса (.progress/.progress-bar) + «N из M» ---------- */
@@ -266,6 +316,22 @@
 
   .cs-td-student {
     min-width: 0;
+    max-width: none;
+  }
+
+  /* T62: в карточном режиме на телефонах переносим имя/email как раньше,
+     односторонняя строка с многоточием — только для десктопной таблицы. */
+  .cs-student b,
+  .cs-student .muted {
+    max-width: none;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+    overflow: visible;
+  }
+
+  .cs-list-panel {
+    padding: 14px;
   }
 
   .cs-progress {

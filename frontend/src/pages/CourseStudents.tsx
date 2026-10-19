@@ -256,126 +256,139 @@ export default function CourseStudents(): JSX.Element {
                 </div>
               )}
 
-              {/* Поиск по email/имени (debounce 300 мс, сброс на первую страницу) */}
-              <div className="cs-toolbar">
-                <label className="cs-search">
-                  <span className="cs-search-label">{t('courseStudents.search')}</span>
-                  <input
-                    className="input"
-                    type="search"
-                    value={q}
-                    onChange={(e) => setQ(e.target.value)}
-                    placeholder={t('courseStudents.search')}
-                    autoComplete="off"
-                  />
-                </label>
-              </div>
-
-              {/* Пустое состояние — не пустая таблица */}
-              {data && data.items.length === 0 && (
-                <div className="empty cs-empty">
-                  <p>{t('courseStudents.empty')}</p>
+              {/* T62: поиск + пустое состояние + таблица + пагинация — единый
+                  блок-карточка (обёртка только ради стилей, логика не тронута). */}
+              <div className="cs-list-panel">
+                {/* Поиск по email/имени (debounce 300 мс, сброс на первую страницу) */}
+                <div className="cs-toolbar">
+                  <label className="cs-search">
+                    <span className="cs-search-label">{t('courseStudents.search')}</span>
+                    <input
+                      className="input"
+                      type="search"
+                      value={q}
+                      onChange={(e) => setQ(e.target.value)}
+                      placeholder={t('courseStudents.search')}
+                      autoComplete="off"
+                    />
+                  </label>
                 </div>
-              )}
 
-              {/* Таблица учеников */}
-              {data && data.items.length > 0 && (
-                <div
-                  className="cs-table-wrap"
-                  role="region"
-                  aria-label={t('courseStudents.title')}
-                  tabIndex={0}
-                >
-                  <table className="cs-table">
-                    <thead>
-                      <tr>
-                        <th scope="col">{t('courseStudents.colStudent')}</th>
-                        <th scope="col">{t('courseStudents.colEnrolled')}</th>
-                        <th scope="col">{t('courseStudents.colProgress')}</th>
-                        <th scope="col">{t('courseStudents.colStatus')}</th>
-                        <th scope="col">{t('courseStudents.colLastActivity')}</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {data.items.map((row) => {
-                        const name = row.displayName.trim();
-                        const percent = clampPercent(row.percent);
-                        return (
-                          <tr key={row.studentId}>
-                            <td className="cs-td-student" data-label={t('courseStudents.colStudent')}>
-                              <span className="cs-student">
-                                <b>{name || row.email}</b>
-                                {name !== '' && <span className="muted">{row.email}</span>}
-                              </span>
-                            </td>
-                            <td data-label={t('courseStudents.colEnrolled')}>
-                              {formatDate(row.enrolledAt)}
-                            </td>
-                            <td data-label={t('courseStudents.colProgress')}>
-                              <span className="cs-progress">
-                                <span
-                                  className="progress"
-                                  role="progressbar"
-                                  aria-label={t('courseStudents.colProgress')}
-                                  aria-valuemin={0}
-                                  aria-valuemax={100}
-                                  aria-valuenow={percent}
-                                  aria-valuetext={`${row.completedLessons} из ${row.totalLessons}`}
-                                >
+                {/* Пустое состояние — не пустая таблица */}
+                {data && data.items.length === 0 && (
+                  <div className="empty cs-empty">
+                    <p>{t('courseStudents.empty')}</p>
+                  </div>
+                )}
+
+                {/* Таблица учеников */}
+                {data && data.items.length > 0 && (
+                  <div
+                    className="cs-table-wrap"
+                    role="region"
+                    aria-label={t('courseStudents.title')}
+                    tabIndex={0}
+                  >
+                    <table className="cs-table">
+                      <thead>
+                        <tr>
+                          <th scope="col">{t('courseStudents.colStudent')}</th>
+                          <th scope="col">{t('courseStudents.colEnrolled')}</th>
+                          <th scope="col">{t('courseStudents.colProgress')}</th>
+                          <th scope="col">{t('courseStudents.colStatus')}</th>
+                          <th scope="col">{t('courseStudents.colLastActivity')}</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {data.items.map((row) => {
+                          const name = row.displayName.trim();
+                          const percent = clampPercent(row.percent);
+                          return (
+                            <tr key={row.studentId}>
+                              <td
+                                className="cs-td-student"
+                                data-label={t('courseStudents.colStudent')}
+                              >
+                                {/* T62: длинные имя/email обрезаются с многоточием,
+                                    полный текст — в title (как в AdminEnrollments). */}
+                                <span className="cs-student">
+                                  <b title={name || row.email}>{name || row.email}</b>
+                                  {name !== '' && (
+                                    <span className="muted" title={row.email}>
+                                      {row.email}
+                                    </span>
+                                  )}
+                                </span>
+                              </td>
+                              <td data-label={t('courseStudents.colEnrolled')}>
+                                {formatDate(row.enrolledAt)}
+                              </td>
+                              <td data-label={t('courseStudents.colProgress')}>
+                                <span className="cs-progress">
                                   <span
-                                    className="progress-bar"
-                                    style={{ width: `${percent}%` }}
-                                  />
+                                    className="progress"
+                                    role="progressbar"
+                                    aria-label={t('courseStudents.colProgress')}
+                                    aria-valuemin={0}
+                                    aria-valuemax={100}
+                                    aria-valuenow={percent}
+                                    aria-valuetext={`${row.completedLessons} из ${row.totalLessons}`}
+                                  >
+                                    <span
+                                      className="progress-bar"
+                                      style={{ width: `${percent}%` }}
+                                    />
+                                  </span>
+                                  <span className="cs-progress-meta">
+                                    {row.completedLessons} из {row.totalLessons}
+                                  </span>
                                 </span>
-                                <span className="cs-progress-meta">
-                                  {row.completedLessons} из {row.totalLessons}
+                              </td>
+                              <td data-label={t('courseStudents.colStatus')}>
+                                <span className={`cs-badge cs-badge--${row.status}`}>
+                                  {enrollmentLabel(row.status)}
                                 </span>
-                              </span>
-                            </td>
-                            <td data-label={t('courseStudents.colStatus')}>
-                              <span className={`cs-badge cs-badge--${row.status}`}>
-                                {enrollmentLabel(row.status)}
-                              </span>
-                            </td>
-                            <td data-label={t('courseStudents.colLastActivity')}>
-                              {row.lastActivityAt === null ? (
-                                <span className="muted">{t('courseStudents.neverActive')}</span>
-                              ) : (
-                                formatDate(row.lastActivityAt)
-                              )}
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              )}
+                              </td>
+                              <td data-label={t('courseStudents.colLastActivity')}>
+                                {row.lastActivityAt === null ? (
+                                  <span className="muted">{t('courseStudents.neverActive')}</span>
+                                ) : (
+                                  formatDate(row.lastActivityAt)
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
 
-              {/* Пагинация по 20 (серверная) */}
-              {showPager && data && (
-                <div className="cs-pager">
-                  <button
-                    type="button"
-                    className="btn"
-                    disabled={page <= 1 || listQuery.isFetching}
-                    onClick={() => goToPage(page - 1)}
-                  >
-                    {t('common.prev')}
-                  </button>
-                  <span className="muted">
-                    {t('admin.showing')} {rangeFrom}–{rangeTo} {t('admin.of')} {total}
-                  </span>
-                  <button
-                    type="button"
-                    className="btn"
-                    disabled={isLastPage || listQuery.isFetching}
-                    onClick={() => goToPage(page + 1)}
-                  >
-                    {t('common.next')}
-                  </button>
-                </div>
-              )}
+                {/* Пагинация по 20 (серверная) */}
+                {showPager && data && (
+                  <div className="cs-pager">
+                    <button
+                      type="button"
+                      className="btn"
+                      disabled={page <= 1 || listQuery.isFetching}
+                      onClick={() => goToPage(page - 1)}
+                    >
+                      {t('common.prev')}
+                    </button>
+                    <span className="muted">
+                      {t('admin.showing')} {rangeFrom}–{rangeTo} {t('admin.of')} {total}
+                    </span>
+                    <button
+                      type="button"
+                      className="btn"
+                      disabled={isLastPage || listQuery.isFetching}
+                      onClick={() => goToPage(page + 1)}
+                    >
+                      {t('common.next')}
+                    </button>
+                  </div>
+                )}
+              </div>
             </>
           )}
         </main>
