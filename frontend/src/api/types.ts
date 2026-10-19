@@ -194,6 +194,11 @@ export interface MyCourse {
   course: CourseItem;
   percent: number;
   nextLesson: NextLesson | null;
+  /**
+   * T67/T68: номер сертификата по курсу (аддитивное поле волны P8).
+   * Пустая строка или отсутствие — сертификат ещё не выдан.
+   */
+  certificateNumber?: string;
 }
 
 /** Результат завершения урока (POST .../complete). Ключ — passed, не accepted. */
@@ -208,6 +213,29 @@ export interface CompleteResult {
   /** Для quiz при провале: сколько верных из total. */
   correct?: number;
   total?: number;
+}
+
+// ---------- Сертификаты ----------
+
+/** Публичный сертификат (GET /certificates/{number}, без авторизации). */
+export interface CertificatePublic {
+  number: string;
+  /** RFC3339. */
+  issuedAt: string;
+  /** displayName студента; пустая строка, если имя не задано. */
+  studentName: string;
+  courseTitle: string;
+  courseSlug: string;
+}
+
+/** Мой сертификат (GET /me/certificates, конверт распакован клиентом). */
+export interface MyCertificate {
+  number: string;
+  /** RFC3339. */
+  issuedAt: string;
+  courseId: string;
+  courseTitle: string;
+  courseSlug: string;
 }
 
 // ---------- Покупка ----------
