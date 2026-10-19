@@ -283,3 +283,85 @@
 .ce-move-row .select {
   max-width: 22rem;
 }
+
+/* ---------- T56: slug — подсказка под полем (создание и карточка) ---------- */
+
+.ce-field-hint {
+  margin: 0.1rem 0 0;
+  font-size: 0.85rem;
+}
+
+/* ---------- T56: чеклист готовности к отправке на модерацию ---------- */
+
+.ce-checklist {
+  margin-bottom: 0.65rem;
+}
+
+.ce-checklist-title {
+  margin: 0 0 0.4rem;
+  font-weight: 600;
+}
+
+.ce-checklist-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 0.25rem;
+}
+
+.ce-checklist-list li {
+  display: flex;
+  align-items: baseline;
+  gap: 0.45rem;
+}
+
+.ce-check-done {
+  color: #2e7d32;
+}
+
+.ce-check-todo {
+  color: #8a2c2c;
+}
+
+.ce-checklist-ready {
+  margin: 0.5rem 0 0;
+}
+
+/* ---------- T56: подпись под неактивной кнопкой «Удалить курс» ---------- */
+
+.ce-delete-hint {
+  margin: 0.1rem 0 0;
+  font-size: 0.85rem;
+}
+
+/* ---------- T53/T56: inline-модалка подтверждения unpublish ---------- */
+
+.ce-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  background: rgba(20, 20, 20, 0.45);
+}
+
+.ce-modal__box {
+  width: min(30rem, 100%);
+  padding: 1rem 1.15rem 1.1rem;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
+}
+
+.ce-modal__box h2 {
+  margin: 0 0 0.35rem;
+  font-size: 1.05rem;
+}
+
+.ce-modal-text {
+  margin: 0 0 0.75rem;
+  overflow-wrap: anywhere;
+}

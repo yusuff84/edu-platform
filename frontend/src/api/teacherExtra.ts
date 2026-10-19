@@ -56,3 +56,19 @@ export function moveLesson(
     },
   );
 }
+
+/**
+ * T53: учитель снимает курс с публикации (published → draft).
+ * POST /teacher/courses/{id}/unpublish — контракт как у archive/withdraw (T21):
+ * ответ 200 {"course":{...}}; права те же (владелец или админ); 409 — статус
+ * не published, 404 — курс не найден, 403 — чужой курс.
+ * Обёртка {"course"} распаковывается: вызывающий код работает с Course
+ * напрямую (сигнатура по замороженному контракту T56).
+ */
+export async function unpublishTeacherCourse(courseId: string): Promise<Course> {
+  const res = await apiFetch<{ course: Course }>(
+    `/teacher/courses/${courseId}/unpublish`,
+    { method: 'POST' },
+  );
+  return res.course;
+}
