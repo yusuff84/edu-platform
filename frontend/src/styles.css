@@ -25,6 +25,27 @@
   --shadow: 0 2px 6px rgba(20, 20, 20, 0.06), 0 16px 40px -12px rgba(20, 20, 20, 0.14);
   --shadow-pop: 0 8px 24px -6px rgba(20, 20, 20, 0.18);
   --font: 'Manrope', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+
+  /* T60: якорные размеры общесайтового каркаса (кнопки/поля/фокус).
+     Имена НОВЫЕ (--btn-*, --control-*, --focus-*, --sp-*) и не пересекаются
+     с теми, что читают другие css-файлы (catalog.css, adminUsers.css и т.п.),
+     поэтому их переопределения не затрагиваются. */
+  --sp-2: 8px; /* мелкий шаг внутри группы */
+  --sp-3: 12px; /* базовый шаг */
+  --sp-4: 16px; /* шаг между группами полей/кнопками */
+  --sp-6: 24px; /* шаг между блоками */
+  --btn-h: 48px; /* высота обычной кнопки */
+  --btn-h-sm: 40px; /* высота компактной кнопки */
+  --btn-pad-y: 12px; --btn-pad-x: 20px;
+  --btn-pad-y-sm: 9px; --btn-pad-x-sm: 18px;
+  --btn-radius: 16px; /* радиус обычных кнопок */
+  --btn-radius-sm: 999px; /* .btn-sm — «пилюля»: осознанный паттерн шапки/поиска каталога */
+  --btn-font-size: 14.5px; --btn-font-size-sm: 13.5px;
+  --control-border-w: 1.5px;
+  --control-h: 48px; /* однострочные поля = высоте обычной кнопки */
+  --focus-ring-color: rgba(230, 50, 35, 0.55);
+  --focus-ring-offset: 2px;
+  --press-shift: 1px;
 }
 
 * {
@@ -33,6 +54,9 @@
 
 html {
   scroll-behavior: smooth;
+  /* T60: якорная прокрутка (#content, skip-link, битые якоря) не прячется
+     под баннером/шапкой — небольшой отступ сверху при переходе по хэшу. */
+  scroll-padding-top: 16px;
 }
 
 html,
@@ -59,6 +83,23 @@ h3 {
   font-weight: 800;
 }
 
+/* T60: единая крупность H1–H3 там, где у страницы нет своего контекстного
+   правила. Контекстные каскады ниже в styles.css (.hero h1, .panel h2,
+   .mini-head h2) и правила из скоуп-css других страниц (catalog/admin/learn)
+   переопределяют размеры по необходимости. Отступы здесь не трогаем
+   (margin: 0 — как раньше): вертикальный ритм задаёт разметка страниц. */
+h1 {
+  font-size: clamp(26px, 3.2vw, 34px);
+}
+
+h2 {
+  font-size: clamp(20px, 2.6vw, 26px);
+}
+
+h3 {
+  font-size: 17.5px;
+}
+
 ::selection {
   background: var(--sun);
   color: #141414;
@@ -72,6 +113,14 @@ h3 {
 
 .page {
   padding: 30px 0 48px;
+}
+
+/* T60: минимальная высота основной области: короткие страницы (404, экран
+   ошибок, вход) не «прижимают» футер к шапке — низ страницы стабилен
+   (футер не «дышит» между маршрутами). */
+#content {
+  min-height: 58vh;
+  scroll-margin-top: 16px;
 }
 
 [hidden] {
@@ -108,19 +157,46 @@ h3 {
   clip: rect(0, 0, 0, 0);
 }
 
-a.sr-only:focus {
-  position: static;
+/* T60: skip-link «Перейти к содержимому». Вне фокуса — по технике .sr-only
+   (уводим transform'ом далеко вверх, элемент остаётся в Tab-порядке).
+   При попадании фокуса по Tab раскрывается как закреплённая «пилюля» слева
+   сверху, поверх промо-баннера и шапки (z-index выше любых блоков каркаса). */
+a.sr-only {
+  position: fixed;
+  left: 16px;
+  top: 16px;
+  z-index: 1200;
+  transform: translateY(-72px);
+  background: #141414;
+  color: #fff;
+  font-weight: 800;
+  font-size: 13.5px;
+  line-height: 1.2;
+  padding: 12px 18px;
+  border-radius: 999px;
+  box-shadow: var(--shadow-pop);
+  text-decoration: none;
+}
+
+a.sr-only:focus,
+a.sr-only:focus-visible {
   width: auto;
   height: auto;
+  overflow: visible;
   clip: auto;
+  transform: none;
+  white-space: normal;
 }
 
 /* ---------- promo + header ---------- */
+/* T60: баннер «Первый курс…» — компактный, с фиксированным ритмом,
+   на узких экранах текст просто переносится, каркас не разъезжается. */
 .promo {
   background: var(--sun);
   color: #141414;
   font-weight: 800;
   font-size: 14.5px;
+  line-height: 1.45;
   text-align: center;
   padding: 12px 16px;
   display: flex;
@@ -152,6 +228,10 @@ a.sr-only:focus {
   min-height: 72px;
   padding-top: 6px;
   padding-bottom: 6px;
+  /* T60: перенос обязателен, иначе на узких экранах (≈360px) кнопки
+     «Начать учиться»/«Вход» уходят за границу экрана. */
+  flex-wrap: wrap;
+  row-gap: 6px;
 }
 
 .logo {
@@ -207,35 +287,66 @@ a.sr-only:focus {
   align-items: center;
 }
 
+/* T60: email — «чип»: длинный адрес не ломает шапку на 1280–1440,
+   обрезается многоточием (максимум зависит от ширины окна). */
 .user-email {
-  color: rgba(255, 255, 255, 0.92);
-  font-size: 14px;
+  display: inline-flex;
+  align-items: center;
+  color: #fff;
+  font-size: 13.5px;
   font-weight: 700;
+  background: rgba(255, 255, 255, 0.18);
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  border-radius: 999px;
+  padding: 8px 14px;
+  max-width: clamp(140px, 18vw, 260px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: none;
+}
+
+/* Кнопки/чип в шапке не сжимаются и не переносят подпись. */
+.topbar .btn,
+.topbar .user-email {
+  flex: none;
+  white-space: nowrap;
 }
 
 /* ---------- buttons ---------- */
+/* T60: единая анатомия кнопок: высота 48 у .btn и 40 у .btn-sm, общие
+   паддинги/радиусы, одинаковые hover/active/disabled/focus во всех
+   вариантах. Вариант меняет только цвет/фон, не геометрию. */
 .btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 9px;
+  flex: none;
   border: 1px solid var(--line);
   background: var(--surface);
   color: var(--fg);
-  border-radius: 16px;
-  padding: 12px 20px;
+  border-radius: var(--btn-radius);
+  padding: var(--btn-pad-y) var(--btn-pad-x);
   font-weight: 800;
-  font-size: 14.5px;
+  font-size: var(--btn-font-size);
   font-family: var(--font);
   cursor: pointer;
+  text-align: center;
   text-decoration: none;
-  min-height: 48px;
-  transition: transform 0.15s, box-shadow 0.15s, background 0.15s;
+  min-height: var(--btn-h);
+  transition: transform 0.15s, box-shadow 0.15s, background 0.15s, border-color 0.15s;
 }
 
 .btn:hover {
   transform: translateY(-1px);
   box-shadow: var(--shadow);
+}
+
+/* Единое «нажатие»: кнопка уходит вниз и теряет тень у всех вариантов. */
+.btn:active:not(:disabled) {
+  transform: translateY(var(--press-shift));
+  box-shadow: var(--shadow-sm);
 }
 
 .btn-primary {
@@ -251,6 +362,12 @@ a.sr-only:focus {
   color: #fff;
 }
 
+.btn-primary:active:not(:disabled) {
+  background: var(--brand-dark);
+  border-color: var(--brand-dark);
+}
+
+/* .btn-ghost рассчитан на тёмный/цветной фон (шапка, hero). */
 .btn-ghost {
   background: rgba(255, 255, 255, 0.16);
   border-color: rgba(255, 255, 255, 0.55);
@@ -260,6 +377,10 @@ a.sr-only:focus {
 .btn-ghost:hover {
   background: rgba(255, 255, 255, 0.28);
   border-color: #fff;
+}
+
+.btn-ghost:active:not(:disabled) {
+  background: rgba(255, 255, 255, 0.34);
 }
 
 .btn-blue {
@@ -277,16 +398,25 @@ a.sr-only:focus {
   color: #fff;
 }
 
-.btn-sm {
-  min-height: 40px;
-  padding: 9px 18px;
-  font-size: 13.5px;
-  border-radius: 999px;
+.btn-blue:active:not(:disabled) {
+  background: #1f3ae0;
+  border-color: #1f3ae0;
 }
 
-.btn:disabled {
+.btn-sm {
+  min-height: var(--btn-h-sm);
+  padding: var(--btn-pad-y-sm) var(--btn-pad-x-sm);
+  font-size: var(--btn-font-size-sm);
+  border-radius: var(--btn-radius-sm);
+}
+
+/* Единое состояние «недоступна»: тень/подъём исчезают, курсор запрещает,
+   видимые варианты (primary/ghost/blue) сохраняют свой цвет. */
+.btn:disabled,
+.btn:disabled:hover,
+.btn:disabled:active {
   opacity: 0.55;
-  cursor: default;
+  cursor: not-allowed;
   transform: none !important;
   box-shadow: none;
 }
@@ -297,8 +427,17 @@ input:focus-visible,
 select:focus-visible,
 textarea:focus-visible,
 button:focus-visible {
-  outline: 3px solid rgba(230, 50, 35, 0.35);
-  outline-offset: 2px;
+  outline: 3px solid var(--focus-ring-color);
+  outline-offset: var(--focus-ring-offset);
+}
+
+/* На тёмных/цветных поверхностях каркаса красное кольцо теряется —
+   там фокус-индикатор белый (та же высота и offset). */
+.topbar :focus-visible,
+.hero :focus-visible,
+.lead-zone :focus-visible,
+.footer :focus-visible {
+  outline-color: rgba(255, 255, 255, 0.9);
 }
 
 /* ---------- hero ---------- */
@@ -735,7 +874,7 @@ button:focus-visible {
 
 .field {
   display: grid;
-  gap: 7px;
+  gap: var(--sp-2);
 }
 
 .field > span,
@@ -755,10 +894,22 @@ button:focus-visible {
   letter-spacing: 0.06em;
 }
 
+/* T60: helper-текст внутри .field (например, подсказка «не короче 8 символов»
+   у поля пароля) — явный стиль вместо «голого» <small> с UA-дефолтом. */
+.field small {
+  display: block;
+  color: var(--muted);
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 1.4;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
 .input,
 .select,
 textarea.input {
-  border: 1.5px solid var(--line);
+  border: var(--control-border-w) solid var(--line);
   border-radius: var(--r-sm);
   padding: 12px 14px;
   font: inherit;
@@ -766,7 +917,42 @@ textarea.input {
   background: #fff;
   color: var(--fg);
   width: 100%;
-  transition: border-color 0.15s, box-shadow 0.15s;
+  transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
+}
+
+/* T60: однострочные поля одной высоты с обычной кнопкой (48px);
+   textarea — исключение, её высоту задаёт rows. */
+.input,
+.select {
+  min-height: var(--control-h);
+}
+
+textarea.input {
+  min-height: 0;
+  resize: vertical;
+  line-height: 1.55;
+}
+
+/* Плейсхолдеры во всех полях одинаковые. */
+.input::placeholder,
+textarea.input::placeholder {
+  color: var(--faint);
+  font-weight: 500;
+}
+
+.input:disabled,
+.select:disabled,
+textarea.input:disabled {
+  background: #f6f5f1;
+  color: var(--muted);
+  cursor: not-allowed;
+  border-color: var(--line-soft);
+}
+
+.input[readonly],
+.select[readonly],
+textarea.input[readonly] {
+  background: #faf9f6;
 }
 
 .input:focus,
@@ -783,7 +969,14 @@ textarea.input:focus {
 
 .form-grid {
   display: grid;
+  /* T60: 14px — якорный шаг между группами полей (signup/login/конструктор). */
   gap: 14px;
+}
+
+/* Группа поля внутри сетки всегда начинается сверху — подпись не «моргает»
+   при появлении текста ошибки. */
+.form-grid > .field {
+  align-content: start;
 }
 
 .err {
@@ -2038,7 +2231,9 @@ tr:last-child td {
   display: grid;
   grid-template-columns: 1.4fr 1fr 1fr 1fr;
   gap: 24px;
-  padding: 44px 0;
+  padding: 44px 0 40px;
+  /* T60: колонки выровнены по верхнему краю независимо от числа ссылок. */
+  align-items: start;
 }
 
 .footer .logo {
@@ -2054,6 +2249,7 @@ tr:last-child td {
 
 .footer small {
   color: #8e8e8e;
+  line-height: 1.55;
 }
 
 .footer a {
@@ -2161,5 +2357,40 @@ tr:last-child td {
   }
   .cab-stats {
     grid-template-columns: 1fr 1fr;
+  }
+}
+
+/* T60: очень узкие экраны (360–560px): компактный промо-баннер, шапка
+   занимает две строки без горизонтального «выезда», чип email сужается. */
+@media (max-width: 560px) {
+  .wrap {
+    padding: 0 16px;
+  }
+  .promo {
+    font-size: 13px;
+    padding: 8px 12px;
+    gap: 10px;
+    line-height: 1.4;
+  }
+  .promo a {
+    padding: 6px 14px;
+    font-size: 12.5px;
+  }
+  .topbar-in {
+    gap: 12px;
+    row-gap: 4px;
+    min-height: 62px;
+  }
+  .top-actions {
+    gap: 8px;
+  }
+  .user-email {
+    max-width: 150px;
+    padding: 7px 10px;
+    font-size: 12.5px;
+  }
+  .footer-in {
+    padding: 36px 0 32px;
+    gap: 20px;
   }
 }

@@ -1,11 +1,17 @@
 /* T05: стили оболочки — гварды ролей, 404, error boundary, скелетоны.
-   Общий styles.css не трогаем; файл импортируется из компонентов T05. */
+   Общий styles.css не трогаем; файл импортируется из компонентов T05.
+   T60: классы не удаляем и не переименовываем; якорные размеры (высота
+   кнопок, радиусы, фокус-кольцо) берём из :root-переменных styles.css. */
 
-/* Активный пункт меню (aria-current ставит NavLink автоматически). */
+/* Активный пункт меню (aria-current ставит NavLink автоматически).
+   T60: цвет здесь НЕ задаём. Раньше стоял тёмный #1a1a1a — у этого
+   селектора специфичность выше, чем у .nav a.active из styles.css
+   (класс + класс vs элементы + атрибут), и на синей шапке текст активного
+   пункта становился тёмным на тёмном фоне. Белый/полупрозрачный цвет
+   активному пункту задаёт каркас styles.css (.nav a / .nav a.active). */
 header nav a[aria-current='page'] {
-  font-weight: 700;
+  font-weight: 800;
   text-decoration: none;
-  color: #1a1a1a;
 }
 
 /* Центрированные сообщения: 404, нет доступа, экран восстановления. */
@@ -16,19 +22,89 @@ header nav a[aria-current='page'] {
   text-align: center;
 }
 
+/* T60: заголовок центрированных экранов — та же шкала H1, что во всем
+   каркасе (styles.css), плюс явный отступ до подсказки. */
+.shell-center h1 {
+  font-size: clamp(26px, 3.2vw, 34px);
+  margin: 0 0 10px;
+}
+
+/* Подсказка на экранах 404/ошибки — приглушённая, как остальной muted-текст. */
+.shell-center p {
+  color: var(--muted);
+}
+
+/* Ссылки «на главную» внутри центрированных экранов — как текстовые ссылки
+   в остальном каркасе (см. .page a:not(.btn) в styles.css). */
+.shell-center p a {
+  color: var(--cta-blue);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  font-weight: 600;
+}
+
+.shell-center p a:hover {
+  color: #1f3ae0;
+}
+
+/* Действия экранов (кнопки ошибки/gоварда). В разметке здесь <button> и
+   <Link> БЕЗ класса .btn — даём им обзор «кнопки» из styles.css: та же
+   высота 48px, радиус, паддинги, hover/active. */
 .shell-actions {
   display: flex;
   gap: 0.75rem;
   justify-content: center;
   align-items: center;
   margin-top: 1rem;
+  flex-wrap: wrap;
 }
 
-.shell-actions button {
-  margin-top: 0;
+.shell-actions button,
+.shell-actions a {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  flex: none;
+  margin: 0; /* раньше — отдельное правило margin-top: 0 */
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--fg);
+  border-radius: var(--btn-radius);
+  padding: var(--btn-pad-y) var(--btn-pad-x);
+  font-family: inherit;
+  font-size: var(--btn-font-size);
+  font-weight: 800;
+  cursor: pointer;
+  text-align: center;
+  text-decoration: none;
+  min-height: var(--btn-h);
+  box-shadow: var(--shadow-sm);
+  transition: transform 0.15s, box-shadow 0.15s, background 0.15s, border-color 0.15s;
 }
 
-/* Скелетон гварда: вместо контента, пока определяется сессия. */
+.shell-actions button:hover,
+.shell-actions a:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow);
+}
+
+.shell-actions button:active,
+.shell-actions a:active {
+  transform: translateY(var(--press-shift));
+  box-shadow: var(--shadow-sm);
+}
+
+.shell-actions button:disabled,
+.shell-actions a:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  transform: none !important;
+  box-shadow: none;
+}
+
+/* Скелетон гварда: вместо контента, пока определяется сессия.
+   T60: тот же «loading»-паттерн использует RouteFallback (router.tsx). */
 .shell-skeleton {
   max-width: 960px;
   margin: 0 auto;
