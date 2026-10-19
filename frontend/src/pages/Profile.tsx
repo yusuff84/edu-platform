@@ -96,7 +96,7 @@ export default function Profile(): JSX.Element {
 
   return (
     <div className="wrap">
-      <div className="page">
+      <main className="page">
         <h1>{t('profile.title')}</h1>
 
         {/* ---------- Карточка профиля ---------- */}
@@ -117,7 +117,7 @@ export default function Profile(): JSX.Element {
               <dl className="pf-facts">
                 <div>
                   <dt>{t('profile.email')}</dt>
-                  <dd>{profileQuery.data.email}</dd>
+                  <dd className="pf-email">{profileQuery.data.email}</dd>
                 </div>
                 <div>
                   <dt>{t('profile.role')}</dt>
@@ -247,7 +247,7 @@ export default function Profile(): JSX.Element {
             </div>
           )}
         </section>
-      </div>
+      </main>
     </div>
   );
 }

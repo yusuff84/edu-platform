@@ -144,7 +144,7 @@ export default function Catalog(): JSX.Element {
   }
 
   return (
-    <div>
+    <main className="page catalog-page">
       <section className="hero">
         <div className="hero-card">
           <span className="eyebrow">Маркетплейс IT-курсов · для новичков</span>
@@ -353,6 +353,6 @@ export default function Catalog(): JSX.Element {
         <FinalCta onChoose={scrollToCards} />
       </div>
       <LeadBlock />
-    </div>
+    </main>
   );
 }
