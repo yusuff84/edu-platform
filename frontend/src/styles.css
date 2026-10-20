@@ -108,6 +108,36 @@ h3 {
   font-size: 17.5px;
 }
 
+/* Ссылка-заголовок (название курса в карточке/списке) наследует цвет и
+   начертание заголовка, а не браузерный синий: подчёркивание — только при
+   наведении/фокусе. Без этого <h3><Link> выглядит как ссылка в тексте
+   (см. .page p a:not(.btn) — тот стиль на заголовки не рассчитан). */
+h1 a:not(.btn),
+h2 a:not(.btn),
+h3 a:not(.btn),
+h4 a:not(.btn),
+h5 a:not(.btn),
+h6 a:not(.btn) {
+  color: inherit;
+  text-decoration: none;
+}
+
+h1 a:not(.btn):hover,
+h2 a:not(.btn):hover,
+h3 a:not(.btn):hover,
+h4 a:not(.btn):hover,
+h5 a:not(.btn):hover,
+h6 a:not(.btn):hover,
+h1 a:not(.btn):focus-visible,
+h2 a:not(.btn):focus-visible,
+h3 a:not(.btn):focus-visible,
+h4 a:not(.btn):focus-visible,
+h5 a:not(.btn):focus-visible,
+h6 a:not(.btn):focus-visible {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
 ::selection {
   background: var(--sun);
   color: #141414;
