@@ -1761,6 +1761,36 @@ func (s *Store) GetLessonAnswer(courseID, questionID, answerID string) (*LessonA
 	return s.lessonAnswerSnapshotLocked(a), true
 }
 
+// UpdateLessonQuestionBody меняет текст вопроса (T71-edit). ErrNotFound —
+// вопроса нет в этом курсе. Права проверяет handler: редактирует только автор.
+func (s *Store) UpdateLessonQuestionBody(courseID, questionID, body string) (*LessonQuestion, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	q, ok := s.lessonQuestions[questionID]
+	if !ok || q.CourseID != courseID {
+		return nil, ErrNotFound
+	}
+	q.Body = body
+	return s.lessonQuestionSnapshotLocked(q), nil
+}
+
+// UpdateLessonAnswerBody меняет текст ответа (T71-edit). ErrNotFound — ответа
+// нет в этом вопросе/курсе. Права проверяет handler: редактирует только автор.
+func (s *Store) UpdateLessonAnswerBody(courseID, questionID, answerID, body string) (*LessonAnswer, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	a, ok := s.lessonAnswers[answerID]
+	if !ok || a.QuestionID != questionID {
+		return nil, ErrNotFound
+	}
+	q, ok := s.lessonQuestions[questionID]
+	if !ok || q.CourseID != courseID {
+		return nil, ErrNotFound
+	}
+	a.Body = body
+	return s.lessonAnswerSnapshotLocked(a), nil
+}
+
 // DeleteLessonQuestion удаляет вопрос; ответы уходят каскадом.
 // ErrNotFound — вопроса нет в этом курсе.
 func (s *Store) DeleteLessonQuestion(courseID, questionID string) error {
@@ -2110,7 +2140,9 @@ func similarCourseCategory(c *Course) string {
 }
 
 // ListSimilarCourses возвращает published-курсы той же категории, что и
-// courseID, кроме самого курса (T79). Порядок: число активных записей по
+// courseID, кроме самого курса (T79). Если в категории не осталось ни одного
+// курса, подборка добирается published-курсами других категорий — блок на
+// странице курса не должен пустовать. Порядок: число активных записей по
 // убыванию, затем avgRating по убыванию, затем createdAt по убыванию; при
 // полном совпадении ключей — id по убыванию (детерминированный хвост,
 // совпадает с ORDER BY SQL-ветки).
@@ -2137,29 +2169,42 @@ func (s *Store) ListSimilarCourses(courseID string, limit int) []*Course {
 		}
 	}
 
-	out := make([]*Course, 0, limit)
+	same := make([]*Course, 0, limit)
+	other := make([]*Course, 0)
 	for _, c := range s.courses {
 		if c.ID == courseID || c.Status != CoursePublished {
 			continue
 		}
-		if similarCourseCategory(c) != category {
-			continue
+		if similarCourseCategory(c) == category {
+			same = append(same, c)
+		} else {
+			other = append(other, c)
 		}
-		out = append(out, c)
 	}
-	sort.SliceStable(out, func(i, j int) bool {
-		a, b := out[i], out[j]
-		if active[a.ID] != active[b.ID] {
-			return active[a.ID] > active[b.ID]
-		}
-		if a.AvgRating != b.AvgRating {
-			return a.AvgRating > b.AvgRating
-		}
-		if !a.CreatedAt.Equal(b.CreatedAt) {
-			return a.CreatedAt.After(b.CreatedAt)
-		}
-		return a.ID > b.ID
-	})
+	sortSimilar := func(list []*Course) {
+		sort.SliceStable(list, func(i, j int) bool {
+			a, b := list[i], list[j]
+			if active[a.ID] != active[b.ID] {
+				return active[a.ID] > active[b.ID]
+			}
+			if a.AvgRating != b.AvgRating {
+				return a.AvgRating > b.AvgRating
+			}
+			if !a.CreatedAt.Equal(b.CreatedAt) {
+				return a.CreatedAt.After(b.CreatedAt)
+			}
+			return a.ID > b.ID
+		})
+	}
+	sortSimilar(same)
+	out := same
+	if len(out) == 0 {
+		// Пустая категория — не оставляем блок «Похожие курсы» пустым:
+		// добираем популярные published-курсы других категорий. Это
+		// аддитивное расширение T79 (сначала всегда та же категория).
+		sortSimilar(other)
+		out = other
+	}
 	if len(out) > limit {
 		out = out[:limit]
 	}

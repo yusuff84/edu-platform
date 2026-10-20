@@ -104,7 +104,7 @@ func TestFavoritesRequireAuth(t *testing.T) {
 }
 
 // TestFavoritesAddIsIdempotent: добавление и повторное добавление — 204,
-// в списке одна запись; форма элемента — CourseItem без признака isFavorite.
+// в списке одна запись; форма элемента — CourseItem с isFavorite=true.
 func TestFavoritesAddIsIdempotent(t *testing.T) {
 	app, router := newTestApp()
 	teacher := t73Teacher(t, app)
@@ -138,8 +138,8 @@ func TestFavoritesAddIsIdempotent(t *testing.T) {
 	if item["category"] != "other" {
 		t.Fatalf("category=%v, ожидали other: %s", item["category"], body)
 	}
-	if _, ok := item["isFavorite"]; ok {
-		t.Fatalf("признака isFavorite быть не должно: %s", body)
+	if item["isFavorite"] != true {
+		t.Fatalf("в избранном isFavorite должен быть true: %s", body)
 	}
 }
 
@@ -308,5 +308,121 @@ func TestFavoritesEmptyResponseShape(t *testing.T) {
 	}
 	if _, ok := raw["isFavorite"]; ok {
 		t.Fatalf("в конверте не должно быть isFavorite: %s", rec.Body.String())
+	}
+}
+
+// favoriteFlagInItems — isFavorite элемента каталога/подборки с нужным id.
+func favoriteFlagInItems(t *testing.T, items []any, courseID string) bool {
+	t.Helper()
+	for _, raw := range items {
+		item, _ := raw.(map[string]any)
+		if item["id"] == courseID {
+			flag, ok := item["isFavorite"].(bool)
+			if !ok {
+				t.Fatalf("у курса %s нет булева isFavorite: %v", courseID, item)
+			}
+			return flag
+		}
+	}
+	t.Fatalf("курс %s не найден в выдаче: %v", courseID, items)
+	return false
+}
+
+// TestFavoriteFlagInPublicCourseViews — аддитивное isFavorite в каталоге,
+// странице курса, похожих курсах и профиле преподавателя: true после
+// добавления в избранное, false у гостя и после удаления.
+func TestFavoriteFlagInPublicCourseViews(t *testing.T) {
+	app, router := newTestApp()
+	teacher := t73Teacher(t, app)
+	srcID := t73Course(t, app, teacher.ID, "t73-flag-src", "Исходный курс", repo.CoursePublished)
+	courseID := t73Course(t, app, teacher.ID, "t73-flag", "Курс с флажком", repo.CoursePublished)
+	cookies, _ := registerUser(t, router, "t73-flag@example.com", "password123", "")
+
+	catalogItem := func(c []*http.Cookie) bool {
+		t.Helper()
+		rec := doRequest(t, router, http.MethodGet, "/api/v1/courses?limit=100", nil, c)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("GET /courses: status=%d body=%s", rec.Code, rec.Body.String())
+		}
+		var out struct {
+			Items []any `json:"items"`
+		}
+		decodeBody(t, rec, &out)
+		return favoriteFlagInItems(t, out.Items, courseID)
+	}
+
+	// Гость и вошедший без избранного — false.
+	if catalogItem(nil) {
+		t.Fatal("гостю каталог отдал isFavorite=true")
+	}
+	if catalogItem(cookies) {
+		t.Fatal("isFavorite=true до добавления в избранное")
+	}
+
+	rec := doRequest(t, router, http.MethodPut, "/api/v1/me/favorites/"+courseID, nil, cookies)
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("PUT favorite: status=%d body=%s", rec.Code, rec.Body.String())
+	}
+
+	if !catalogItem(cookies) {
+		t.Fatal("каталог не увидел добавленный курс в избранном")
+	}
+
+	// Страница курса: course.isFavorite.
+	rec = doRequest(t, router, http.MethodGet, "/api/v1/courses/t73-flag", nil, cookies)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET course: status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var detail struct {
+		Course map[string]any `json:"course"`
+	}
+	decodeBody(t, rec, &detail)
+	if detail.Course["isFavorite"] != true {
+		t.Fatalf("course.isFavorite=%v, ждали true", detail.Course["isFavorite"])
+	}
+
+	// Похожие курсы исходного курса: у выбранного isFavorite=true.
+	rec = doRequest(t, router, http.MethodGet, "/api/v1/courses/"+srcID+"/similar", nil, cookies)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET similar: status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var similar struct {
+		Items []any `json:"items"`
+	}
+	decodeBody(t, rec, &similar)
+	if !favoriteFlagInItems(t, similar.Items, courseID) {
+		t.Fatal("похожие курсы не увидели isFavorite")
+	}
+
+	// Профиль преподавателя: courses[].isFavorite.
+	rec = doRequest(t, router, http.MethodGet, "/api/v1/teachers/"+teacher.ID, nil, cookies)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET teacher profile: status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var profile struct {
+		Courses []any `json:"courses"`
+	}
+	decodeBody(t, rec, &profile)
+	if !favoriteFlagInItems(t, profile.Courses, courseID) {
+		t.Fatal("профиль преподавателя не увидел isFavorite")
+	}
+
+	// Гость на странице курса видит false, даже если у кого-то курс в избранном.
+	rec = doRequest(t, router, http.MethodGet, "/api/v1/courses/t73-flag", nil, nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("guest GET course: status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	decodeBody(t, rec, &detail)
+	if detail.Course["isFavorite"] != false {
+		t.Fatalf("гостю course.isFavorite=%v, ждали false", detail.Course["isFavorite"])
+	}
+
+	// После удаления — снова false.
+	rec = doRequest(t, router, http.MethodDelete, "/api/v1/me/favorites/"+courseID, nil, cookies)
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("DELETE favorite: status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if catalogItem(cookies) {
+		t.Fatal("isFavorite остался true после удаления из избранного")
 	}
 }

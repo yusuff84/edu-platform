@@ -5,10 +5,10 @@ package handler
 //   DELETE /me/favorites/{courseId} — идемпотентно убрать;
 //   GET    /me/favorites            — сохранённые курсы, новые первыми.
 //
-// Источник правды — Task/00-api-contract.md, раздел «T73 — Избранное»
-// (заморожен). Признака isFavorite в публичных видах курса нет: клиент
-// определяет избранное по этому списку. Элементы отдаются существующим
-// toCourseItem (handler/courses.go), форма CourseItem не меняется.
+// Источник правды — Task/00-api-contract.md, раздел «T73 — Избранное».
+// Дополнительно публичные виды курса отдают аддитивное isFavorite для
+// вошедшего зрителя (T73-extension); клиент может не запрашивать весь список
+// избранного только ради сердечек. Элементы этого ответа всегда isFavorite=true.
 
 import (
 	"errors"
@@ -83,7 +83,9 @@ func (a *App) MyFavorites(w http.ResponseWriter, r *http.Request) {
 	courses := a.Store.ListFavoriteCoursesByUser(u.ID)
 	items := make([]courseItem, 0, len(courses))
 	for _, c := range courses {
-		items = append(items, toCourseItem(c))
+		item := toCourseItem(c)
+		item.IsFavorite = true
+		items = append(items, item)
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"items": items, "total": len(items)})
 }

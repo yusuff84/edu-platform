@@ -12,6 +12,8 @@ import {
   askQuestion,
   deleteAnswer,
   deleteQuestion,
+  editAnswer,
+  editQuestion,
   listLessonQuestions,
 } from '../../.tmp-api-test/client.js';
 
@@ -224,6 +226,86 @@ test('answerQuestion: 403 (нет записи) → ApiError с текстом �
 test('answerQuestion: 404 (вопрос не найден) → ApiError 404', async () => {
   api.mockReply({ status: 404, json: { error: 'Вопрос не найден' } });
   await expectApiError(answerQuestion('c1', 'nope', 'Ответ'), 404, 'Вопрос не найден');
+});
+
+// ---------- editQuestion: PATCH ----------
+
+test('editQuestion: PATCH .../questions/{qid}, тело ровно {body}, конверт распакован', async () => {
+  const edited = { ...QUESTION, body: '  Новый текст вопроса  ' };
+  api.mockReply({ status: 200, json: { question: edited } });
+  const res = await editQuestion('c1', 'q1', edited.body);
+  assert.equal(res.body, edited.body);
+  assert.equal(res.id, 'q1');
+
+  const req = lastRequest(api);
+  assert.equal(req.method, 'PATCH');
+  assert.equal(req.path, '/api/v1/courses/c1/questions/q1');
+  const body = jsonBody(req);
+  expectBodyKeys(body, ['body']);
+  assert.equal(body.body, '  Новый текст вопроса  ');
+});
+
+test('editQuestion: id курса и вопроса кодируются целиком', async () => {
+  api.mockReply({ status: 200, json: { question: QUESTION } });
+  await editQuestion('c/1', 'q/1', 'Новый текст вопроса');
+  assert.equal(
+    lastRequest(api).path,
+    '/api/v1/courses/c%2F1/questions/q%2F1',
+  );
+});
+
+test('editQuestion: 403 (не автор) → ApiError «Нет прав на редактирование»', async () => {
+  api.mockReply({ status: 403, json: { error: 'Нет прав на редактирование' } });
+  await expectApiError(
+    editQuestion('c1', 'q1', 'Чужой текст вопроса'),
+    403,
+    'Нет прав на редактирование',
+  );
+});
+
+test('editQuestion: 404 (вопрос не найден) → ApiError 404', async () => {
+  api.mockReply({ status: 404, json: { error: 'Вопрос не найден' } });
+  await expectApiError(editQuestion('c1', 'nope', 'Текст вопроса'), 404, 'Вопрос не найден');
+});
+
+// ---------- editAnswer: PATCH ----------
+
+test('editAnswer: PATCH .../answers/{aid}, тело ровно {body}, конверт распакован', async () => {
+  const edited = { ...OLD_ANSWER, body: 'Новый текст ответа' };
+  api.mockReply({ status: 200, json: { answer: edited } });
+  const res = await editAnswer('c1', 'q1', 'a1', edited.body);
+  assert.equal(res.body, edited.body);
+  assert.equal(res.id, 'a1');
+
+  const req = lastRequest(api);
+  assert.equal(req.method, 'PATCH');
+  assert.equal(req.path, '/api/v1/courses/c1/questions/q1/answers/a1');
+  const body = jsonBody(req);
+  expectBodyKeys(body, ['body']);
+  assert.equal(body.body, 'Новый текст ответа');
+});
+
+test('editAnswer: id курса, вопроса и ответа кодируются целиком', async () => {
+  api.mockReply({ status: 200, json: { answer: OLD_ANSWER } });
+  await editAnswer('c/1', 'q/1', 'a/1', 'Новый текст ответа');
+  assert.equal(
+    lastRequest(api).path,
+    '/api/v1/courses/c%2F1/questions/q%2F1/answers/a%2F1',
+  );
+});
+
+test('editAnswer: 403 (не автор) → ApiError «Нет прав на редактирование»', async () => {
+  api.mockReply({ status: 403, json: { error: 'Нет прав на редактирование' } });
+  await expectApiError(
+    editAnswer('c1', 'q1', 'a1', 'Чужой текст ответа'),
+    403,
+    'Нет прав на редактирование',
+  );
+});
+
+test('editAnswer: 404 (ответ не найден) → ApiError 404', async () => {
+  api.mockReply({ status: 404, json: { error: 'Ответ не найден' } });
+  await expectApiError(editAnswer('c1', 'q1', 'nope', 'Текст ответа'), 404, 'Ответ не найден');
 });
 
 // ---------- deleteQuestion: DELETE ----------

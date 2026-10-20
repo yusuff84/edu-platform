@@ -1001,8 +1001,9 @@ trim 3..2000 символов, иначе `400 «Ответ: от 3 до 2000 с
 
 Шесть фич: вопросы и ответы по урокам, избранное, превью-уроки, аналитика
 учителя, похожие курсы, публичный профиль преподавателя. Все изменения
-аддитивные: формы существующих ответов не меняются, кроме аддитивного
-`isPreview` в уроке. Миграции волны: `012_lesson_questions.sql`,
+аддитивные: формы существующих ответов не меняются, кроме аддитивных
+`isPreview` в уроке и `isFavorite` в видах курса (расширения T73/T75).
+Миграции волны: `012_lesson_questions.sql`,
 `013_favorites.sql`, `014_lesson_preview.sql`, `015_analytics_indexes.sql`.
 
 ### T71 — Вопросы и ответы по урокам
@@ -1046,6 +1047,18 @@ LessonAnswer {
 вопрос другого курса) → `404 «Вопрос не найден»`. Ответ:
 `201 {"answer": LessonAnswer}`.
 
+`PATCH /api/v1/courses/{id}/questions/{questionId}` — только автор вопроса.
+Тело `{"body":"…"}`; trim 10..2000, иначе
+`400 «Вопрос: от 10 до 2000 символов»`. Чужой текст (включая владельца курса и
+admin) → `403 «Нет прав на редактирование»`; нет вопроса →
+`404 «Вопрос не найден»`. Ответ: `200 {"question": LessonQuestion}`.
+
+`PATCH /api/v1/courses/{id}/questions/{questionId}/answers/{answerId}` — только
+автор ответа. Тело `{"body":"…"}`; trim 3..2000, иначе
+`400 «Ответ: от 3 до 2000 символов»`; чужой ответ →
+`403 «Нет прав на редактирование»`; нет ответа → `404 «Ответ не найден»`.
+Ответ: `200 {"answer": LessonAnswer}`.
+
 `DELETE /api/v1/courses/{id}/questions/{questionId}` — автор вопроса, владелец
 курса или admin; иначе `403 «Нет прав на удаление»`; нет вопроса →
 `404 «Вопрос не найден»`; успех — `204` (ответы каскадом).
@@ -1066,8 +1079,11 @@ FK каскадом на users/courses.
 - `GET /api/v1/me/favorites` — только вошедший:
   `200 {"items":[CourseItem],"total":N}`; порядок — добавленные позже первыми;
   архивные/удалённые курсы в список не попадают.
-- Признака `isFavorite` в публичных видах курса НЕТ: фронт определяет
-  избранное по списку `/me/favorites`.
+- Расширение T73: публичные виды курса (`GET /courses`, `GET /courses/{slug}`,
+  `GET /courses/{id}/similar`, `GET /teachers/{id}`, а также `GET /me/favorites`)
+  отдают аддитивное `isFavorite` (bool). Для гостя — `false`; для вошедшего —
+  по его избранному. `GET /me/favorites` всегда отдаёт `true` в элементах.
+  Прежний способ через список `/me/favorites` остаётся рабочим.
 
 ### T75 — Превью-уроки
 
@@ -1121,8 +1137,11 @@ admin — все курсы платформы.
 существовать и быть published, иначе `404 «Курс не найден»`. Возвращает
 опубликованные курсы той же `category`, кроме самого курса, сортировка —
 активные записи desc, затем `avgRating` desc, затем `createdAt` desc.
-`limit` по умолчанию 4 (максимум 12). Ответ:
-`200 {"items":[CourseItem],"total":N}`; `items` может быть пустым.
+`limit` по умолчанию 4 (максимум 12). Расширение T79: если в категории не
+осталось ни одного published-курса, подборка добирается курсами других
+категорий (сначала всегда та же категория). Ответ:
+`200 {"items":[CourseItem],"total":N}`; `items` пуст только если на платформе
+нет других published-курсов.
 
 ### T81 — Публичный профиль преподавателя
 
@@ -1146,9 +1165,9 @@ admin — все курсы платформы.
 ### Новые ключи i18n (ru.json) — заморожены для P9
 
 - `p9.qa.*`: title, ask, askTitle, placeholder, send, answer, answerPlaceholder,
-  answers, empty, emptyHint, loginToAsk, enrollToAsk, delete, deleteConfirm,
-  deleted, sent, answerSent, notFound, teacherBadge, lessonLabel, allLessons,
-  cancel, save, count;
+  answers, empty, emptyHint, loginToAsk, enrollToAsk, edit, edited,
+  answerEdited, delete, deleteConfirm, deleted, sent, answerSent, notFound,
+  teacherBadge, lessonLabel, allLessons, cancel, save, count;
 - `p9.fav.*`: add, remove, added, removed, title, empty, emptyHint, goCatalog,
   loginHint;
 - `p9.preview.*`: badge, watch, title, close, hint, toggle, toggleHint;

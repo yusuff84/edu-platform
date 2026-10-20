@@ -321,6 +321,22 @@ $r = Invoke-Api -Method GET -Path "/api/v1/courses/$coursePB/questions?lessonId=
 $q1 = @($r.Json.items | Where-Object { $_.id -eq $question1 })[0]
 Invoke-Check "A15. Ответы в списке, старые первыми" ($q1 -and @($q1.answers).Count -eq 2 -and @($q1.answers)[0].id -eq $answer1) $r.Body
 
+$r = Invoke-Api -Method PATCH -Path "/api/v1/courses/$coursePB/questions/$question1" -Body @{ body = "Edited by a stranger, must be rejected." } -Session $student
+Invoke-Check "A15a. Правка чужого вопроса -> 403" ($r.Status -eq 403) $r.Body
+
+$r = Invoke-Api -Method PATCH -Path "/api/v1/courses/$coursePB/questions/$question1" -Body @{ body = "  Edited question: free lesson details.  " } -Session $student2
+Invoke-Check "A15b. Автор правит вопрос (trim, 200)" ($r.Status -eq 200 -and $r.Json.question.body -eq "Edited question: free lesson details.") $r.Body
+
+$r = Invoke-Api -Method PATCH -Path "/api/v1/courses/$coursePB/questions/$question1/answers/$answer1" -Body @{ body = "Edited by a stranger, must be rejected." } -Session $student2
+Invoke-Check "A15c. Правка чужого ответа -> 403" ($r.Status -eq 403) $r.Body
+
+$r = Invoke-Api -Method PATCH -Path "/api/v1/courses/$coursePB/questions/$question1/answers/$answer1" -Body @{ body = "  Edited teacher answer.  " } -Session $teacher
+Invoke-Check "A15d. Автор правит ответ (trim, 200)" ($r.Status -eq 200 -and $r.Json.answer.body -eq "Edited teacher answer.") $r.Body
+
+$r = Invoke-Api -Method GET -Path "/api/v1/courses/$coursePB/questions?lessonId=$lessonPB" -Session $anon
+$q1 = @($r.Json.items | Where-Object { $_.id -eq $question1 })[0]
+Invoke-Check "A15e. Лента отдаёт обновлённые тексты" ($r.Status -eq 200 -and $q1.body -eq "Edited question: free lesson details." -and @($q1.answers)[0].body -eq "Edited teacher answer.") $r.Body
+
 $r = Invoke-Api -Method DELETE -Path "/api/v1/courses/$coursePB/questions/$question1/answers/$answer2" -Session $student
 Invoke-Check "A16. Удаление чужого ответа -> 403" ($r.Status -eq 403) $r.Body
 
@@ -357,12 +373,18 @@ Invoke-Check "B1. Без входа -> 401" ($r.Status -eq 401) $r.Body
 
 $r = Invoke-Api -Method PUT -Path "/api/v1/me/favorites/$coursePA" -Session $student
 Invoke-Check "B2. Добавление в избранное -> 204" ($r.Status -eq 204) $r.Body
+
+$r = Invoke-Api -Method GET -Path "/api/v1/courses/$slugPA" -Session $student
+Invoke-Check "B2a. isFavorite в странице курса для автора избранного" ($r.Status -eq 200 -and $r.Json.course.isFavorite -eq $true) $r.Body
+$r = Invoke-Api -Method GET -Path "/api/v1/courses/$slugPA" -Session $anon
+Invoke-Check "B2b. isFavorite=false для гостя" ($r.Status -eq 200 -and $r.Json.course.isFavorite -eq $false) $r.Body
+
 $r = Invoke-Api -Method PUT -Path "/api/v1/me/favorites/$coursePA" -Session $student
 Invoke-Check "B3. Повторное добавление идемпотентно" ($r.Status -eq 204) $r.Body
 
 $r = Invoke-Api -Method GET -Path "/api/v1/me/favorites" -Session $student
 $fav = @($r.Json.items | Where-Object { $_.id -eq $coursePA })[0]
-Invoke-Check "B4. Список содержит курс (CourseItem)" ($r.Status -eq 200 -and $r.Json.total -ge 1 -and $fav -and $fav.slug -eq $slugPA) $r.Body
+Invoke-Check "B4. Список содержит курс (CourseItem, isFavorite=true)" ($r.Status -eq 200 -and $r.Json.total -ge 1 -and $fav -and $fav.slug -eq $slugPA -and $fav.isFavorite -eq $true) $r.Body
 
 $r = Invoke-Api -Method PUT -Path "/api/v1/me/favorites/$coursePD" -Session $student
 Invoke-Check "B5. Черновик в избранное -> 404" ($r.Status -eq 404) $r.Body
@@ -376,6 +398,8 @@ Invoke-Check "B7. Удаление из избранного -> 204" ($r.Status 
 $r = Invoke-Api -Method GET -Path "/api/v1/me/favorites" -Session $student
 $hasFav = @($r.Json.items | Where-Object { $_.id -eq $coursePA }).Count -gt 0
 Invoke-Check "B8. После удаления курса нет" ($r.Status -eq 200 -and -not $hasFav) $r.Body
+$r = Invoke-Api -Method GET -Path "/api/v1/courses/$slugPA" -Session $student
+Invoke-Check "B8a. После удаления isFavorite=false" ($r.Status -eq 200 -and $r.Json.course.isFavorite -eq $false) $r.Body
 $r = Invoke-Api -Method DELETE -Path "/api/v1/me/favorites/$coursePA" -Session $student
 Invoke-Check "B9. Повторное удаление идемпотентно" ($r.Status -eq 204) $r.Body
 

@@ -70,9 +70,9 @@ export default function CourseCard({ course }: { course: CourseItem }): JSX.Elem
   const meQuery = useQuery(meQueryOptions);
   const user = meQuery.data;
 
-  // Признака isFavorite в CourseItem нет (контракт T73): состояние берём из
-  // общего списка ['favorites']. React Query дедуплицирует запрос по ключу,
-  // поэтому все карточки страницы используют один ответ.
+  // Публичные виды курса отдают isFavorite (T73-extension): сердечко верное
+  // сразу, ещё до загрузки общего списка. Когда список ['favorites'] уже
+  // загружен, он источник истины — оптимистичный toggle и сервер сходятся.
   const favoritesQuery = useQuery({
     queryKey: ['favorites'],
     queryFn: myFavorites,
@@ -80,7 +80,9 @@ export default function CourseCard({ course }: { course: CourseItem }): JSX.Elem
     retry: false,
     staleTime: 60_000,
   });
-  const favorite = Boolean(favoritesQuery.data?.some((c) => c.id === course.id));
+  const favorite = favoritesQuery.data
+    ? favoritesQuery.data.some((c) => c.id === course.id)
+    : Boolean(course.isFavorite);
 
   // Toggle: оптимистично правим кэш ['favorites'] (сердечко откликается
   // сразу), при ошибке откатываем, после ответа инвалидируем — список и

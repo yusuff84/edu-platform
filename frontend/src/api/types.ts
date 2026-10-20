@@ -85,6 +85,11 @@ export interface CourseItem {
    * null/"" — обложки нет; плитки без обложки рисуются как раньше.
    */
   coverPath?: string | null;
+  /**
+   * T73-extension: курс в избранном текущего зрителя. Для гостя false;
+   * необязательное поле для совместимости со старыми ответами.
+   */
+  isFavorite?: boolean;
 }
 
 /** Полный курс (repo.Course, JSON-теги backend). */
@@ -112,6 +117,8 @@ export interface Course {
   ratingsCount: number;
   /** Заполняется при отклонении на модерации (omitempty). */
   moderationComment?: string;
+  /** T73-extension: курс в избранном зрителя (false для гостя). */
+  isFavorite?: boolean;
   createdAt: string;
   updatedAt: string;
 }

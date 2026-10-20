@@ -30,6 +30,7 @@ function courseFixture(overrides = {}) {
     ratingsCount: 12,
     category: 'programming',
     coverPath: '/uploads/covers/python.png',
+    isFavorite: true,
     ...overrides,
   };
 }

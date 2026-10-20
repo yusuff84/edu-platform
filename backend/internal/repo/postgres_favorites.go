@@ -14,6 +14,33 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 )
 
+// FavoriteCourseIDs — множество id избранных курсов пользователя. Нужен
+// публичным видам курса для поля isFavorite; никогда не nil.
+func (s *PostgresStore) FavoriteCourseIDs(userID string) map[string]bool {
+	out := make(map[string]bool)
+	if !validUUID(userID) {
+		return out
+	}
+	ctx, cancel := s.ctx()
+	defer cancel()
+	rows, err := s.pool.Query(ctx,
+		`SELECT course_id::text FROM favorites WHERE user_id=$1::uuid`, userID)
+	if err != nil {
+		log.Printf("postgres FavoriteCourseIDs: %v", err)
+		return out
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			log.Printf("postgres FavoriteCourseIDs scan: %v", err)
+			continue
+		}
+		out[id] = true
+	}
+	return out
+}
+
 // isInvalidUUID — ошибка приведения текста к uuid (22P02). Для контракта
 // избранного это «такого курса нет»: POST/DELETE не должны отвечать 500 на
 // мусорный id в URL.

@@ -22,7 +22,6 @@ import (
 
 	"edu-platform/backend/internal/auth"
 	"edu-platform/backend/internal/config"
-	"edu-platform/backend/internal/payments"
 	"edu-platform/backend/internal/repo"
 	"edu-platform/backend/internal/storage"
 )
@@ -95,7 +94,9 @@ func NewRouter(app *App) http.Handler {
 	// к курсу активируется тем же кодом, что и для реальных провайдеров.
 	// Без этого маршрута mock-покупка не работает вообще.
 	// chi r.Get требует http.HandlerFunc — оборачиваем Handler через ServeHTTP.
-	r.Get("/pay/mock/{id}", payments.MockConfirmHandler().ServeHTTP)
+	// Страница читает платёж из Store (handler/mock_payment.go), а не из
+	// in-memory реестра провайдера: статус переживает рестарт API.
+	r.Get("/pay/mock/{id}", app.MockPaymentPage)
 	// T13: обслуживание уже загруженных файлов (обложки курсов и т.п.,
 	// см. internal/storage). Загрузочного эндпоинта в MVP нет — раздаются
 	// только файлы, которые уже лежат в каталоге uploads/.
@@ -146,7 +147,9 @@ func NewRouter(app *App) http.Handler {
 		// хендлер: активная запись/владение курсом/admin).
 		r.Get("/courses/{id}/questions", app.ListLessonQuestions)
 		r.With(app.requireAuth).Post("/courses/{id}/questions", app.CreateLessonQuestion)
+		r.With(app.requireAuth).Patch("/courses/{id}/questions/{questionId}", app.UpdateLessonQuestion)
 		r.With(app.requireAuth).Post("/courses/{id}/questions/{questionId}/answers", app.CreateLessonAnswer)
+		r.With(app.requireAuth).Patch("/courses/{id}/questions/{questionId}/answers/{answerId}", app.UpdateLessonAnswer)
 		r.With(app.requireAuth).Delete("/courses/{id}/questions/{questionId}", app.DeleteLessonQuestion)
 		r.With(app.requireAuth).Delete("/courses/{id}/questions/{questionId}/answers/{answerId}", app.DeleteLessonAnswer)
 

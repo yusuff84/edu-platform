@@ -281,6 +281,12 @@ type StoreAPI interface {
 	// GetLessonAnswer — ответ вопроса курса; false — ответа нет или он
 	// относится к другому вопросу/курсу.
 	GetLessonAnswer(courseID, questionID, answerID string) (*LessonAnswer, bool)
+	// UpdateLessonQuestionBody меняет текст вопроса. ErrNotFound — вопроса нет
+	// в этом курсе. Права (только автор) проверяет handler.
+	UpdateLessonQuestionBody(courseID, questionID, body string) (*LessonQuestion, error)
+	// UpdateLessonAnswerBody меняет текст ответа. ErrNotFound — ответа нет
+	// в этом вопросе/курсе. Права (только автор) проверяет handler.
+	UpdateLessonAnswerBody(courseID, questionID, answerID, body string) (*LessonAnswer, error)
 	// DeleteLessonQuestion удаляет вопрос; ответы уходят каскадом.
 	// ErrNotFound — вопроса нет в этом курсе.
 	DeleteLessonQuestion(courseID, questionID string) error
@@ -303,6 +309,10 @@ type StoreAPI interface {
 	// добавленные позже первыми. Архивные, черновики и удалённые курсы в
 	// список не попадают. Никогда не nil (пустой слайс — избранного нет).
 	ListFavoriteCoursesByUser(userID string) []*Course
+	// FavoriteCourseIDs — множество id курсов в избранном пользователя.
+	// Нужен публичным видам курса для аддитивного поля isFavorite: один
+	// запрос на страницу вместо проверки каждой карточки. Никогда не nil.
+	FavoriteCourseIDs(userID string) map[string]bool
 
 	// ---- T77: аналитика учителя ----
 
@@ -328,7 +338,8 @@ type StoreAPI interface {
 	// ---- T79: похожие курсы ----
 
 	// ListSimilarCourses — published-курсы той же category, что и courseID,
-	// кроме самого курса (контракт T79). Сортировка: число АКТИВНЫХ записей
+	// кроме самого курса (T79). Если категория пуста, добирает published-курсы
+	// других категорий (расширение T79). Сортировка: число АКТИВНЫХ записей
 	// по убыванию, затем avgRating по убыванию, затем createdAt по убыванию
 	// (при полном совпадении — id по убыванию, чтобы порядок был
 	// детерминированным и совпадал у in-memory и Postgres).

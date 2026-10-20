@@ -27,9 +27,10 @@ func (a *App) GetTeacherProfile(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusNotFound, "Преподаватель не найден")
 		return
 	}
+	favs := a.favoriteCourseIDs(r)
 	courses := make([]courseItem, 0, len(data.Courses))
 	for _, c := range data.Courses {
-		courses = append(courses, toCourseItem(c))
+		courses = append(courses, toCourseItemFor(c, favs))
 	}
 	writeJSON(w, http.StatusOK, teacherProfileResponse{
 		Teacher: data.Teacher,

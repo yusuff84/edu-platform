@@ -2037,6 +2037,58 @@ func (s *PostgresStore) GetLessonAnswer(courseID, questionID, answerID string) (
 	return a, true
 }
 
+// UpdateLessonQuestionBody меняет текст вопроса (T71-edit). ErrNotFound —
+// вопроса нет в этом курсе. Права (только автор) проверяет handler.
+func (s *PostgresStore) UpdateLessonQuestionBody(courseID, questionID, body string) (*LessonQuestion, error) {
+	if !validUUID(courseID) || !validUUID(questionID) {
+		return nil, ErrNotFound
+	}
+	ctx, cancel := s.ctx()
+	defer cancel()
+	tag, err := s.pool.Exec(ctx,
+		`UPDATE lesson_questions SET body=$3
+		 WHERE id=$2::uuid AND course_id=$1::uuid`,
+		courseID, questionID, body)
+	if err != nil {
+		return nil, fmt.Errorf("не удалось сохранить вопрос: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return nil, ErrNotFound
+	}
+	q, ok := s.GetLessonQuestion(courseID, questionID)
+	if !ok {
+		return nil, ErrNotFound
+	}
+	return q, nil
+}
+
+// UpdateLessonAnswerBody меняет текст ответа (T71-edit). ErrNotFound — ответа
+// нет в этом вопросе/курсе. Права (только автор) проверяет handler.
+func (s *PostgresStore) UpdateLessonAnswerBody(courseID, questionID, answerID, body string) (*LessonAnswer, error) {
+	if !validUUID(courseID) || !validUUID(questionID) || !validUUID(answerID) {
+		return nil, ErrNotFound
+	}
+	ctx, cancel := s.ctx()
+	defer cancel()
+	tag, err := s.pool.Exec(ctx,
+		`UPDATE lesson_answers SET body=$4
+		 WHERE id=$3::uuid AND question_id=$2::uuid
+		 AND EXISTS (SELECT 1 FROM lesson_questions q
+		             WHERE q.id = lesson_answers.question_id AND q.course_id=$1::uuid)`,
+		courseID, questionID, answerID, body)
+	if err != nil {
+		return nil, fmt.Errorf("не удалось сохранить ответ: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return nil, ErrNotFound
+	}
+	a, ok := s.GetLessonAnswer(courseID, questionID, answerID)
+	if !ok {
+		return nil, ErrNotFound
+	}
+	return a, nil
+}
+
 // DeleteLessonQuestion удаляет вопрос; ответы уходят каскадом (FK 012).
 // ErrNotFound — вопроса нет в этом курсе.
 func (s *PostgresStore) DeleteLessonQuestion(courseID, questionID string) error {
@@ -2310,7 +2362,9 @@ func (s *PostgresStore) TeacherCourseStats(teacherID string, all bool, limit int
 //
 // Порядок полностью повторяет in-memory: активные записи DESC, avgRating
 // DESC, createdAt DESC, id DESC. limit нормализуется (по умолчанию 4,
-// максимум 12). Нет исходного published-курса — пустой результат.
+// максимум 12). Если в категории ничего нет, второй запрос добирает
+// published-курсы других категорий (расширение T79). Нет исходного
+// published-курса — пустой результат.
 func (s *PostgresStore) ListSimilarCourses(courseID string, limit int) []*Course {
 	limit = normalizeSimilarCoursesLimit(limit)
 	if _, err := uuid.Parse(strings.TrimSpace(courseID)); err != nil {
@@ -2318,35 +2372,46 @@ func (s *PostgresStore) ListSimilarCourses(courseID string, limit int) []*Course
 	}
 	ctx, cancel := s.ctx()
 	defer cancel()
-	rows, err := s.pool.Query(ctx,
-		`SELECT `+courseColsJoined+`
-		 FROM courses c
-		 JOIN courses src ON src.id = $1::uuid AND src.status = 'published'
-		 LEFT JOIN (
-		     SELECT course_id, COUNT(*)::int AS active_count
-		     FROM enrollments
-		     WHERE status = 'active'
-		     GROUP BY course_id
-		 ) e ON e.course_id = c.id
-		 WHERE c.status = 'published'
-		   AND c.id <> src.id
-		   AND COALESCE(NULLIF(TRIM(c.category), ''), 'other')
-		       = COALESCE(NULLIF(TRIM(src.category), ''), 'other')
-		 ORDER BY COALESCE(e.active_count, 0) DESC,
-		          COALESCE(c.avg_rating, 0) DESC,
-		          c.created_at DESC,
-		          c.id DESC
-		 LIMIT $2`, courseID, limit)
-	if err != nil {
-		log.Printf("postgres ListSimilarCourses: %v", err)
-		return nil
-	}
-	defer rows.Close()
-	var out []*Course
-	for rows.Next() {
-		if c, err := scanCourse(rows.Scan); err == nil {
-			out = append(out, c)
+	load := func(categoryFilter string) []*Course {
+		rows, err := s.pool.Query(ctx,
+			`SELECT `+courseColsJoined+`
+			 FROM courses c
+			 JOIN courses src ON src.id = $1::uuid AND src.status = 'published'
+			 LEFT JOIN (
+			     SELECT course_id, COUNT(*)::int AS active_count
+			     FROM enrollments
+			     WHERE status = 'active'
+			     GROUP BY course_id
+			 ) e ON e.course_id = c.id
+			 WHERE c.status = 'published'
+			   AND c.id <> src.id
+			   AND `+categoryFilter+`
+			 ORDER BY COALESCE(e.active_count, 0) DESC,
+			          COALESCE(c.avg_rating, 0) DESC,
+			          c.created_at DESC,
+			          c.id DESC
+			 LIMIT $2`, courseID, limit)
+		if err != nil {
+			log.Printf("postgres ListSimilarCourses: %v", err)
+			return nil
 		}
+		defer rows.Close()
+		var list []*Course
+		for rows.Next() {
+			if c, err := scanCourse(rows.Scan); err == nil {
+				list = append(list, c)
+			}
+		}
+		return list
+	}
+	const sameCategory = `COALESCE(NULLIF(TRIM(c.category), ''), 'other')
+		= COALESCE(NULLIF(TRIM(src.category), ''), 'other')`
+	out := load(sameCategory)
+	if len(out) == 0 {
+		// Аддитивное расширение T79: пустую категорию добираем другими
+		// published-курсами, чтобы блок «Похожие курсы» не пустовал.
+		out = load(`COALESCE(NULLIF(TRIM(c.category), ''), 'other')
+			<> COALESCE(NULLIF(TRIM(src.category), ''), 'other')`)
 	}
 	return out
 }

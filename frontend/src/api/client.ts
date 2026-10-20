@@ -727,6 +727,37 @@ export function answerQuestion(
   ).then((res) => res.answer);
 }
 
+/** Изменить текст своего вопроса; конверт { question } разворачивается. */
+export function editQuestion(
+  courseId: string,
+  questionId: string,
+  body: string,
+): Promise<LessonQuestion> {
+  return apiFetch<{ question: LessonQuestion }>(
+    `/courses/${encodeURIComponent(courseId)}/questions/${encodeURIComponent(questionId)}`,
+    {
+      method: 'PATCH',
+      body: JSON.stringify({ body }),
+    },
+  ).then((res) => res.question);
+}
+
+/** Изменить текст своего ответа; конверт { answer } разворачивается. */
+export function editAnswer(
+  courseId: string,
+  questionId: string,
+  answerId: string,
+  body: string,
+): Promise<LessonAnswer> {
+  return apiFetch<{ answer: LessonAnswer }>(
+    `/courses/${encodeURIComponent(courseId)}/questions/${encodeURIComponent(questionId)}/answers/${encodeURIComponent(answerId)}`,
+    {
+      method: 'PATCH',
+      body: JSON.stringify({ body }),
+    },
+  ).then((res) => res.answer);
+}
+
 /** Удалить вопрос вместе с ответами; успех — 204. */
 export function deleteQuestion(
   courseId: string,

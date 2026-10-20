@@ -5,7 +5,10 @@ package handler
 // урокам» (заморожен):
 //   - GET  /courses/{id}/questions?lessonId=&page=&limit= — публичный;
 //   - POST /courses/{id}/questions — записанные, владелец курса, admin;
+//   - PATCH /courses/{id}/questions/{questionId} — автор вопроса;
 //   - POST /courses/{id}/questions/{questionId}/answers — те же права;
+//   - PATCH /courses/{id}/questions/{questionId}/answers/{answerId} — автор
+//     ответа;
 //   - DELETE /courses/{id}/questions/{questionId} — автор, владелец, admin;
 //   - DELETE /courses/{id}/questions/{questionId}/answers/{answerId} — автор
 //     ответа, владелец, admin.
@@ -219,6 +222,100 @@ func (a *App) CreateLessonAnswer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusCreated, map[string]any{"answer": ans})
+}
+
+type updateLessonTextRequest struct {
+	Body string `json:"body"`
+}
+
+// UpdateLessonQuestion — PATCH /courses/{id}/questions/{questionId}: правка
+// текста вопроса его автором. 200 {"question": LessonQuestion}. Владелец
+// курса и admin могут удалить вопрос, но не переписать чужой текст — 403.
+func (a *App) UpdateLessonQuestion(w http.ResponseWriter, r *http.Request) {
+	u, ok := a.currentUser(r)
+	if !ok {
+		writeErr(w, http.StatusUnauthorized, "Требуется вход в аккаунт")
+		return
+	}
+	c, ok := a.courseByIDForQA(w, r)
+	if !ok {
+		return
+	}
+	questionID := strings.TrimSpace(chi.URLParam(r, "questionId"))
+	q, found := a.Store.GetLessonQuestion(c.ID, questionID)
+	if !found {
+		writeErr(w, http.StatusNotFound, "Вопрос не найден")
+		return
+	}
+	if q.StudentID != u.ID {
+		writeErr(w, http.StatusForbidden, "Нет прав на редактирование")
+		return
+	}
+	var req updateLessonTextRequest
+	if !decodeJSON(w, r, &req) {
+		return
+	}
+	body := strings.TrimSpace(req.Body)
+	if n := utf8.RuneCountInString(body); n < questionMinRunes || n > questionMaxRunes {
+		writeErr(w, http.StatusBadRequest, "Вопрос: от 10 до 2000 символов")
+		return
+	}
+	updated, err := a.Store.UpdateLessonQuestionBody(c.ID, questionID, body)
+	if err != nil {
+		if errors.Is(err, repo.ErrNotFound) {
+			writeErr(w, http.StatusNotFound, "Вопрос не найден")
+			return
+		}
+		writeErr(w, http.StatusInternalServerError, "Не удалось сохранить вопрос")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"question": updated})
+}
+
+// UpdateLessonAnswer — PATCH
+// /courses/{id}/questions/{questionId}/answers/{answerId}: правка текста
+// ответа его автором. 200 {"answer": LessonAnswer}. Владелец курса и admin
+// могут удалить ответ, но не переписать чужой текст — 403.
+func (a *App) UpdateLessonAnswer(w http.ResponseWriter, r *http.Request) {
+	u, ok := a.currentUser(r)
+	if !ok {
+		writeErr(w, http.StatusUnauthorized, "Требуется вход в аккаунт")
+		return
+	}
+	c, ok := a.courseByIDForQA(w, r)
+	if !ok {
+		return
+	}
+	questionID := strings.TrimSpace(chi.URLParam(r, "questionId"))
+	answerID := strings.TrimSpace(chi.URLParam(r, "answerId"))
+	ans, found := a.Store.GetLessonAnswer(c.ID, questionID, answerID)
+	if !found {
+		writeErr(w, http.StatusNotFound, "Ответ не найден")
+		return
+	}
+	if ans.AuthorID != u.ID {
+		writeErr(w, http.StatusForbidden, "Нет прав на редактирование")
+		return
+	}
+	var req updateLessonTextRequest
+	if !decodeJSON(w, r, &req) {
+		return
+	}
+	body := strings.TrimSpace(req.Body)
+	if n := utf8.RuneCountInString(body); n < answerMinRunes || n > answerMaxRunes {
+		writeErr(w, http.StatusBadRequest, "Ответ: от 3 до 2000 символов")
+		return
+	}
+	updated, err := a.Store.UpdateLessonAnswerBody(c.ID, questionID, answerID, body)
+	if err != nil {
+		if errors.Is(err, repo.ErrNotFound) {
+			writeErr(w, http.StatusNotFound, "Ответ не найден")
+			return
+		}
+		writeErr(w, http.StatusInternalServerError, "Не удалось сохранить ответ")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"answer": updated})
 }
 
 // DeleteLessonQuestion — DELETE /courses/{id}/questions/{questionId}: автор

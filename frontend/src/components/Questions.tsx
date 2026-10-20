@@ -19,6 +19,8 @@ import {
   askQuestion,
   deleteAnswer,
   deleteQuestion,
+  editAnswer,
+  editQuestion,
   formatDate,
   listLessonQuestions,
   me,
@@ -60,6 +62,15 @@ export default function Questions({
   const [answerForId, setAnswerForId] = useState<string | null>(null);
   const [answerDraft, setAnswerDraft] = useState('');
   const [answerError, setAnswerError] = useState('');
+  const [editingQuestionId, setEditingQuestionId] = useState<string | null>(null);
+  const [questionEditDraft, setQuestionEditDraft] = useState('');
+  const [questionEditError, setQuestionEditError] = useState('');
+  const [editingAnswer, setEditingAnswer] = useState<{
+    questionId: string;
+    answerId: string;
+  } | null>(null);
+  const [answerEditDraft, setAnswerEditDraft] = useState('');
+  const [answerEditError, setAnswerEditError] = useState('');
   const [notice, setNotice] = useState('');
   const [actionError, setActionError] = useState('');
 
@@ -112,6 +123,40 @@ export default function Questions({
     },
   });
 
+  const editQuestionMutation = useMutation({
+    mutationFn: (v: { questionId: string; body: string }) =>
+      editQuestion(courseId, v.questionId, v.body),
+    onSuccess: () => {
+      setEditingQuestionId(null);
+      setQuestionEditDraft('');
+      setQuestionEditError('');
+      setActionError('');
+      setNotice(t('p9.qa.edited'));
+      invalidateQuestions();
+    },
+    onError: (e: unknown) => {
+      setNotice('');
+      setQuestionEditError(errorText(e));
+    },
+  });
+
+  const editAnswerMutation = useMutation({
+    mutationFn: (v: { questionId: string; answerId: string; body: string }) =>
+      editAnswer(courseId, v.questionId, v.answerId, v.body),
+    onSuccess: () => {
+      setEditingAnswer(null);
+      setAnswerEditDraft('');
+      setAnswerEditError('');
+      setActionError('');
+      setNotice(t('p9.qa.answerEdited'));
+      invalidateQuestions();
+    },
+    onError: (e: unknown) => {
+      setNotice('');
+      setAnswerEditError(errorText(e));
+    },
+  });
+
   const deleteQuestionMutation = useMutation({
     mutationFn: (questionId: string) => deleteQuestion(courseId, questionId),
     onSuccess: () => {
@@ -148,6 +193,12 @@ export default function Questions({
     setAnswerForId(null);
     setAnswerDraft('');
     setAnswerError('');
+    setEditingQuestionId(null);
+    setQuestionEditDraft('');
+    setQuestionEditError('');
+    setEditingAnswer(null);
+    setAnswerEditDraft('');
+    setAnswerEditError('');
     setNotice('');
     setActionError('');
   }, [courseId, lessonId]);
@@ -207,6 +258,77 @@ export default function Questions({
     setAnswerError('');
     setNotice('');
     answerMutation.mutate({ questionId, body });
+  };
+
+  const startQuestionEdit = (q: LessonQuestion): void => {
+    setEditingQuestionId(q.id);
+    setQuestionEditDraft(q.body);
+    setQuestionEditError('');
+    setEditingAnswer(null);
+    setAnswerEditError('');
+    setAnswerForId(null);
+    setAnswerError('');
+    setNotice('');
+    setActionError('');
+  };
+
+  const cancelQuestionEdit = (): void => {
+    setEditingQuestionId(null);
+    setQuestionEditDraft('');
+    setQuestionEditError('');
+  };
+
+  const submitQuestionEdit = (
+    e: FormEvent<HTMLFormElement>,
+    questionId: string,
+  ): void => {
+    e.preventDefault();
+    const body = questionEditDraft.trim();
+    if (body.length < 10 || body.length > 2000) {
+      setQuestionEditError(QUESTION_LENGTH_ERROR);
+      return;
+    }
+    setQuestionEditError('');
+    setNotice('');
+    editQuestionMutation.mutate({ questionId, body });
+  };
+
+  const startAnswerEdit = (
+    questionId: string,
+    answerId: string,
+    body: string,
+  ): void => {
+    setEditingAnswer({ questionId, answerId });
+    setAnswerEditDraft(body);
+    setAnswerEditError('');
+    setEditingQuestionId(null);
+    setQuestionEditError('');
+    setAnswerForId(null);
+    setAnswerError('');
+    setNotice('');
+    setActionError('');
+  };
+
+  const cancelAnswerEdit = (): void => {
+    setEditingAnswer(null);
+    setAnswerEditDraft('');
+    setAnswerEditError('');
+  };
+
+  const submitAnswerEdit = (
+    e: FormEvent<HTMLFormElement>,
+    questionId: string,
+    answerId: string,
+  ): void => {
+    e.preventDefault();
+    const body = answerEditDraft.trim();
+    if (body.length < 3 || body.length > 2000) {
+      setAnswerEditError(ANSWER_LENGTH_ERROR);
+      return;
+    }
+    setAnswerEditError('');
+    setNotice('');
+    editAnswerMutation.mutate({ questionId, answerId, body });
   };
 
   const removeQuestion = (questionId: string): void => {
@@ -333,6 +455,17 @@ export default function Questions({
                 <div className="qa-question-head">
                   <span className="qa-author">{q.studentName || '—'}</span>
                   <span className="muted qa-date">{formatDate(q.createdAt)}</span>
+                  {mine && editingQuestionId !== q.id && (
+                    <button
+                      type="button"
+                      className="btn btn-sm qa-edit"
+                      onClick={() => startQuestionEdit(q)}
+                      disabled={editQuestionMutation.isPending}
+                      aria-label={`${t('p9.qa.edit')}: ${q.body}`}
+                    >
+                      {t('p9.qa.edit')}
+                    </button>
+                  )}
                   {mine && (
                     <button
                       type="button"
@@ -345,7 +478,64 @@ export default function Questions({
                     </button>
                   )}
                 </div>
-                <p className="qa-body">{q.body}</p>
+                {editingQuestionId === q.id ? (
+                  <form
+                    className="qa-form qa-edit-form"
+                    onSubmit={(e) => submitQuestionEdit(e, q.id)}
+                  >
+                    <label className="field" htmlFor={`qa-question-edit-${q.id}`}>
+                      <span>{t('p9.qa.edit')}</span>
+                      <textarea
+                        id={`qa-question-edit-${q.id}`}
+                        className="input"
+                        rows={4}
+                        maxLength={2000}
+                        value={questionEditDraft}
+                        aria-invalid={Boolean(questionEditError)}
+                        aria-describedby={
+                          questionEditError
+                            ? `qa-question-edit-error-${q.id}`
+                            : undefined
+                        }
+                        onChange={(e) => {
+                          setQuestionEditDraft(e.target.value);
+                          if (questionEditError) setQuestionEditError('');
+                        }}
+                      />
+                    </label>
+                    <div className="qa-form-foot">
+                      <span className="qa-counter">{questionEditDraft.length}/2000</span>
+                      <div className="qa-actions">
+                        <button
+                          type="submit"
+                          className="btn btn-primary btn-sm"
+                          disabled={editQuestionMutation.isPending}
+                        >
+                          {t('p9.qa.save')}
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn-sm"
+                          onClick={cancelQuestionEdit}
+                          disabled={editQuestionMutation.isPending}
+                        >
+                          {t('p9.qa.cancel')}
+                        </button>
+                      </div>
+                    </div>
+                    {questionEditError && (
+                      <p
+                        className="err"
+                        id={`qa-question-edit-error-${q.id}`}
+                        role="alert"
+                      >
+                        {questionEditError}
+                      </p>
+                    )}
+                  </form>
+                ) : (
+                  <p className="qa-body">{q.body}</p>
+                )}
 
                 {q.answers.length > 0 && (
                   <div className="qa-answers">
@@ -371,6 +561,22 @@ export default function Questions({
                             <span className="muted qa-date">
                               {formatDate(a.createdAt)}
                             </span>
+                            {Boolean(user) &&
+                              user?.id === a.authorId &&
+                              !(editingAnswer?.questionId === q.id &&
+                                editingAnswer.answerId === a.id) && (
+                                <button
+                                  type="button"
+                                  className="btn btn-sm qa-edit"
+                                  onClick={() =>
+                                    startAnswerEdit(q.id, a.id, a.body)
+                                  }
+                                  disabled={editAnswerMutation.isPending}
+                                  aria-label={`${t('p9.qa.edit')}: ${a.body}`}
+                                >
+                                  {t('p9.qa.edit')}
+                                </button>
+                              )}
                             {Boolean(user) && user?.id === a.authorId && (
                               <button
                                 type="button"
@@ -383,7 +589,72 @@ export default function Questions({
                               </button>
                             )}
                           </div>
-                          <p className="qa-body">{a.body}</p>
+                          {editingAnswer?.questionId === q.id &&
+                          editingAnswer.answerId === a.id ? (
+                            <form
+                              className="qa-form qa-edit-form"
+                              onSubmit={(e) =>
+                                submitAnswerEdit(e, q.id, a.id)
+                              }
+                            >
+                              <label
+                                className="field"
+                                htmlFor={`qa-answer-edit-${a.id}`}
+                              >
+                                <span>{t('p9.qa.edit')}</span>
+                                <textarea
+                                  id={`qa-answer-edit-${a.id}`}
+                                  className="input"
+                                  rows={3}
+                                  maxLength={2000}
+                                  value={answerEditDraft}
+                                  aria-invalid={Boolean(answerEditError)}
+                                  aria-describedby={
+                                    answerEditError
+                                      ? `qa-answer-edit-error-${a.id}`
+                                      : undefined
+                                  }
+                                  onChange={(e) => {
+                                    setAnswerEditDraft(e.target.value);
+                                    if (answerEditError) setAnswerEditError('');
+                                  }}
+                                />
+                              </label>
+                              <div className="qa-form-foot">
+                                <span className="qa-counter">
+                                  {answerEditDraft.length}/2000
+                                </span>
+                                <div className="qa-actions">
+                                  <button
+                                    type="submit"
+                                    className="btn btn-primary btn-sm"
+                                    disabled={editAnswerMutation.isPending}
+                                  >
+                                    {t('p9.qa.save')}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="btn btn-sm"
+                                    onClick={cancelAnswerEdit}
+                                    disabled={editAnswerMutation.isPending}
+                                  >
+                                    {t('p9.qa.cancel')}
+                                  </button>
+                                </div>
+                              </div>
+                              {answerEditError && (
+                                <p
+                                  className="err"
+                                  id={`qa-answer-edit-error-${a.id}`}
+                                  role="alert"
+                                >
+                                  {answerEditError}
+                                </p>
+                              )}
+                            </form>
+                          ) : (
+                            <p className="qa-body">{a.body}</p>
+                          )}
                         </li>
                       ))}
                     </ul>

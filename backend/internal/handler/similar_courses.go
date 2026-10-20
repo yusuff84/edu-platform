@@ -47,9 +47,10 @@ func (a *App) ListSimilarCourses(w http.ResponseWriter, r *http.Request) {
 	}
 
 	similar := a.Store.ListSimilarCourses(c.ID, limit)
+	favs := a.favoriteCourseIDs(r)
 	items := make([]courseItem, 0, len(similar))
 	for _, sc := range similar {
-		items = append(items, toCourseItem(sc))
+		items = append(items, toCourseItemFor(sc, favs))
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"items": items, "total": len(items)})
 }

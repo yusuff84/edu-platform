@@ -74,6 +74,19 @@ func (s *Store) ListFavoriteCoursesByUser(userID string) []*Course {
 	return out
 }
 
+// FavoriteCourseIDs возвращает множество id избранных курсов пользователя.
+// Нужен публичным видам курса для поля isFavorite; никогда не nil.
+func (s *Store) FavoriteCourseIDs(userID string) map[string]bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	favs := s.favorites[userID]
+	out := make(map[string]bool, len(favs))
+	for courseID := range favs {
+		out[courseID] = true
+	}
+	return out
+}
+
 // dropFavoritesByUserLocked — каскад удаления пользователя
 // (зеркало ON DELETE CASCADE 013_favorites.sql). Вызывается с s.mu.
 func (s *Store) dropFavoritesByUserLocked(userID string) {

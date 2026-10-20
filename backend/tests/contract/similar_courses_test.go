@@ -227,9 +227,10 @@ func TestSimilarCoursesContract(t *testing.T) {
 	})
 }
 
-// TestSimilarCoursesEmptyCategory — если в категории исходного курса больше
-// нет published-курсов, ответ — 200 с пустым массивом items и total 0.
-func TestSimilarCoursesEmptyCategory(t *testing.T) {
+// TestSimilarCoursesEmptyCategoryFallback — если в категории исходного курса
+// больше нет published-курсов, подборка добирается курсами других категорий
+// (расширение T79), а черновики по-прежнему не попадают.
+func TestSimilarCoursesEmptyCategoryFallback(t *testing.T) {
 	app, router := newTestApp()
 	teacher, err := app.Store.CreateUser("similar-empty@example.com", "hash", repo.RoleTeacher)
 	if err != nil {
@@ -246,8 +247,12 @@ func TestSimilarCoursesEmptyCategory(t *testing.T) {
 	})
 
 	total, items := similarGet(t, router, src.ID, "")
-	if total != 0 || len(items) != 0 {
-		t.Fatalf("пустая категория: total=%d items=%v, ждали пустой массив", total, items)
+	if total != 1 || len(items) != 1 {
+		t.Fatalf("пустая категория: total=%d items=%v, ждали fallback из одной другой категории", total, items)
+	}
+	similarWantSlugs(t, items, "similar-empty-other")
+	if items[0]["category"] != "ai" {
+		t.Fatalf("fallback должен взять published-курс другой категории: %v", items[0])
 	}
 	if draft.Status != repo.CourseDraft {
 		t.Fatalf("тестовый черновик получил статус %q", draft.Status)

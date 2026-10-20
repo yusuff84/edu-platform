@@ -124,6 +124,27 @@
   overflow-wrap: anywhere;
 }
 
+/* «Редактировать» — тихая ссылка рядом с датой, без акцентной кнопки. */
+.qa-edit {
+  border-color: transparent;
+  background: transparent;
+  color: var(--brand);
+  font-weight: 700;
+}
+
+.qa-edit:hover {
+  border-color: transparent;
+  background: var(--brand-bg, #fff1ef);
+  color: var(--brand);
+  box-shadow: none;
+}
+
+.qa-edit-form {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--line);
+}
+
 /* «Удалить» — только у своих сообщений; тихая ссылка, а не акцентная кнопка. */
 .qa-delete {
   margin-left: auto;

@@ -487,3 +487,115 @@ func TestLessonAnswersAndDeletionRights(t *testing.T) {
 		t.Fatalf("DELETE вопроса админом: status=%d body=%s", rec.Code, rec.Body.String())
 	}
 }
+
+// TestLessonQuestionAndAnswerEditRights — правка текста вопроса/ответа:
+// только автор (не владелец курса и не admin), trim, валидация длины,
+// 404 для чужого курса/несуществующей записи, обновление в публичной ленте.
+func TestLessonQuestionAndAnswerEditRights(t *testing.T) {
+	app, router := newTestApp()
+	teacherCookies, courseID, _ := seedPublishedCourse(t, app, router, 0)
+	lessonID := qaLessonIDs(t, app, courseID)[0]
+	questionsPath := "/api/v1/courses/" + courseID + "/questions"
+
+	authorCookies, _ := qaEnrollStudent(t, router, courseID, "qa-edit-author@example.com")
+	otherCookies, _ := qaEnrollStudent(t, router, courseID, "qa-edit-other@example.com")
+	adminCookies := loginUser(t, router, "admin@example.com", "password123")
+	q := qaPostQuestion(t, router, courseID, lessonID,
+		"Исходный текст вопроса для проверки правки", authorCookies)
+	questionID := q["id"].(string)
+	questionPath := questionsPath + "/" + questionID
+
+	// Чужие (ученик, владелец курса, admin) не переписывают авторский текст.
+	for name, cookies := range map[string][]*http.Cookie{
+		"другой ученик": otherCookies,
+		"владелец":      teacherCookies,
+		"admin":         adminCookies,
+	} {
+		rec := doRequest(t, router, http.MethodPatch, questionPath,
+			map[string]any{"body": "Чужой текст вопроса"}, cookies)
+		if rec.Code != http.StatusForbidden {
+			t.Fatalf("%s: status=%d, ждали 403: %s", name, rec.Code, rec.Body.String())
+		}
+	}
+
+	// Автор правит вопрос: body обрезается, ответы/метаданные сохраняются.
+	rec := doRequest(t, router, http.MethodPatch, questionPath,
+		map[string]any{"body": "  Обновлённый текст вопроса про замыкания  "}, authorCookies)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("PATCH вопроса: status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var envelope map[string]any
+	decodeBody(t, rec, &envelope)
+	updated, _ := envelope["question"].(map[string]any)
+	if updated["body"] != "Обновлённый текст вопроса про замыкания" {
+		t.Fatalf("body после PATCH=%q", updated["body"])
+	}
+	if updated["id"] != questionID || updated["studentId"] != q["studentId"] {
+		t.Fatalf("PATCH изменил метаданные вопроса: %v", updated)
+	}
+
+	// Валидация: после trim 10..2000 символов.
+	for _, bad := range []string{"", "  коротко  ", strings.Repeat("я", 2001)} {
+		rec := doRequest(t, router, http.MethodPatch, questionPath,
+			map[string]any{"body": bad}, authorCookies)
+		qaErrText(t, rec, http.StatusBadRequest, "Вопрос: от 10 до 2000 символов")
+	}
+
+	// 404: вопроса нет / он принадлежит другому курсу.
+	missing := "00000000-0000-4000-8000-000000000000"
+	rec = doRequest(t, router, http.MethodPatch, questionsPath+"/"+missing,
+		map[string]any{"body": "Текст для несуществующего вопроса"}, authorCookies)
+	qaErrText(t, rec, http.StatusNotFound, "Вопрос не найден")
+	foreignTeacherCookies, foreignCourseID, foreignLessonID := qaDraftCourseWithLesson(t, app, router, "qa-edit-foreign")
+	foreignQ := qaPostQuestion(t, router, foreignCourseID, foreignLessonID,
+		"Вопрос другого курса для проверки", foreignTeacherCookies)
+	rec = doRequest(t, router, http.MethodPatch,
+		questionsPath+"/"+foreignQ["id"].(string),
+		map[string]any{"body": "Текст в чужом курсе"}, authorCookies)
+	qaErrText(t, rec, http.StatusNotFound, "Вопрос не найден")
+
+	// Ответ: автор правит свой текст, остальные — 403.
+	answersPath := questionPath + "/answers"
+	rec = doRequest(t, router, http.MethodPost, answersPath,
+		map[string]any{"body": "Исходный текст ответа"}, otherCookies)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create answer: status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	decodeBody(t, rec, &envelope)
+	answer, _ := envelope["answer"].(map[string]any)
+	answerID := answer["id"].(string)
+	answerPath := answersPath + "/" + answerID
+
+	rec = doRequest(t, router, http.MethodPatch, answerPath,
+		map[string]any{"body": "Чужой текст ответа"}, authorCookies)
+	qaErrText(t, rec, http.StatusForbidden, "Нет прав на редактирование")
+	rec = doRequest(t, router, http.MethodPatch, answerPath,
+		map[string]any{"body": "  Обновлённый текст ответа  "}, otherCookies)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("PATCH ответа: status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	decodeBody(t, rec, &envelope)
+	answer, _ = envelope["answer"].(map[string]any)
+	if answer["body"] != "Обновлённый текст ответа" || answer["id"] != answerID {
+		t.Fatalf("ответ после PATCH: %v", answer)
+	}
+	for _, bad := range []string{"", "  ok  ", strings.Repeat("я", 2001)} {
+		rec := doRequest(t, router, http.MethodPatch, answerPath,
+			map[string]any{"body": bad}, otherCookies)
+		qaErrText(t, rec, http.StatusBadRequest, "Ответ: от 3 до 2000 символов")
+	}
+	rec = doRequest(t, router, http.MethodPatch, answersPath+"/"+missing,
+		map[string]any{"body": "Текст для несуществующего ответа"}, otherCookies)
+	qaErrText(t, rec, http.StatusNotFound, "Ответ не найден")
+
+	// Публичная лента отдаёт обновлённые тексты.
+	envelope = qaListQuestions(t, router, questionsPath, nil)
+	listed := qaQuestionByID(t, envelope, questionID)
+	if listed["body"] != "Обновлённый текст вопроса про замыкания" {
+		t.Fatalf("лента: старый текст вопроса %q", listed["body"])
+	}
+	answers, _ := listed["answers"].([]any)
+	if len(answers) != 1 || answers[0].(map[string]any)["body"] != "Обновлённый текст ответа" {
+		t.Fatalf("лента: старый текст ответа %v", listed["answers"])
+	}
+}

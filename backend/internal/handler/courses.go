@@ -23,6 +23,9 @@ type courseItem struct {
 	Status       repo.CourseStatus `json:"status,omitempty"`
 	AvgRating    float64           `json:"avgRating"`
 	RatingsCount int               `json:"ratingsCount"`
+	// IsFavorite — курс в избранном текущего зрителя; для гостя всегда false.
+	// Аддитивное поле публичных видов курса (T73-extension).
+	IsFavorite bool `json:"isFavorite"`
 }
 
 func toCourseItem(c *repo.Course) courseItem {
@@ -37,6 +40,30 @@ func toCourseItem(c *repo.Course) courseItem {
 		PriceCents: c.PriceCents, Currency: c.Currency,
 		AvgRating: c.AvgRating, RatingsCount: c.RatingsCount,
 	}
+}
+
+// favoriteCourseIDs — множество избранных курсов текущего зрителя. nil для
+// гостя: все isFavorite остаются false, лишнего запроса в хранилище нет.
+func (a *App) favoriteCourseIDs(r *http.Request) map[string]bool {
+	u := a.optionalUser(r)
+	if u == nil {
+		return nil
+	}
+	return a.Store.FavoriteCourseIDs(u.ID)
+}
+
+// toCourseItemFor — карточка курса с признаком избранного для зрителя.
+func toCourseItemFor(c *repo.Course, favs map[string]bool) courseItem {
+	item := toCourseItem(c)
+	item.IsFavorite = favs[c.ID]
+	return item
+}
+
+// courseWithFavorite — полный курс в ответе страницы курса с аддитивным
+// isFavorite. Встроенный указатель сохраняет прежнюю плоскую форму Course.
+type courseWithFavorite struct {
+	*repo.Course
+	IsFavorite bool `json:"isFavorite"`
 }
 
 // catalogDefaults — значения фильтров GET /courses по умолчанию (T65):
@@ -105,9 +132,10 @@ func (a *App) ListCourses(w http.ResponseWriter, r *http.Request) {
 	if end > len(all) {
 		end = len(all)
 	}
+	favs := a.favoriteCourseIDs(r)
 	items := make([]courseItem, 0, end-start)
 	for _, c := range all[start:end] {
-		items = append(items, toCourseItem(c))
+		items = append(items, toCourseItemFor(c, favs))
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"items": items, "total": len(all), "page": safePage, "limit": safeLimit,
@@ -217,7 +245,11 @@ func (a *App) GetCourse(w http.ResponseWriter, r *http.Request) {
 		}
 		mv = append(mv, moduleView{ID: m.ID, Title: m.Title, Position: m.Position, Lessons: lv})
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"course": c, "modules": mv})
+	favs := a.favoriteCourseIDs(r)
+	writeJSON(w, http.StatusOK, map[string]any{
+		"course":  courseWithFavorite{Course: c, IsFavorite: favs[c.ID]},
+		"modules": mv,
+	})
 }
 
 // coursePreviewRef — минимальная карточка курса в ответе превью-урока (T75):

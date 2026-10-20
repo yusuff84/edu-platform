@@ -228,8 +228,10 @@ pre{background:#f0f1f3;padding:12px;border-radius:8px;white-space:pre-wrap;margi
 
 var mockConfirmTmpl = template.Must(template.New("mockConfirm").Parse(mockConfirmHTML))
 
-// mockConfirmData — данные шаблона страницы оплаты.
-type mockConfirmData struct {
+// MockConfirmData — данные шаблона страницы оплаты. Экспортирован, чтобы
+// handler мог собрать страницу из долговечного Store (после рестарта API
+// in-memory реестр провайдера пуст, а платёж в БД остаётся).
+type MockConfirmData struct {
 	ID          string
 	IDJSON      template.JS // id внутри JS-строки (html/template экранирует контекст)
 	Amount      string
@@ -239,18 +241,29 @@ type mockConfirmData struct {
 	Found       bool
 }
 
-// MockConfirmHandler — HTML-страница подтверждения mock-платежа.
-// Регистрируется зоной T13 в middleware.go (см. отчёт T09).
-// ID платежа берётся из последнего сегмента пути /pay/mock/{id},
-// поэтому handler не зависит от chi и параметров роутинга.
+// RenderMockConfirm отдаёт HTML-страницу подтверждения с готовыми данными.
+func RenderMockConfirm(w http.ResponseWriter, data MockConfirmData) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-store")
+	if err := mockConfirmTmpl.Execute(w, data); err != nil {
+		http.Error(w, "Не удалось отобразить страницу оплаты", http.StatusInternalServerError)
+	}
+}
+
+// MockConfirmHandler — HTML-страница подтверждения mock-платежа из
+// in-memory реестра провайдера. Оставлен для совместимости; рабочий маршрут
+// /pay/mock/{id} обслуживает handler.App.MockPaymentPage, который читает
+// платёж из Store и переживает перезапуск (важно для Postgres).
+// ID платежа берётся из последнего сегмента пути, поэтому handler не зависит
+// от chi и параметров роутинга.
 func MockConfirmHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		id := pathBase(r.URL.Path)
 		mockRegistry.RLock()
 		p := mockRegistry.items[id]
-		var data mockConfirmData
+		var data MockConfirmData
 		if p != nil {
-			data = mockConfirmData{
+			data = MockConfirmData{
 				ID:          id,
 				IDJSON:      template.JS(strconvQuote(id)),
 				Amount:      fmt.Sprintf("%d.%02d", p.AmountCents/100, p.AmountCents%100),
@@ -261,11 +274,7 @@ func MockConfirmHandler() http.Handler {
 			}
 		}
 		mockRegistry.RUnlock()
-		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		w.Header().Set("Cache-Control", "no-store")
-		if err := mockConfirmTmpl.Execute(w, data); err != nil {
-			http.Error(w, "Не удалось отобразить страницу оплаты", http.StatusInternalServerError)
-		}
+		RenderMockConfirm(w, data)
 	})
 }
 
