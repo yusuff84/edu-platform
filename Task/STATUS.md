@@ -811,3 +811,29 @@ P8 + новые map-поля P9) — разрешены вручную, обе �
   `qa-p6` (43/43), `qa-p7` (59/59), `qa-p8` (66/66), `qa-p9` (93/93) —
   0 FAIL. Живой ответ API без SMTP:
   `emailSent:false`, `inviteLink:http://localhost:3001/register?inviteToken=...`.
+
+### Проверка на живом Postgres (20.10.2026)
+
+- Docker Desktop на машине недоступен (pipe `dockerDesktopLinuxEngine` не
+  найден, WSL-дистрибутивов нет), поэтому поднят **временный нативный
+  PostgreSQL 17** в `%TEMP%\pgdata-edu` на порту `55432`; стенд и данные
+  пользователя не затрагивались.
+- `TEST_DATABASE_URL` → чистая БД: все **35 top-level** тестов
+  `backend/tests/postgres` (включая `TestPostgresQAEditParity`,
+  `TestPostgresFavoriteCourseIDs`, `TestPostgresSimilarCoursesEmptyCategoryFallback`,
+  `TestPostgresAdminT47Parity` и новый `TestConnectPoolScansTimestamptzUTC`) —
+  PASS; `go test ./internal/repo` — PASS.
+- **Найден и исправлен реальный Postgres-баг:** `startsAt` и другие
+  `timestamptz` возвращались в поясе процесса (`+03:00` на Europe/Moscow),
+  тогда как in-memory Store отдаёт UTC, и `qa-p7 A11` падал. `repo.ConnectPool`
+  теперь задаёт `timezone=UTC` для SQL-сессии и регистрирует
+  `TimestamptzCodec{ScanLocation: time.UTC}` через `AfterConnect`; регрессионный
+  тест `TestConnectPoolScansTimestamptzUTC`. После фикса `qa-p7` — 59/59.
+- **Усилена изоляция PG-теста похожих курсов:** уникальная категория прогона
+  вместо общей `ai`; повторный прогон на уже наполненной БД больше не вытесняет
+  свои курсы из TOP-12 чужими данными.
+- Полный E2E на свежей базе `edu_qa2` (API `:8085`, Vite `:3001`):
+  `qa-abc` 49/49, `qa-p3` 80/80, `qa-p4` 37/37, `qa-p5` 19/19,
+  `qa-p6` 43/43, `qa-p7` 59/59, `qa-p8` 66/66, `qa-p9` 93/93 — 0 FAIL.
+  Это закрывает ранее заблокированную проверку Postgres/Compose-сценария
+  на уровне приложения (сам Docker Compose по-прежнему не проверен).

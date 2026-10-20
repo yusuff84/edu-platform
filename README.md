@@ -202,10 +202,26 @@ docker run --rm --network host -v "$PWD\backend:/src" -v gomodcache:/go/pkg/mod 
 docker stop edu-pgtest
 ```
 
+Если Postgres установлен нативно и Docker недоступен:
+
+```powershell
+createdb -h 127.0.0.1 -p 5432 -U postgres edu_test
+$env:TEST_DATABASE_URL="postgres://postgres:пароль@127.0.0.1:5432/edu_test?sslmode=disable"
+go test ./tests/postgres/... ./internal/repo -count=1 -v
+```
+
 Покрыто: пользователи (фильтры, блокировка/разблокировка, зависимости при
 удалении), сводка админки (в том числе `users.blocked` — до T34 счётчик
 на Postgres всегда показывал 0), журнал платежей (фильтры, тоталы, пагинация),
-ученики курса и их прогресс, кабинет ученика (записи, платежи, `nextLessonId`).
+ученики курса и их прогресс, кабинет ученика (записи, платежи, `nextLessonId`),
+Q&A и правка ответов, избранное, похожие курсы с fallback, приглашения и
+`processed_at` платежей (T47).
+
+`repo.ConnectPool` принудительно переводит SQL-сессию и декодирование
+`timestamptz` в UTC — API не зависит от часового пояса сервера Postgres
+(регрессия `startsAt` `+03:00` на Europe/Moscow закрыта тестом
+`TestConnectPoolScansTimestamptzUTC`). PG-тесты похожих курсов используют
+уникальную категорию прогона, поэтому их можно повторять на наполненной БД.
 
 ## Документация API
 
@@ -265,6 +281,13 @@ docker stop edu-pgtest
 | `SMTP_USERNAME` + `SMTP_PASSWORD` | SMTP-аутентификация | — (без auth) | зависит от провайдера |
 | `SMTP_TLS` | `starttls` (587) \| `implicit` (465) \| `none` (локальный тест) | `starttls` | рекомендуется `starttls`/`implicit` |
 | `VITE_API_URL` | базовый URL API для фронтенда; нужен только локальному `npm run dev` (в docker nginx проксирует `/api` сам) | `/api/v1` (в коде клиента) | нет |
+
+SMTP проверяется тестами на локальном SMTP-сервере (формат письма, UTF-8,
+обработка ошибок), но не против реального провайдера. Для продакшена задайте
+`SMTP_ADDR`, `SMTP_FROM`, при необходимости логин/пароль и `PUBLIC_APP_URL`,
+затем создайте тестовое приглашение и проверьте доставку. Если SMTP не задан,
+`POST /admin/invites` продолжает работать: админ получает `inviteLink` и
+`emailSent: false`.
 
 ### Про `.env` в репозитории
 
