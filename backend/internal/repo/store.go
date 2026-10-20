@@ -1975,6 +1975,14 @@ func (s *Store) TeacherOverview(teacherID string, all bool) (*TeacherOverview, e
 // по succeeded-платежам. Порядок строго по контракту T77: revenueCents desc,
 // затем students desc, затем title (без учёта регистра; id — детерминированный
 // tie-break для одинаковых названий). limit — 50 по умолчанию, максимум 200.
+// TeacherCourseStatsTotal — число курсов в области видимости аналитики до
+// применения limit (T77). Считается по тому же scope, что и разбивка.
+func (s *Store) TeacherCourseStatsTotal(teacherID string, all bool) int {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return len(teacherStatsScopeLocked(s, teacherID, all))
+}
+
 func (s *Store) TeacherCourseStats(teacherID string, all bool, limit int) []*TeacherCourseStat {
 	limit = clampTeacherStatsLimit(limit)
 

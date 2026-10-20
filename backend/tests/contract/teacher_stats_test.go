@@ -348,9 +348,10 @@ func TestTeacherStatsOverviewAndCourses(t *testing.T) {
 		t.Fatalf("статус draft-курса в разбивке: %v", row3["status"])
 	}
 
-	// limit: 2 → два первых курса; мусор/0 → дефолт 50 (все три).
+	// limit: 2 → два первых курса, но total — все 3 курса в области видимости
+	// (limit только укорачивает items; это не пагинация).
 	limited, limitedTotal := t77CourseStats(t, router, teacherCookies, "?limit=2")
-	if limitedTotal != 2 || len(limited) != 2 || limited[0]["courseId"] != c1.ID || limited[1]["courseId"] != c2.ID {
+	if limitedTotal != 3 || len(limited) != 2 || limited[0]["courseId"] != c1.ID || limited[1]["courseId"] != c2.ID {
 		t.Fatalf("limit=2: total=%d items=%v", limitedTotal, limited)
 	}
 	for _, q := range []string{"?limit=abc", "?limit=0", "?limit=-5", "?limit=500"} {

@@ -2196,6 +2196,26 @@ func (s *PostgresStore) TeacherOverview(teacherID string, all bool) (*TeacherOve
 // регистра (id — детерминированный tie-break); limit 50 по умолчанию,
 // максимум 200. Ошибки БД логируются и дают пустой список — как у остальных
 // методов StoreAPI без error в сигнатуре.
+// TeacherCourseStatsTotal — общее число курсов в области видимости аналитики
+// до применения limit (T77). Отдельный COUNT вместо выборки всех строк.
+func (s *PostgresStore) TeacherCourseStatsTotal(teacherID string, all bool) int {
+	teacherID, ok := teacherStatsTeacherID(teacherID, all)
+	if !ok {
+		return 0
+	}
+	ctx, cancel := s.ctx()
+	defer cancel()
+	var total int
+	err := s.pool.QueryRow(ctx,
+		`SELECT COUNT(*)::int FROM courses c
+		 WHERE $2::bool OR c.teacher_id = $1::uuid`, teacherID, all).Scan(&total)
+	if err != nil {
+		log.Printf("postgres TeacherCourseStatsTotal: %v", err)
+		return 0
+	}
+	return total
+}
+
 func (s *PostgresStore) TeacherCourseStats(teacherID string, all bool, limit int) []*TeacherCourseStat {
 	teacherID, ok := teacherStatsTeacherID(teacherID, all)
 	if !ok {

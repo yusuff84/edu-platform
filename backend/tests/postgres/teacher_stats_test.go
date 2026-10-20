@@ -256,6 +256,11 @@ func TestPostgresTeacherStatsParity(t *testing.T) {
 	if len(memLimited) != 2 || len(pgLimited) != 2 || !reflect.DeepEqual(t77Views(memLimited), t77Views(pgLimited)) {
 		t.Fatalf("limit=2 не совпал: mem=%+v pg=%+v", t77Views(memLimited), t77Views(pgLimited))
 	}
+	// total не зависит от limit и совпадает у обеих реализаций.
+	if memTotal, pgTotal := mem.TeacherCourseStatsTotal(memData.teacher.ID, false),
+		pg.TeacherCourseStatsTotal(pgData.teacher.ID, false); memTotal != 3 || pgTotal != 3 {
+		t.Fatalf("total разбивки: mem=%d pg=%d, ждали 3", memTotal, pgTotal)
+	}
 
 	// Чужой преподаватель видит только свой курс — в обеих реализациях.
 	memOther, err := mem.TeacherOverview(memData.other.ID, false)

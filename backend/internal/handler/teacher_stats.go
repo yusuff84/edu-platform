@@ -65,8 +65,9 @@ func (a *App) TeacherStats(w http.ResponseWriter, r *http.Request) {
 }
 
 // teacherStatsCoursesResponse — конверт GET /teacher/stats/courses: items
-// всегда массив (не null), total — число возвращённых элементов (после
-// применения limit; пагинации у эндпоинта нет).
+// всегда массив (не null), total — общее число курсов в области видимости до
+// применения limit (пагинации у эндпоинта нет, limit только укорачивает
+// список).
 type teacherStatsCoursesResponse struct {
 	Items []*repo.TeacherCourseStat `json:"items"`
 	Total int                       `json:"total"`
@@ -82,10 +83,12 @@ func (a *App) TeacherStatsCourses(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusUnauthorized, "Требуется вход в аккаунт")
 		return
 	}
+	all := teacherStatsAll(u)
 	limit := parseTeacherStatsLimit(r.URL.Query().Get("limit"))
-	items := a.Store.TeacherCourseStats(u.ID, teacherStatsAll(u), limit)
+	items := a.Store.TeacherCourseStats(u.ID, all, limit)
 	if items == nil {
 		items = []*repo.TeacherCourseStat{}
 	}
-	writeJSON(w, http.StatusOK, teacherStatsCoursesResponse{Items: items, Total: len(items)})
+	total := a.Store.TeacherCourseStatsTotal(u.ID, all)
+	writeJSON(w, http.StatusOK, teacherStatsCoursesResponse{Items: items, Total: total})
 }

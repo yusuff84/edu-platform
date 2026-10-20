@@ -320,6 +320,10 @@ type StoreAPI interface {
 	// затем students desc, затем title (без учёта регистра). limit по
 	// умолчанию 50, максимум 200. all=true — все курсы платформы (admin).
 	TeacherCourseStats(teacherID string, all bool, limit int) []*TeacherCourseStat
+	// TeacherCourseStatsTotal — общее число курсов в области видимости
+	// аналитики (любой статус, до применения limit). Нужен для total в ответе
+	// /teacher/stats/courses: он не зависит от limit.
+	TeacherCourseStatsTotal(teacherID string, all bool) int
 
 	// ---- T79: похожие курсы ----
 

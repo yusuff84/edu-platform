@@ -227,6 +227,23 @@ func TestLessonPreviewFlagInTeacherAndPublicViews(t *testing.T) {
 	if v, _ := lessonFromPublicPage(t, rec.Body.Bytes(), thirdID)["isPreview"].(bool); v {
 		t.Fatalf("полный вид: у закрытого урока isPreview=true")
 	}
+
+	// T75: флаг превью переключается и у опубликованного курса — без снятия
+	// курса с публикации; остальные поля по-прежнему требуют черновика.
+	onPublished := f.patchLesson(t, f.courseID, thirdID, map[string]any{"isPreview": true})
+	if v, _ := onPublished["isPreview"].(bool); !v {
+		t.Fatalf("PATCH isPreview=true на published-курсе: %s", mustJSON(onPublished))
+	}
+	offPublished := f.patchLesson(t, f.courseID, thirdID, map[string]any{"isPreview": false})
+	if v, _ := offPublished["isPreview"].(bool); v {
+		t.Fatalf("PATCH isPreview=false на published-курсе: %s", mustJSON(offPublished))
+	}
+	rec = doRequest(t, f.router, http.MethodPatch,
+		"/api/v1/teacher/courses/"+f.courseID+"/lessons/"+thirdID,
+		map[string]any{"title": "Нельзя"}, f.teacherCookies)
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("PATCH title на published-курсе: status=%d, ждали 409: %s", rec.Code, rec.Body.String())
+	}
 }
 
 // TestLessonPreviewPublicEndpoint — публичный просмотр превью-урока: 200 без

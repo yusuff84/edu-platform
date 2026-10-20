@@ -109,6 +109,17 @@ type updateLessonRequest struct {
 	IsPreview *bool `json:"isPreview"`
 }
 
+// onlyPreviewPatch сообщает, что PATCH содержит только isPreview (T75).
+// Такой запрос разрешён и для опубликованного курса: преподаватель управляет
+// бесплатным превью без снятия курса с публикации. Любое другое поле требует
+// черновика (requireDraft).
+func onlyPreviewPatch(req *updateLessonRequest) bool {
+	return req.IsPreview != nil &&
+		req.ModuleID == "" && req.Title == nil && req.Kind == nil &&
+		req.BodyMD == nil && req.VideoURL == nil && req.LiveURL == nil &&
+		req.StartsAt == nil && req.Quiz == nil && req.CodeTask == nil
+}
+
 // TeacherUpdateLesson — PATCH .../lessons/{lessonID}: переданные поля
 // перезаписывают содержимое урока, непереданные остаются; валидация — по kind
 // (validateLessonContent, та же валидация, что в TeacherCreateLesson).
@@ -119,11 +130,14 @@ func (a *App) TeacherUpdateLesson(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	if !requireDraft(w, c) {
-		return
-	}
 	var req updateLessonRequest
 	if !decodeJSON(w, r, &req) {
+		return
+	}
+	// T75: включить/снять превью можно и у опубликованного курса — иначе
+	// преподавателю пришлось бы снимать курс с публикации. Любые другие поля
+	// по-прежнему редактируются только в черновике.
+	if !onlyPreviewPatch(&req) && !requireDraft(w, c) {
 		return
 	}
 	cur, found := a.Store.GetLesson(chi.URLParam(r, "lessonID"))
