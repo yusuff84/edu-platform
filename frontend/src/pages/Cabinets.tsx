@@ -72,6 +72,10 @@ export function TeacherCab(): JSX.Element {
           <p>
             <Link className="btn btn-primary" to="/teach/new">
               {t('teach.create')}
+            </Link>{' '}
+            {/* T78: переход на аналитику преподавателя. */}
+            <Link className="btn btn-ghost" to="/teach/stats">
+              {t('p9.stats.title')}
             </Link>
           </p>
           <TeacherCourses />

@@ -31,6 +31,8 @@ const AdminCourseDetail = lazy(() => import('../pages/AdminCourseDetail'));
 // T49: экран «Записи на курсы» — отдельная страница подраздела.
 const AdminEnrollments = lazy(() => import('../pages/AdminEnrollments'));
 const CourseStudents = lazy(() => import('../pages/CourseStudents'));
+// T78: аналитика преподавателя — отдельный чанк подраздела кабинета.
+const TeacherStats = lazy(() => import('../pages/TeacherStats'));
 const Profile = lazy(() => import('../pages/Profile'));
 // T68: публичная страница сертификата — редкая, отдельный чанк.
 const Certificate = lazy(() => import('../pages/Certificate'));
@@ -249,6 +251,9 @@ export const router = createBrowserRouter([
       { path: '/me/favorites', element: <RequireAuth><Favorites /></RequireAuth> },
       { path: '/teach', element: <RequireRole roles={['teacher', 'admin']}><TeacherCab /></RequireRole> },
       { path: '/teach/new', element: <RequireRole roles={['teacher', 'admin']}><Constructor /></RequireRole> },
+      // T78: /teach/stats обязан идти ДО /teach/:id, иначе параметрический
+      // маршрут перехватит «stats» и откроет конструктор.
+      { path: '/teach/stats', element: <RequireRole roles={['teacher', 'admin']}><TeacherStats /></RequireRole> },
       { path: '/teach/:id', element: <RequireRole roles={['teacher', 'admin']}><Constructor /></RequireRole> },
       { path: '/admin', element: <RequireRole roles={['admin']}><Admin /></RequireRole> },
       // Подразделы супер-админки — отдельные страницы со своим роутом

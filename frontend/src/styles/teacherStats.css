@@ -1,0 +1,302 @@
+/* T78: страница «Аналитика» кабинета преподавателя (/teach/stats).
+   Импортируется из pages/TeacherStats.tsx. Собственные селекторы — с префиксом
+   .tstats-; базовые классы (.btn, .error, .sr-only) и токены дизайн-системы
+   берутся из styles.css, чужие стили не меняются. */
+
+.tstats-page {
+  max-width: 1200px;
+}
+
+/* ---------- KPI-карточки ---------- */
+
+.tstats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 1rem;
+  align-items: start;
+}
+
+.tstats-card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  padding: 1rem 1.1rem;
+  box-shadow: var(--shadow-sm);
+}
+
+.tstats-card__title {
+  margin: 0 0 0.65rem;
+  font-size: 18px;
+}
+
+.tstats-rows {
+  display: grid;
+  gap: 0.4rem;
+  margin: 0;
+}
+
+.tstats-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding-bottom: 0.3rem;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.tstats-row:last-child {
+  padding-bottom: 0;
+  border-bottom: none;
+}
+
+.tstats-row dt {
+  color: var(--muted);
+}
+
+.tstats-row dd {
+  margin: 0;
+  font-weight: 800;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Скелетон загрузки сводки. */
+
+.tstats-skeleton {
+  display: block;
+  height: 0.85rem;
+  border-radius: 6px;
+  background: var(--line-soft);
+  animation: tstats-pulse 1.2s ease-in-out infinite;
+}
+
+.tstats-skeleton + .tstats-skeleton {
+  margin-top: 0.55rem;
+}
+
+.tstats-skeleton--title {
+  height: 1.05rem;
+  width: 50%;
+}
+
+.tstats-skeleton--short {
+  width: 70%;
+}
+
+@keyframes tstats-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.55;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tstats-skeleton {
+    animation: none;
+  }
+}
+
+/* ---------- Ошибка загрузки ---------- */
+
+.tstats-error {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+  margin: 0.5rem 0;
+}
+
+.tstats-error p {
+  margin: 0;
+}
+
+.tstats-error .btn {
+  margin-top: 0;
+}
+
+/* ---------- Таблица по курсам ---------- */
+
+.tstats-section {
+  margin-top: 1.5rem;
+}
+
+.tstats-section__title {
+  margin: 0 0 0.65rem;
+  font-size: 20px;
+}
+
+.tstats-table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  -webkit-overflow-scrolling: touch;
+}
+
+.tstats-table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 860px;
+}
+
+.tstats-table th,
+.tstats-table td {
+  padding: 0.55rem 0.65rem;
+  border-bottom: 1px solid var(--line-soft);
+  text-align: left;
+  font-size: 0.9rem;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+.tstats-table th {
+  background: #f8f7f4;
+  color: #55524c;
+  font-size: 0.85rem;
+}
+
+.tstats-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+/* Строка кликабельна целиком (переход в конструктор), поэтому курсор и
+   подсветка есть у всей строки; ссылки внутри не дублируют переход. */
+.tstats-tr {
+  cursor: pointer;
+}
+
+.tstats-tr:hover,
+.tstats-tr:focus-within {
+  background: #fbfaf8;
+}
+
+/* Колонка названия: сжимаемая, длинный текст обрезается, полное значение — в title. */
+.tstats-td-title {
+  white-space: normal;
+  min-width: 12rem;
+  max-width: 22rem;
+  font-weight: 700;
+}
+
+.tstats-td-title a {
+  display: block;
+  overflow: hidden;
+  color: var(--fg);
+  text-decoration: none;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tstats-td-title a:hover,
+.tstats-td-title a:focus-visible {
+  text-decoration: underline;
+}
+
+.tstats-num {
+  font-variant-numeric: tabular-nums;
+}
+
+.tstats-td-progress {
+  min-width: 10rem;
+}
+
+.tstats-progress {
+  display: inline-block;
+  width: 90px;
+  height: 8px;
+  margin-right: 0.45rem;
+  border-radius: 999px;
+  background: var(--line-soft);
+  overflow: hidden;
+  vertical-align: middle;
+}
+
+.tstats-progress__bar {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--brand), #f2762e);
+}
+
+.tstats-percent {
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+}
+
+.tstats-muted {
+  color: var(--muted);
+  font-weight: 400;
+}
+
+.tstats-td-action {
+  width: 1%;
+}
+
+.tstats-td-action .btn {
+  margin-top: 0;
+  white-space: nowrap;
+}
+
+/* ---------- Статусы курса ---------- */
+
+.tstats-status {
+  display: inline-block;
+  padding: 0.12rem 0.55rem;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.tstats-status--draft {
+  background: var(--line-soft);
+  color: #57534a;
+}
+
+.tstats-status--review {
+  background: var(--warn-bg);
+  color: #8a6100;
+}
+
+.tstats-status--published {
+  background: var(--ok-bg);
+  color: var(--ok);
+}
+
+.tstats-status--archived {
+  background: #e9edf7;
+  color: #3d4f7c;
+}
+
+/* ---------- Пустое состояние ---------- */
+
+.tstats-empty {
+  padding: 1.5rem 1rem;
+  border: 1px dashed var(--line);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  color: var(--muted);
+  text-align: center;
+}
+
+/* ---------- Адаптив ---------- */
+
+@media (max-width: 720px) {
+  /* На узких экранах карточки встают в колонку; таблица скроллится
+     горизонтально, чтобы не терять колонки. */
+  .tstats-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .tstats-table {
+    min-width: 760px;
+  }
+
+  .tstats-td-title {
+    max-width: none;
+  }
+}
