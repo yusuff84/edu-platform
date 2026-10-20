@@ -255,6 +255,16 @@ type StoreAPI interface {
 	// false — промокода нет. Вызывается ровно один раз при первом переходе
 	// платежа в succeeded (идемпотентность обеспечивает handler).
 	IncrementPromoCodeUsage(id string) bool
+
+	// ---- T81: публичный профиль преподавателя ----
+
+	// GetTeacherProfile собирает публичный профиль преподавателя одним
+	// вызовом (T81): карточка TeacherPublic с агрегатами по published-курсам
+	// и сами published-курсы (максимум 100) в порядке «активные записи desc,
+	// затем createdAt desc». false — пользователя нет или его роль не
+	// teacher/admin (handler отвечает 404). Агрегаты считаются без N+1:
+	// in-memory — одним проходом по картам, Postgres — агрегирующими SQL.
+	GetTeacherProfile(teacherID string) (*TeacherProfileData, bool)
 }
 
 // PaymentFilter — параметры журнала платежей для админки (US6, T31).

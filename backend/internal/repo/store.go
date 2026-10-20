@@ -1226,6 +1226,85 @@ func (s *Store) ReviewRatingBreakdown(courseID string) map[int]int {
 	return out
 }
 
+// ---- T81: публичный профиль преподавателя ----
+
+// teacherProfileCoursesLimit — максимум курсов в публичном профиле (T81):
+// пагинации нет, но ответ ограничен сотней курсов.
+const teacherProfileCoursesLimit = 100
+
+// teacherCourseBefore — порядок published-курсов в профиле преподавателя
+// (T81): активные записи по убыванию, затем createdAt по убыванию, затем
+// id по убыванию (детерминированный порядок при полном совпадении ключей).
+// Общий компаратор in-memory и Postgres — чтобы выдачи совпадали.
+func teacherCourseBefore(a, b *Course, active map[string]int) bool {
+	if active[a.ID] != active[b.ID] {
+		return active[a.ID] > active[b.ID]
+	}
+	if !a.CreatedAt.Equal(b.CreatedAt) {
+		return a.CreatedAt.After(b.CreatedAt)
+	}
+	return a.ID > b.ID
+}
+
+// GetTeacherProfile собирает публичный профиль преподавателя (T81) под одним
+// RLock: пользователь, агрегаты по published-курсам и сами курсы-снимки.
+// Роль не teacher/admin — false (handler отвечает 404). Курсы — максимум
+// teacherProfileCoursesLimit, порядок teacherCourseBefore.
+func (s *Store) GetTeacherProfile(teacherID string) (*TeacherProfileData, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	u, ok := s.users[teacherID]
+	if !ok || (u.Role != RoleTeacher && u.Role != RoleAdmin) {
+		return nil, false
+	}
+
+	// Активные записи по курсам: один проход, без запросов на каждый курс.
+	active := make(map[string]int)
+	for _, e := range s.enrollments {
+		if e.Status == EnrollmentActive {
+			active[e.CourseID]++
+		}
+	}
+
+	courses := make([]*Course, 0, len(s.courses))
+	students := 0
+	ratings := 0
+	weighted := 0.0
+	for _, c := range s.courses {
+		if c.TeacherID != teacherID || c.Status != CoursePublished {
+			continue
+		}
+		// Снимок: наружу не должен утекать живой указатель на карту хранилища.
+		snapshot := *c
+		courses = append(courses, &snapshot)
+		students += active[c.ID]
+		ratings += c.RatingsCount
+		weighted += c.AvgRating * float64(c.RatingsCount)
+	}
+
+	coursesCount := len(courses)
+	sort.SliceStable(courses, func(i, j int) bool {
+		return teacherCourseBefore(courses[i], courses[j], active)
+	})
+	if len(courses) > teacherProfileCoursesLimit {
+		courses = courses[:teacherProfileCoursesLimit]
+	}
+
+	teacher := TeacherPublic{
+		ID:            u.ID,
+		DisplayName:   u.DisplayName,
+		CoursesCount:  coursesCount,
+		StudentsCount: students,
+		RatingsCount:  ratings,
+	}
+	if ratings > 0 {
+		// Как RecalcCourseRating: среднее с одним знаком после запятой.
+		teacher.AvgRating = math.Round(weighted/float64(ratings)*10) / 10
+	}
+	return &TeacherProfileData{Teacher: teacher, Courses: courses}, true
+}
+
 // ---- Settings ----
 
 // GetCommissionPct возвращает действующую комиссию платформы.

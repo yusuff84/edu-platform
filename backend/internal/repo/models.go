@@ -268,3 +268,25 @@ type CertificateDetails struct {
 	CourseTitle string    `json:"courseTitle"`
 	CourseSlug  string    `json:"courseSlug"`
 }
+
+// TeacherPublic — публичная карточка преподавателя (T81):
+// GET /teachers/{id}. Агрегаты считаются только по published-курсам:
+// CoursesCount — их число, StudentsCount — активные записи на них,
+// AvgRating/RatingsCount — средневзвешенная оценка и суммарное число оценок.
+// DisplayName — пустая строка, если имя не задано (e-mail наружу не отдаётся).
+type TeacherPublic struct {
+	ID            string  `json:"id"`
+	DisplayName   string  `json:"displayName"`
+	CoursesCount  int     `json:"coursesCount"`
+	StudentsCount int     `json:"studentsCount"`
+	AvgRating     float64 `json:"avgRating"`
+	RatingsCount  int     `json:"ratingsCount"`
+}
+
+// TeacherProfileData — данные публичного профиля преподавателя (T81):
+// карточка Teacher и все его published-курсы (отсортированы и ограничены
+// хранилищем, см. StoreAPI.GetTeacherProfile).
+type TeacherProfileData struct {
+	Teacher TeacherPublic `json:"teacher"`
+	Courses []*Course     `json:"courses"`
+}
