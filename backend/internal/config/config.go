@@ -25,6 +25,14 @@ type Config struct {
 	AllowedOrigins   []string
 	AdminEmail       string // опциональный сид админа (создаётся только если задан вместе с паролем)
 	AdminPassword    string
+	PublicAppURL     string // PUBLIC_APP_URL: база ссылок в письмах, default http://localhost:3000
+
+	// ---- SMTP для приглашений (опционально) ----
+	SMTPAddr     string // SMTP_ADDR: host:port; пусто — письма выключены
+	SMTPFrom     string // SMTP_FROM: адрес отправителя
+	SMTPUsername string // SMTP_USERNAME
+	SMTPPassword string // SMTP_PASSWORD
+	SMTPTLS      string // SMTP_TLS: starttls | implicit | none
 
 	// ---- Безопасность аутентификации (T10) ----
 
@@ -80,6 +88,14 @@ func Load() *Config {
 	if runner == "" {
 		runner = "http://runner:8081"
 	}
+	publicAppURL := strings.TrimSpace(os.Getenv("PUBLIC_APP_URL"))
+	if publicAppURL == "" {
+		publicAppURL = "http://localhost:3000"
+	}
+	smtpTLS := strings.ToLower(strings.TrimSpace(os.Getenv("SMTP_TLS")))
+	if smtpTLS == "" {
+		smtpTLS = "starttls"
+	}
 	origins := []string{"http://localhost:3000", "http://127.0.0.1:3000"}
 	if v := strings.TrimSpace(os.Getenv("ALLOWED_ORIGINS")); v != "" {
 		parts := strings.Split(v, ",")
@@ -116,6 +132,13 @@ func Load() *Config {
 		AllowedOrigins:   origins,
 		AdminEmail:       strings.TrimSpace(os.Getenv("ADMIN_EMAIL")),
 		AdminPassword:    os.Getenv("ADMIN_PASSWORD"),
+		PublicAppURL:     publicAppURL,
+
+		SMTPAddr:     strings.TrimSpace(os.Getenv("SMTP_ADDR")),
+		SMTPFrom:     strings.TrimSpace(os.Getenv("SMTP_FROM")),
+		SMTPUsername: strings.TrimSpace(os.Getenv("SMTP_USERNAME")),
+		SMTPPassword: os.Getenv("SMTP_PASSWORD"),
+		SMTPTLS:      smtpTLS,
 
 		CookieSameSite:         parseSameSite(os.Getenv("COOKIE_SAMESITE")),
 		CSRFAllowMissingOrigin: parseBool(os.Getenv("CSRF_ALLOW_MISSING_ORIGIN")),

@@ -787,3 +787,27 @@ P8 + новые map-поля P9) — разрешены вручную, обе �
   QA-прогон — **93/93 PASS, 0 FAIL** на in-memory API `:8080`, Origin `:3001`.
 - Проверки: `go vet ./...`, `go test -count=1 ./...` — все пакеты ok;
   `npm run build` — ok; `npm test` — **193/193 PASS**.
+
+### Доставка приглашений по email (20.10.2026)
+
+- Закрыт пробел FR-006: `POST /admin/invites` теперь не только возвращает
+  токен, но и отправляет письмо со ссылкой `/register?inviteToken=...`, если
+  заданы `SMTP_ADDR` и `SMTP_FROM`. Реализация — `internal/mailer` на stdlib
+  `net/smtp`: `starttls` (587, по умолчанию), `implicit` (465) и `none` для
+  локального MailHog/тестов; таймаут 10 с, защита от CRLF-инъекций, UTF-8
+  тема через RFC 2047.
+- Без SMTP приглашение создаётся как раньше: в ответе `inviteLink` и
+  `emailSent: false`, админ передаёт ссылку вручную. Ошибка SMTP также не
+  отменяет приглашение (`201`, `emailSent: false`, лог); в UI появился статус
+  «письмо отправлено / передайте ссылку вручную».
+- `PUBLIC_APP_URL` задаёт базу ссылки; переменные добавлены в `.env.example`,
+  `docker-compose.yml` и README.
+- Тесты: `internal/mailer` (реальный минимальный SMTP-сервер, UTF-8-письмо,
+  отказ при CRLF-инъекции, отключение без конфига, неполная конфигурация) и
+  контрактный `TestAdminInviteEmailDelivery` (успешная отправка, `inviteLink`,
+  сбой SMTP без потери приглашения).
+- После доработки на свежем in-memory API `:8084` повторно прогнаны
+  `qa-abc` (49/49), `qa-p3` (80/80), `qa-p4` (37/37), `qa-p5` (19/19),
+  `qa-p6` (43/43), `qa-p7` (59/59), `qa-p8` (66/66), `qa-p9` (93/93) —
+  0 FAIL. Живой ответ API без SMTP:
+  `emailSent:false`, `inviteLink:http://localhost:3001/register?inviteToken=...`.

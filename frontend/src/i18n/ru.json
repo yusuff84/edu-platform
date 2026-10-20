@@ -193,6 +193,8 @@
   "admin.inviteEmail": "Email учителя",
   "admin.inviteSend": "Пригласить",
   "admin.inviteCreated": "Приглашение создано",
+  "admin.inviteEmailSent": "Письмо со ссылкой отправлено на email учителя.",
+  "admin.inviteEmailManual": "Письмо не отправлено — передайте ссылку или токен вручную.",
   "admin.inviteToken": "Токен приглашения",
   "admin.copyToken": "Скопировать токен",
   "admin.tokenCopied": "Токен скопирован",

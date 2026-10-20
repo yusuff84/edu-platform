@@ -6,9 +6,13 @@ package contract_test
 // статус — сырой статус хранилища; revoke только из sent (200/404/409).
 
 import (
+	"context"
+	"errors"
 	"net/http"
+	"strings"
 	"testing"
 
+	"edu-platform/backend/internal/mailer"
 	"edu-platform/backend/internal/repo"
 )
 
@@ -225,5 +229,72 @@ func TestAdminInvitesListAndRevoke(t *testing.T) {
 	rec = doRequest(t, router, http.MethodGet, "/api/v1/admin/invites", nil, nil)
 	if rec.Code != http.StatusUnauthorized {
 		t.Fatalf("аноним на списке: status=%d, ждали 401", rec.Code)
+	}
+}
+
+// captureInviteMailer — двойник SMTP: запоминает письма и умеет вернуть
+// ошибку, чтобы проверить, что приглашение не теряется при сбое доставки.
+type captureInviteMailer struct {
+	messages []mailer.Message
+	err      error
+}
+
+func (m *captureInviteMailer) Send(_ context.Context, msg mailer.Message) error {
+	m.messages = append(m.messages, msg)
+	return m.err
+}
+
+// При настроенном Mailer приглашение уходит письмом; ссылка и emailSent
+// возвращаются в API. Ошибка SMTP не отменяет приглашение: 201, emailSent=false.
+func TestAdminInviteEmailDelivery(t *testing.T) {
+	app, router := newTestApp()
+	app.Config.PublicAppURL = "https://edu.example/"
+	adminCookies, _ := registerUser(t, router, "invite-mail-admin@example.com", "password123", "")
+	promoteToAdmin(t, app, "invite-mail-admin@example.com")
+
+	fake := &captureInviteMailer{}
+	app.Mailer = fake
+
+	rec := doRequest(t, router, http.MethodPost, "/api/v1/admin/invites", map[string]any{
+		"email": "mail-teacher@example.com",
+	}, adminCookies)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("invite: status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var created map[string]any
+	decodeBody(t, rec, &created)
+	token, _ := created["token"].(string)
+	link, _ := created["inviteLink"].(string)
+	if token == "" || !strings.HasPrefix(link, "https://edu.example/register?inviteToken="+token) {
+		t.Fatalf("ответ без корректной ссылки: %s", rec.Body.String())
+	}
+	if sent, _ := created["emailSent"].(bool); !sent {
+		t.Fatalf("emailSent=%v, ждали true: %s", created["emailSent"], rec.Body.String())
+	}
+	if len(fake.messages) != 1 {
+		t.Fatalf("писем отправлено %d, ждали 1", len(fake.messages))
+	}
+	msg := fake.messages[0]
+	if msg.To != "mail-teacher@example.com" ||
+		!strings.Contains(msg.Subject, "Приглашение") ||
+		!strings.Contains(msg.Text, link) {
+		t.Fatalf("письмо не соответствует приглашению: %+v", msg)
+	}
+
+	// Сбой SMTP: приглашение остаётся созданным, админ получает ссылку.
+	fake.err = errors.New("smtp недоступен")
+	rec = doRequest(t, router, http.MethodPost, "/api/v1/admin/invites", map[string]any{
+		"email": "mail-teacher-2@example.com",
+	}, adminCookies)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("invite при сбое SMTP: status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var failed map[string]any
+	decodeBody(t, rec, &failed)
+	if sent, _ := failed["emailSent"].(bool); sent {
+		t.Fatalf("emailSent=true при ошибке SMTP: %s", rec.Body.String())
+	}
+	if link, _ := failed["inviteLink"].(string); !strings.Contains(link, "inviteToken=") {
+		t.Fatalf("при сбое SMTP не отдана резервная ссылка: %s", rec.Body.String())
 	}
 }

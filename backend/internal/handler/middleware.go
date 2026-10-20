@@ -22,6 +22,7 @@ import (
 
 	"edu-platform/backend/internal/auth"
 	"edu-platform/backend/internal/config"
+	"edu-platform/backend/internal/mailer"
 	"edu-platform/backend/internal/repo"
 	"edu-platform/backend/internal/storage"
 )
@@ -41,6 +42,10 @@ type App struct {
 	// каталоге ./uploads — тот же каталог, что раздаёт маршрут /uploads/*.
 	// Тесты подставляют свою реализацию, чтобы не писать на диск.
 	Storage storage.ObjectStore
+
+	// Mailer — отправка приглашений учителям (SMTP). nil — письма выключены,
+	// админ передаёт ссылку вручную; создание приглашения от этого не зависит.
+	Mailer mailer.Sender
 
 	// Лениво создаваемые rate-limiter'ы по имени группы (T10).
 	limitersMu   sync.Mutex

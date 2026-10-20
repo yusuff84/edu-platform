@@ -438,6 +438,10 @@ export interface Invite {
   token: string;
   tokenPrefix: string;
   expiresAt: string;
+  /** Готовая ссылка регистрации; сервер отдаёт её вместе с токеном. */
+  inviteLink?: string;
+  /** true — письмо со ссылкой удалось отправить через SMTP. */
+  emailSent?: boolean;
 }
 
 /** Строка журнала платежей US6 (GET /admin/payments). */

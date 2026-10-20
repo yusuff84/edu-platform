@@ -1059,6 +1059,9 @@ export default function Admin(): JSX.Element {
             <p>
               <strong>{t('admin.inviteCreated')}</strong>
             </p>
+            <p className="muted">
+              {invite.emailSent ? t('admin.inviteEmailSent') : t('admin.inviteEmailManual')}
+            </p>
             <p>
               <span className="admin-token__label">{t('admin.inviteEmail')}:</span> {invite.email}
             </p>

@@ -1,13 +1,17 @@
 package handler
 
 import (
+	"fmt"
+	"log"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
 
 	"edu-platform/backend/internal/auth"
+	"edu-platform/backend/internal/mailer"
 	"edu-platform/backend/internal/repo"
 )
 
@@ -16,8 +20,10 @@ type createInviteRequest struct {
 }
 
 // AdminCreateInvite — POST /admin/invites.
-// Возвращает токен в ответе (MVP; в проде отправлять письмом). Старые активные
-// приглашения на тот же email отзываются.
+// Токен всегда возвращается в ответе (его нужно показать один раз). Если
+// настроен SMTP, дополнительно отправляется письмо со ссылкой регистрации;
+// ошибка отправки не отменяет приглашение — emailSent=false, админ передаст
+// ссылку вручную. Старые активные приглашения на тот же email отзываются.
 func (a *App) AdminCreateInvite(w http.ResponseWriter, r *http.Request) {
 	u, ok := a.currentUser(r)
 	if !ok {
@@ -39,9 +45,37 @@ func (a *App) AdminCreateInvite(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	inv := a.Store.CreateInvite(email, tokenHash, prefix, u.ID, time.Now().UTC().Add(auth.InviteTTL))
+
+	baseURL := "http://localhost:3000"
+	if a.Config != nil && strings.TrimSpace(a.Config.PublicAppURL) != "" {
+		baseURL = strings.TrimSpace(a.Config.PublicAppURL)
+	}
+	inviteLink := strings.TrimRight(baseURL, "/") + "/register?inviteToken=" + url.QueryEscape(token)
+
+	emailSent := false
+	if a.Mailer != nil {
+		text := fmt.Sprintf(
+			"Здравствуйте!\n\nВас пригласили преподавать на Edu Platform.\n"+
+				"Зарегистрируйтесь по ссылке:\n%s\n\n"+
+				"Ссылка действует до %s.\n\n"+
+				"Если вы не ожидали это письмо, просто проигнорируйте его.\n",
+			inviteLink, inv.ExpiresAt.UTC().Format("02.01.2006 15:04 UTC"),
+		)
+		if err := a.Mailer.Send(r.Context(), mailer.Message{
+			To:      email,
+			Subject: "Приглашение преподавателя на Edu Platform",
+			Text:    text,
+		}); err != nil {
+			log.Printf("SMTP: не удалось отправить приглашение на %s: %v", email, err)
+		} else {
+			emailSent = true
+		}
+	}
+
 	writeJSON(w, http.StatusCreated, map[string]any{
 		"id": inv.ID, "email": inv.Email, "token": token,
 		"tokenPrefix": inv.TokenPrefix, "expiresAt": inv.ExpiresAt,
+		"inviteLink": inviteLink, "emailSent": emailSent,
 	})
 }
 

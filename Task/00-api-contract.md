@@ -231,8 +231,14 @@ Query: `q` (поиск), `page`, `limit`.
 ## 12. `POST /admin/invites`
 
 Тело: `{ "email": "string" }`
-Ответ `201`: `{ "id", "email", "token", "tokenPrefix", "expiresAt" }`
+Ответ `201`: `{ "id", "email", "token", "tokenPrefix", "expiresAt", "inviteLink", "emailSent" }`
 **Токен показывается один раз** — сохранять его в UI нужно сразу.
+
+`inviteLink` — готовая ссылка `/register?inviteToken=...` на базе
+`PUBLIC_APP_URL`. Если настроен SMTP (`SMTP_ADDR`/`SMTP_FROM`), сервер
+отправляет на email письмо со ссылкой и ставит `emailSent: true`. Ошибка SMTP
+не отменяет приглашение: ответ остаётся `201`, `emailSent: false`, а админ
+передаёт ссылку вручную.
 
 ---
 

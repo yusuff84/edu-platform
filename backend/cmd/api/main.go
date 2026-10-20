@@ -13,6 +13,7 @@ import (
 
 	"edu-platform/backend/internal/config"
 	"edu-platform/backend/internal/handler"
+	"edu-platform/backend/internal/mailer"
 	"edu-platform/backend/internal/migrate"
 	"edu-platform/backend/internal/repo"
 )
@@ -26,7 +27,26 @@ func main() {
 	}
 	seedAdmin(store, cfg)
 
-	app := &handler.App{Store: store, Config: cfg}
+	smtpSender, err := mailer.NewSMTP(mailer.Config{
+		Addr:     cfg.SMTPAddr,
+		From:     cfg.SMTPFrom,
+		Username: cfg.SMTPUsername,
+		Password: cfg.SMTPPassword,
+		TLSMode:  cfg.SMTPTLS,
+	})
+	if err != nil {
+		log.Printf("ПРЕДУПРЕЖДЕНИЕ: SMTP отключён: %v", err)
+	} else if smtpSender != nil {
+		log.Printf("SMTP включён: приглашения уходят на email")
+	} else {
+		log.Printf("SMTP не задан: приглашения создаются со ссылкой в API/UI")
+	}
+	var mailerSender mailer.Sender
+	if smtpSender != nil {
+		mailerSender = smtpSender
+	}
+
+	app := &handler.App{Store: store, Config: cfg, Mailer: mailerSender}
 	addr := ":" + cfg.Port
 	log.Printf("edu-platform api слушает %s (провайдер оплаты: %s)", addr, cfg.PaymentsProvider)
 	if err := http.ListenAndServe(addr, handler.NewRouter(app)); err != nil {
