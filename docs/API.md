@@ -169,7 +169,10 @@
 > полный вид владельца/админа и ответы teacher-хендлеров. `POST
 > /api/v1/teacher/courses/{id}/lessons` и `PATCH …/lessons/{lessonID}`
 > принимают необязательное `isPreview`: создание без поля — `false`, PATCH без
-> поля значение не меняет. Публичный `GET /api/v1/courses/{slug}/preview/{lessonId}`
+> поля значение не меняет. PATCH, содержащий только `isPreview`, разрешён и
+> для опубликованного курса (преподаватель управляет превью без снятия курса с
+> публикации); любые другие поля по-прежнему требуют черновика (`409`).
+> Публичный `GET /api/v1/courses/{slug}/preview/{lessonId}`
 > без входа отдаёт `200 {"course":{"id","slug","title"},"lesson":<lessonView>}`
 > только для published-курса и урока с `isPreview=true`; урок отдаётся
 > публичным видом — без правильных ответов теста и скрытых тестов code-задания.
@@ -189,7 +192,8 @@
 > `200 {"items":[{courseId,title,status,students,revenueCents,avgRating,
 > ratingsCount,avgPercent}],"total":N}` — курсы любого статуса, порядок
 > `revenueCents` desc → `students` desc → `title`; `limit` по умолчанию 50,
-> максимум 200 (`total` — число возвращённых элементов после limit).
+> максимум 200 (`total` — все курсы в области видимости до применения limit;
+> limit только укорачивает `items`).
 > Ученику оба эндпоинта — `403` (группа `/teacher` — только teacher/admin).
 
 > В бэклоге T13: `GET/PATCH/DELETE /teacher/courses[...]`, PATCH модулей/уроков,
