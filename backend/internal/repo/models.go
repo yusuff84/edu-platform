@@ -268,3 +268,35 @@ type CertificateDetails struct {
 	CourseTitle string    `json:"courseTitle"`
 	CourseSlug  string    `json:"courseSlug"`
 }
+
+// ---- T71: вопросы и ответы по урокам ----
+
+// LessonQuestion — вопрос ученика к уроку (T71). LessonTitle/StudentName —
+// вычисляемые поля: заголовок урока и display_name автора читаются из
+// lessons/users при каждом чтении (в Postgres — JOIN, в in-memory — из карт).
+// Answers — ответы вопроса старыми первыми; всегда не nil (в JSON []).
+type LessonQuestion struct {
+	ID          string          `json:"id"`
+	CourseID    string          `json:"courseId"`
+	LessonID    string          `json:"lessonId"`
+	LessonTitle string          `json:"lessonTitle"`
+	StudentID   string          `json:"studentId"`
+	StudentName string          `json:"studentName"`
+	Body        string          `json:"body"`
+	CreatedAt   time.Time       `json:"createdAt"`
+	Answers     []*LessonAnswer `json:"answers"`
+}
+
+// LessonAnswer — ответ на вопрос по уроку (T71). AuthorRole — роль автора
+// ("student" | "teacher" | "admin"); IsTeacher — автор является
+// преподавателем курса или администратором (публичный бейдж «преподаватель»).
+type LessonAnswer struct {
+	ID         string    `json:"id"`
+	QuestionID string    `json:"questionId"`
+	AuthorID   string    `json:"authorId"`
+	AuthorName string    `json:"authorName"`
+	AuthorRole string    `json:"authorRole"`
+	IsTeacher  bool      `json:"isTeacher"`
+	Body       string    `json:"body"`
+	CreatedAt  time.Time `json:"createdAt"`
+}

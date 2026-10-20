@@ -255,6 +255,38 @@ type StoreAPI interface {
 	// false — промокода нет. Вызывается ровно один раз при первом переходе
 	// платежа в succeeded (идемпотентность обеспечивает handler).
 	IncrementPromoCodeUsage(id string) bool
+
+	// ---- T71: вопросы и ответы по урокам ----
+
+	// CreateLessonQuestion создаёт вопрос ученика к уроку. LessonID должен
+	// принадлежать курсу CourseID, иначе ErrNotFound (handler отдаёт 404
+	// «Урок не найден в этом курсе»); права проверяет handler.
+	// LessonTitle/StudentName заполняются из lessons.title и
+	// users.display_name; Answers — пустой не-nil срез.
+	CreateLessonQuestion(courseID, lessonID, studentID, body string) (*LessonQuestion, error)
+	// ListLessonQuestions — вопросы курса, новые первыми; пустой lessonID —
+	// все вопросы курса. Вопросы отдаются с ответами (старые первыми).
+	// page 1-based, limit 20 по умолчанию; total — до пагинации. Никогда не
+	// возвращает nil-срез.
+	ListLessonQuestions(courseID, lessonID string, page, limit int) (items []*LessonQuestion, total int)
+	// GetLessonQuestion — вопрос курса с ответами; false — вопроса нет или
+	// он принадлежит другому курсу.
+	GetLessonQuestion(courseID, questionID string) (*LessonQuestion, bool)
+	// CreateLessonAnswer создаёт ответ на вопрос. QuestionID должен
+	// принадлежать курсу CourseID, иначе ErrNotFound (handler отдаёт 404
+	// «Вопрос не найден», в т.ч. для вопроса другого курса). AuthorName,
+	// AuthorRole и IsTeacher вычисляются из users/course. Права проверяет
+	// handler.
+	CreateLessonAnswer(courseID, questionID, authorID, body string) (*LessonAnswer, error)
+	// GetLessonAnswer — ответ вопроса курса; false — ответа нет или он
+	// относится к другому вопросу/курсу.
+	GetLessonAnswer(courseID, questionID, answerID string) (*LessonAnswer, bool)
+	// DeleteLessonQuestion удаляет вопрос; ответы уходят каскадом.
+	// ErrNotFound — вопроса нет в этом курсе.
+	DeleteLessonQuestion(courseID, questionID string) error
+	// DeleteLessonAnswer удаляет ответ. ErrNotFound — ответа нет в этом
+	// вопросе/курсе.
+	DeleteLessonAnswer(courseID, questionID, answerID string) error
 }
 
 // PaymentFilter — параметры журнала платежей для админки (US6, T31).
