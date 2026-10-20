@@ -30,6 +30,7 @@ import {
 import type { CompleteLessonInput, CompleteResult, Lesson } from '../api/client';
 import { courseProgress } from '../api/meExtra';
 import LessonView from '../components/LessonView';
+import Questions from '../components/Questions';
 import { t } from '../i18n/t';
 import '../styles/learn.css';
 import '../styles/profile.css';
@@ -493,6 +494,14 @@ export default function Learn(): JSX.Element {
                     </Link>
                   </p>
                 )}
+
+                {/* T72: Q&A под уроком, после навигации «Отметить пройденным». */}
+                <Questions
+                  key={currentLesson.id}
+                  courseId={courseId}
+                  lessonId={currentLesson.id}
+                  enrolled={Boolean(meCourse)}
+                />
               </>
             )}
           </div>
