@@ -132,6 +132,8 @@ func NewRouter(app *App) http.Handler {
 		// T67: публичная проверка сертификата по номеру (без авторизации).
 		// Статический сегмент /certificates не пересекается с /courses.
 		app.RegisterCertificateRoutes(r)
+		// T81: публичный профиль преподавателя (без авторизации).
+		r.Get("/teachers/{id}", app.GetTeacherProfile)
 		r.Get("/courses/{id}/reviews", app.ListReviews)
 		// T79: публичная подборка похожих курсов той же категории —
 		// GET /courses/{id}/similar?limit=4 (handler/similar_courses.go).

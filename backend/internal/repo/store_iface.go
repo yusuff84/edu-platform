@@ -332,6 +332,16 @@ type StoreAPI interface {
 	// Исходный курс должен существовать и быть published, иначе пустой
 	// результат (хендлер отвечает 404 «Курс не найден»).
 	ListSimilarCourses(courseID string, limit int) []*Course
+
+	// ---- T81: публичный профиль преподавателя ----
+
+	// GetTeacherProfile собирает публичный профиль преподавателя одним
+	// вызовом (T81): карточка TeacherPublic с агрегатами по published-курсам
+	// и сами published-курсы (максимум 100) в порядке «активные записи desc,
+	// затем createdAt desc». false — пользователя нет или его роль не
+	// teacher/admin (handler отвечает 404). Агрегаты считаются без N+1:
+	// in-memory — одним проходом по картам, Postgres — агрегирующими SQL.
+	GetTeacherProfile(teacherID string) (*TeacherProfileData, bool)
 }
 
 // PaymentFilter — параметры журнала платежей для админки (US6, T31).

@@ -2330,3 +2330,80 @@ func (s *PostgresStore) ListSimilarCourses(courseID string, limit int) []*Course
 	}
 	return out
 }
+
+// ---- T81: публичный профиль преподавателя ----
+
+// GetTeacherProfile собирает публичный профиль преподавателя (T81) тремя
+// запросами с постоянным их числом (без N+1): пользователь, агрегаты по
+// published-курсам и сами курсы с числом активных записей для сортировки.
+// false — пользователя нет, роль не teacher/admin или БД отказала.
+func (s *PostgresStore) GetTeacherProfile(teacherID string) (*TeacherProfileData, bool) {
+	if _, err := uuid.Parse(strings.TrimSpace(teacherID)); err != nil {
+		return nil, false
+	}
+	ctx, cancel := s.ctx()
+	defer cancel()
+
+	teacher := TeacherPublic{}
+	var role Role
+	err := s.pool.QueryRow(ctx,
+		`SELECT id::text, COALESCE(display_name,''), role FROM users WHERE id=$1::uuid`, teacherID).
+		Scan(&teacher.ID, &teacher.DisplayName, &role)
+	if err != nil {
+		return nil, false
+	}
+	if role != RoleTeacher && role != RoleAdmin {
+		return nil, false
+	}
+
+	// Агрегаты по published-курсам одним запросом: число курсов, активные
+	// записи на них, средневзвешенная оценка (как RecalcCourseRating — до
+	// одного знака) и суммарное число оценок.
+	err = s.pool.QueryRow(ctx, `
+		SELECT COUNT(*)::int,
+		       COALESCE(SUM(COALESCE(ea.cnt, 0)), 0)::int,
+		       COALESCE(ROUND(SUM(c.avg_rating * c.ratings_count)
+		                      / NULLIF(SUM(c.ratings_count), 0), 1), 0)::float8,
+		       COALESCE(SUM(c.ratings_count), 0)::int
+		FROM courses c
+		LEFT JOIN (
+		    SELECT course_id, COUNT(*)::int AS cnt
+		    FROM enrollments
+		    WHERE status = 'active'
+		    GROUP BY course_id
+		) ea ON ea.course_id = c.id
+		WHERE c.teacher_id = $1::uuid AND c.status = 'published'`, teacherID).
+		Scan(&teacher.CoursesCount, &teacher.StudentsCount,
+			&teacher.AvgRating, &teacher.RatingsCount)
+	if err != nil {
+		log.Printf("postgres GetTeacherProfile stats: %v", err)
+		return nil, false
+	}
+
+	rows, err := s.pool.Query(ctx,
+		`SELECT `+courseCols+`
+		 FROM courses c
+		 LEFT JOIN (
+		     SELECT course_id, COUNT(*)::int AS cnt
+		     FROM enrollments
+		     WHERE status = 'active'
+		     GROUP BY course_id
+		 ) ea ON ea.course_id = c.id
+		 WHERE c.teacher_id = $1::uuid AND c.status = 'published'
+		 ORDER BY COALESCE(ea.cnt, 0) DESC, c.created_at DESC, c.id DESC
+		 LIMIT $2`,
+		teacherID, teacherProfileCoursesLimit)
+	if err != nil {
+		log.Printf("postgres GetTeacherProfile courses: %v", err)
+		return nil, false
+	}
+	defer rows.Close()
+
+	courses := make([]*Course, 0, teacher.CoursesCount)
+	for rows.Next() {
+		if c, err := scanCourse(rows.Scan); err == nil {
+			courses = append(courses, c)
+		}
+	}
+	return &TeacherProfileData{Teacher: teacher, Courses: courses}, true
+}

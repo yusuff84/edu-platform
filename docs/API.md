@@ -54,6 +54,7 @@
 | POST | `/api/v1/courses/{id}/reviews` | студент с активной записью | `{rating:1..5, body}` → `201` `Review` |
 | GET | `/api/v1/courses/{id}/questions?lessonId=&page=&limit=` | публичный* | → `200` `{items:[LessonQuestion],total,page,limit}`; вопросы новые первыми, ответы внутри — старые первыми; *неопубликованный курс виден только владельцу/админу, остальным `404 «Курс не найден»`; `lessonId` не из курса → `404 «Урок не найден в этом курсе»` |
 | GET | `/api/v1/certificates/{number}` | публичный | → `200` `{number,issuedAt,studentName,courseTitle,courseSlug}`; `studentName` — displayName студента (e-mail не отдаётся); `404 «Сертификат не найден»` |
+| GET | `/api/v1/teachers/{id}` | публичный | → `200 {"teacher":{id,displayName,coursesCount,studentsCount,avgRating,ratingsCount},"courses":[CourseItem]}`; только `published`-курсы, порядок — активные записи desc, затем `createdAt` desc; агрегаты — по published-курсам; `404 «Преподаватель не найден»` — пользователя нет или роль не teacher/admin (T81) |
 
 > Волна P8 (T65): `category` — слаг из `programming`, `design`, `data`,
 > `marketing`, `ai`, `other`. Необязателен при создании курса (по умолчанию
