@@ -79,6 +79,9 @@
 |---|---|---|---|
 | GET | `/api/v1/me/courses` | cookie | → `200` `{items:[{course,percent,nextLesson,certificateNumber}],total}`; `certificateNumber` — пустая строка, если сертификата нет |
 | GET | `/api/v1/me/certificates` | cookie | → `200` `{items:[{number,issuedAt,courseId,courseTitle,courseSlug}]}` — новые первыми; сертификат выдаётся автоматически при первом достижении 100% прогресса (все уроки курса завершены) |
+| GET | `/api/v1/me/favorites` | cookie | → `200` `{items:[CourseItem],total}` — избранные курсы, добавленные позже первыми; архивные/неопубликованные и удалённые курсы не попадают (T73) |
+| PUT | `/api/v1/me/favorites/{courseId}` | cookie | без тела → `204`; идемпотентно; только published-курс, иначе `404 «Курс не найден»` (T73) |
+| DELETE | `/api/v1/me/favorites/{courseId}` | cookie | → `204`; идемпотентно, в т.ч. если курса или пары уже нет (T73) |
 | POST | `/api/v1/me/courses/{id}/lessons/{lessonId}/complete` | активная запись | `{quizAnswers?, code?, language?}` → `200 {passed,completed,percent,nextLesson}` или `{passed:false,message}`; для code-задач `502` при недоступном runner |
 
 ### Преподаватель (`teacher` — роли teacher/admin)

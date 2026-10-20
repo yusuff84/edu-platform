@@ -287,6 +287,22 @@ type StoreAPI interface {
 	// DeleteLessonAnswer удаляет ответ. ErrNotFound — ответа нет в этом
 	// вопросе/курсе.
 	DeleteLessonAnswer(courseID, questionID, answerID string) error
+
+	// ---- T73: избранные курсы ----
+
+	// AddFavorite идемпотентно добавляет курс в избранное пользователя:
+	// повторный вызов для пары (user, course) — успех без дубликата и без
+	// изменения времени добавления. ErrNotFound — пользователя или курса нет
+	// (в Postgres то же поведение даёт нарушение FK). Проверку published и
+	// ответ 404 выполняет handler.
+	AddFavorite(userID, courseID string) error
+	// RemoveFavorite идемпотентно удаляет курс из избранного: отсутствие
+	// пары — успех (в т.ч. если курса уже нет).
+	RemoveFavorite(userID, courseID string) error
+	// ListFavoriteCoursesByUser — published-курсы из избранного пользователя,
+	// добавленные позже первыми. Архивные, черновики и удалённые курсы в
+	// список не попадают. Никогда не nil (пустой слайс — избранного нет).
+	ListFavoriteCoursesByUser(userID string) []*Course
 }
 
 // PaymentFilter — параметры журнала платежей для админки (US6, T31).

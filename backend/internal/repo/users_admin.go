@@ -95,6 +95,8 @@ func (s *Store) DeleteUser(id string) error {
 	}
 	// T67: сертификаты ученика уходят каскадом (010_certificates.sql).
 	s.dropCertificatesByUserLocked(id)
+	// T73: избранное ученика — зеркало ON DELETE CASCADE (013_favorites.sql).
+	s.dropFavoritesByUserLocked(id)
 	return nil
 }
 
