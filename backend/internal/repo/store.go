@@ -48,6 +48,11 @@ type Store struct {
 	certByNumber map[string]string       // number -> certificate id
 	commissionPct      int
 	promoBarEnabled    bool
+
+	// T73: избранное — userID -> courseID -> время добавления. Вложенная
+	// карта удаляет избранное пользователя одной операцией; при удалении
+	// курса его пары вычищаются обходом (зеркало ON DELETE CASCADE).
+	favorites map[string]map[string]time.Time
 }
 
 // NewStore создаёт пустое хранилище.
@@ -71,6 +76,7 @@ func NewStore() *Store {
 		certificates:       make(map[string]*Certificate),
 		certIdx:            make(map[string]string),
 		certByNumber:       make(map[string]string),
+		favorites:          make(map[string]map[string]time.Time),
 		commissionPct:      15,
 		promoBarEnabled:    true,
 	}
@@ -578,6 +584,8 @@ func (s *Store) DeleteCourse(id string) error {
 	}
 	// T67: сертификаты за курс уходят каскадом (010_certificates.sql).
 	s.dropCertificatesByCourseLocked(id)
+	// T73: избранное по курсу — зеркало ON DELETE CASCADE (013_favorites.sql).
+	s.dropFavoritesByCourseLocked(id)
 	// T63: промокоды курса — зеркало ON DELETE CASCADE (008_promo_codes.sql).
 	for cid, pc := range s.promoCodes {
 		if pc.CourseID == id {

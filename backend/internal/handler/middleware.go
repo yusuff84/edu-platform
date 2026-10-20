@@ -212,6 +212,9 @@ func NewRouter(app *App) http.Handler {
 		r.With(app.requireAuth).Get("/me/courses", app.MyCourses)
 		r.With(app.requireAuth).Post("/me/courses/{id}/lessons/{lessonId}/complete", app.CompleteLesson)
 		app.RegisterMeExtraRoutes(r)
+		// T73: избранные курсы — PUT/DELETE /me/favorites/{courseId},
+		// GET /me/favorites (handler/favorites.go).
+		app.RegisterFavoritesRoutes(r)
 	})
 	return r
 }
