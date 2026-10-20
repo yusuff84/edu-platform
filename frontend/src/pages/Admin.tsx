@@ -1065,6 +1065,14 @@ export default function Admin(): JSX.Element {
             <p>
               <span className="admin-token__label">{t('admin.inviteEmail')}:</span> {invite.email}
             </p>
+            {invite.inviteLink && (
+              <>
+                <p>
+                  <span className="admin-token__label">{t('admin.inviteLink')}:</span>
+                </p>
+                <code className="admin-token__value">{invite.inviteLink}</code>
+              </>
+            )}
             <p>
               <span className="admin-token__label">{t('admin.inviteToken')}:</span>
             </p>
