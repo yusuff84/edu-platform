@@ -167,6 +167,7 @@ func cloneLesson(src *Lesson) *Lesson {
 		StartsAt:  cloneTimePtr(src.StartsAt),
 		Quiz:      cloneQuiz(src.Quiz),
 		CodeTask:  cloneCodeTask(src.CodeTask),
+		IsPreview: src.IsPreview,
 		CreatedAt: time.Now().UTC(),
 	}
 }

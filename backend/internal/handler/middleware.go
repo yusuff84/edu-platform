@@ -126,6 +126,9 @@ func NewRouter(app *App) http.Handler {
 		// и число published-курсов (регистрируется до /courses/{slug}).
 		r.Get("/categories", app.ListCategories)
 		r.Get("/courses/{slug}", app.GetCourse)
+		// T75: публичный бесплатный просмотр превью-урока (P9) — без входа.
+		// Статический сегмент preview не пересекается с /courses/{id}/reviews.
+		r.Get("/courses/{slug}/preview/{lessonId}", app.GetLessonPreview)
 		// T67: публичная проверка сертификата по номеру (без авторизации).
 		// Статический сегмент /certificates не пересекается с /courses.
 		app.RegisterCertificateRoutes(r)

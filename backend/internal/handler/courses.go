@@ -138,12 +138,15 @@ type lessonView struct {
 	Title    string          `json:"title"`
 	Kind     repo.LessonKind `json:"kind"`
 	Position int             `json:"position"`
-	BodyMD   string          `json:"bodyMd,omitempty"`
-	VideoURL string          `json:"videoUrl,omitempty"`
-	LiveURL  string          `json:"liveUrl,omitempty"`
-	StartsAt *time.Time      `json:"startsAt,omitempty"`
-	Quiz     any             `json:"quiz,omitempty"`
-	CodeTask any             `json:"codeTask,omitempty"`
+	// IsPreview — флаг бесплатного превью (T75): есть и в публичном,
+	// и в полном виде урока (аддитивное поле контракта P9).
+	IsPreview bool       `json:"isPreview"`
+	BodyMD    string     `json:"bodyMd,omitempty"`
+	VideoURL  string     `json:"videoUrl,omitempty"`
+	LiveURL   string     `json:"liveUrl,omitempty"`
+	StartsAt  *time.Time `json:"startsAt,omitempty"`
+	Quiz      any        `json:"quiz,omitempty"`
+	CodeTask  any        `json:"codeTask,omitempty"`
 }
 
 type moduleView struct {
@@ -157,7 +160,8 @@ type moduleView struct {
 func lessonToView(l *repo.Lesson, full bool) lessonView {
 	v := lessonView{
 		ID: l.ID, Title: l.Title, Kind: l.Kind, Position: l.Position,
-		BodyMD: l.BodyMD, VideoURL: l.VideoURL, LiveURL: l.LiveURL, StartsAt: l.StartsAt,
+		IsPreview: l.IsPreview,
+		BodyMD:    l.BodyMD, VideoURL: l.VideoURL, LiveURL: l.LiveURL, StartsAt: l.StartsAt,
 	}
 	if l.Quiz != nil {
 		if full {
@@ -214,4 +218,34 @@ func (a *App) GetCourse(w http.ResponseWriter, r *http.Request) {
 		mv = append(mv, moduleView{ID: m.ID, Title: m.Title, Position: m.Position, Lessons: lv})
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"course": c, "modules": mv})
+}
+
+// coursePreviewRef — минимальная карточка курса в ответе превью-урока (T75):
+// контракт P9 требует ровно id/slug/title, без остальных полей курса.
+type coursePreviewRef struct {
+	ID    string `json:"id"`
+	Slug  string `json:"slug"`
+	Title string `json:"title"`
+}
+
+// GetLessonPreview — GET /courses/{slug}/preview/{lessonId}: публичный
+// бесплатный просмотр превью-урока (T75). Курс должен существовать и быть
+// published, урок — принадлежать курсу и иметь isPreview=true; иначе
+// 404 «Курс не найден» / 404 «Урок не найден». Урок отдаётся публичным видом
+// lessonToView(..., false): без правильных ответов теста и скрытых тестов.
+func (a *App) GetLessonPreview(w http.ResponseWriter, r *http.Request) {
+	c, ok := a.Store.GetCourseBySlug(chi.URLParam(r, "slug"))
+	if !ok || c.Status != repo.CoursePublished {
+		writeErr(w, http.StatusNotFound, "Курс не найден")
+		return
+	}
+	l, found := a.Store.GetLesson(strings.TrimSpace(chi.URLParam(r, "lessonId")))
+	if !found || !l.IsPreview || !a.lessonInCourse(l, c.ID) {
+		writeErr(w, http.StatusNotFound, "Урок не найден")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"course": coursePreviewRef{ID: c.ID, Slug: c.Slug, Title: c.Title},
+		"lesson": lessonToView(l, false),
+	})
 }

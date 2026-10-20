@@ -104,6 +104,9 @@ type updateLessonRequest struct {
 	StartsAt *string          `json:"startsAt"` // "" — очистить; отсутствует — не менять
 	Quiz     *quizRequest     `json:"quiz"`
 	CodeTask *repo.CodeTask   `json:"codeTask"`
+	// IsPreview — необязательный флаг превью (T75): указатель, чтобы PATCH
+	// без поля не менял значение, а явный false снимал флаг.
+	IsPreview *bool `json:"isPreview"`
 }
 
 // TeacherUpdateLesson — PATCH .../lessons/{lessonID}: переданные поля
@@ -137,6 +140,7 @@ func (a *App) TeacherUpdateLesson(w http.ResponseWriter, r *http.Request) {
 		ID: cur.ID, ModuleID: cur.ModuleID, Kind: cur.Kind, Position: cur.Position,
 		Title: cur.Title, BodyMD: cur.BodyMD, VideoURL: cur.VideoURL,
 		LiveURL: cur.LiveURL, StartsAt: cur.StartsAt, Quiz: cur.Quiz, CodeTask: cur.CodeTask,
+		IsPreview: cur.IsPreview,
 	}
 	if req.Title != nil {
 		title := strings.TrimSpace(*req.Title)
@@ -188,6 +192,9 @@ func (a *App) TeacherUpdateLesson(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.CodeTask != nil {
 		merged.CodeTask = req.CodeTask
+	}
+	if req.IsPreview != nil {
+		merged.IsPreview = *req.IsPreview
 	}
 	if msg := validateLessonContent(merged); msg != "" {
 		writeErr(w, http.StatusBadRequest, msg)

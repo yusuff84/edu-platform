@@ -134,6 +134,17 @@
 > админа появляются аддитивные `promoCode` и `discountCents`, `usedCount`
 > увеличивается один раз при успешной оплате.
 
+> Волна P9 (T75): превью-уроки. В урок добавлено аддитивное поле `isPreview`
+> (bool, всегда присутствует — не omitempty) во всех видах: страница курса,
+> полный вид владельца/админа и ответы teacher-хендлеров. `POST
+> /api/v1/teacher/courses/{id}/lessons` и `PATCH …/lessons/{lessonID}`
+> принимают необязательное `isPreview`: создание без поля — `false`, PATCH без
+> поля значение не меняет. Публичный `GET /api/v1/courses/{slug}/preview/{lessonId}`
+> без входа отдаёт `200 {"course":{"id","slug","title"},"lesson":<lessonView>}`
+> только для published-курса и урока с `isPreview=true`; урок отдаётся
+> публичным видом — без правильных ответов теста и скрытых тестов code-задания.
+> Иначе `404 «Курс не найден»` / `404 «Урок не найден»`.
+
 > В бэклоге T13: `GET/PATCH/DELETE /teacher/courses[...]`, PATCH модулей/уроков,
 > reorder — в `Task/T13-integration-wiring.md`.
 

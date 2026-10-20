@@ -146,6 +146,9 @@ type CodeTask struct {
 	Tests    []CodeTest `json:"tests"`
 }
 
+// Lesson — урок программы курса. IsPreview (T75) — урок открыт для
+// бесплатного публичного просмотра: GET /courses/{slug}/preview/{lessonId}.
+// Поле аддитивное и всегда присутствует во всех видах урока (не omitempty).
 type Lesson struct {
 	ID        string     `json:"id"`
 	ModuleID  string     `json:"moduleId"`
@@ -158,6 +161,7 @@ type Lesson struct {
 	StartsAt  *time.Time `json:"startsAt,omitempty"`
 	Quiz      *QuizData  `json:"quiz,omitempty"`
 	CodeTask  *CodeTask  `json:"codeTask,omitempty"`
+	IsPreview bool       `json:"isPreview"`
 	CreatedAt time.Time  `json:"createdAt"`
 }
 
