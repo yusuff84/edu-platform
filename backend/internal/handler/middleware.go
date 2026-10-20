@@ -181,6 +181,9 @@ func NewRouter(app *App) http.Handler {
 			// T63: промокоды курса — POST/GET /courses/{id}/promo-codes,
 			// DELETE /courses/{id}/promo-codes/{promoId} (handler/promo_codes.go).
 			app.RegisterTeacherPromoRoutes(r)
+			// T77: аналитика учителя — GET /stats и /stats/courses
+			// (handler/teacher_stats.go; teacher — свои курсы, admin — все).
+			app.RegisterTeacherStatsRoutes(r)
 		})
 
 		r.Route("/admin", func(r chi.Router) {
