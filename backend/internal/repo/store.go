@@ -791,6 +791,9 @@ func (s *Store) UpdateLesson(l *Lesson) error {
 	cur.StartsAt = l.StartsAt
 	cur.Quiz = l.Quiz
 	cur.CodeTask = l.CodeTask
+	// T75: флаг превью — часть содержимого урока, PATCH без поля его не меняет
+	// (handler передаёт в UpdateLesson слитый урок с текущим значением).
+	cur.IsPreview = l.IsPreview
 	return nil
 }
 

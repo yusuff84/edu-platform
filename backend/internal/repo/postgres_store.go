@@ -686,7 +686,7 @@ func scanLesson(scan func(dest ...any) error) (*Lesson, error) {
 	var quizRaw, codeRaw *string
 	var created time.Time
 	if err := scan(&l.ID, &moduleID, &title, &kind, &pos, &body, &video, &live,
-		&starts, &quizRaw, &codeRaw, &created); err != nil {
+		&starts, &quizRaw, &codeRaw, &created, &l.IsPreview); err != nil {
 		return nil, err
 	}
 	l.ModuleID = moduleID
@@ -715,7 +715,7 @@ func scanLesson(scan func(dest ...any) error) (*Lesson, error) {
 
 const lessonCols = `l.id::text, l.module_id::text, l.title, l.kind, l.position,
 	COALESCE(l.body_md,''), COALESCE(l.video_url,''), COALESCE(l.live_url,''),
-	l.starts_at, l.quiz::text, l.code_task::text, l.created_at`
+	l.starts_at, l.quiz::text, l.code_task::text, l.created_at, l.is_preview`
 
 func (s *PostgresStore) CreateLesson(l *Lesson) *Lesson {
 	ctx, cancel := s.ctx()
@@ -730,13 +730,14 @@ func (s *PostgresStore) CreateLesson(l *Lesson) *Lesson {
 		ModuleID: l.ModuleID, Title: l.Title, Kind: l.Kind,
 		BodyMD: l.BodyMD, VideoURL: l.VideoURL, LiveURL: l.LiveURL,
 		StartsAt: l.StartsAt, Quiz: l.Quiz, CodeTask: l.CodeTask,
+		IsPreview: l.IsPreview,
 	}
 	err := s.pool.QueryRow(ctx,
-		`INSERT INTO lessons (module_id, title, kind, position, body_md, video_url, live_url, starts_at, quiz, code_task)
-		 SELECT $1::uuid, $2, $3, COALESCE(MAX(position),0)+1, $4, $5, $6, $7, $8::jsonb, $9::jsonb
+		`INSERT INTO lessons (module_id, title, kind, position, body_md, video_url, live_url, starts_at, quiz, code_task, is_preview)
+		 SELECT $1::uuid, $2, $3, COALESCE(MAX(position),0)+1, $4, $5, $6, $7, $8::jsonb, $9::jsonb, $10
 		 FROM lessons WHERE module_id=$1::uuid
 		 RETURNING id::text, position, created_at`,
-		l.ModuleID, l.Title, string(l.Kind), body, video, live, starts, quiz, code).
+		l.ModuleID, l.Title, string(l.Kind), body, video, live, starts, quiz, code, l.IsPreview).
 		Scan(&nl.ID, &nl.Position, &nl.CreatedAt)
 	if err != nil {
 		log.Printf("postgres CreateLesson: %v", err)
@@ -1552,9 +1553,9 @@ func (s *PostgresStore) UpdateLesson(l *Lesson) error {
 	}
 	tag, err := s.pool.Exec(ctx,
 		`UPDATE lessons SET title=$2, body_md=$3, video_url=$4, live_url=$5,
-		 starts_at=$6, quiz=$7::jsonb, code_task=$8::jsonb
+		 starts_at=$6, quiz=$7::jsonb, code_task=$8::jsonb, is_preview=$9
 		 WHERE id=$1::uuid`,
-		l.ID, l.Title, body, video, live, starts, quiz, code)
+		l.ID, l.Title, body, video, live, starts, quiz, code, l.IsPreview)
 	if err != nil {
 		return fmt.Errorf("не удалось обновить урок: %w", err)
 	}

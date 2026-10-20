@@ -164,6 +164,10 @@ type createLessonRequest struct {
 	StartsAt *string         `json:"startsAt"`
 	Quiz     *quizRequest    `json:"quiz"`
 	CodeTask *repo.CodeTask  `json:"codeTask"`
+	// IsPreview — необязательный флаг бесплатного превью (T75): указатель,
+	// чтобы отличить «поле не передано» (создание без него — false) от
+	// явного false.
+	IsPreview *bool `json:"isPreview"`
 }
 
 // ---- quiz (T53, контракт P7: валидация теста на бэкенде) ----
@@ -306,14 +310,15 @@ func (a *App) TeacherCreateLesson(w http.ResponseWriter, r *http.Request) {
 	// Формат разбирает parseLessonStartsAt: RFC3339 или datetime-local
 	// (контракт P7: строка без зоны считается UTC).
 	l := &repo.Lesson{
-		ModuleID: mod.ID,
-		Title:    strings.TrimSpace(req.Title),
-		Kind:     req.Kind,
-		BodyMD:   req.BodyMD,
-		VideoURL: strings.TrimSpace(req.VideoURL),
-		LiveURL:  strings.TrimSpace(req.LiveURL),
-		Quiz:     req.Quiz.toRepo(),
-		CodeTask: req.CodeTask,
+		ModuleID:  mod.ID,
+		Title:     strings.TrimSpace(req.Title),
+		Kind:      req.Kind,
+		BodyMD:    req.BodyMD,
+		VideoURL:  strings.TrimSpace(req.VideoURL),
+		LiveURL:   strings.TrimSpace(req.LiveURL),
+		Quiz:      req.Quiz.toRepo(),
+		CodeTask:  req.CodeTask,
+		IsPreview: req.IsPreview != nil && *req.IsPreview,
 	}
 	if req.StartsAt != nil {
 		raw := strings.TrimSpace(*req.StartsAt)
