@@ -150,8 +150,24 @@ export interface Lesson {
   quiz?: QuizData;
   /** Кодовое задание; в публичном виде приходят только тесты с hidden != true. */
   codeTask?: CodeTask;
+  /**
+   * T76 (P9/T75): урок доступен без записи на курс (публичное превью).
+   * Аддитивное поле во всех видах урока; false/отсутствие — превью нет.
+   */
+  isPreview?: boolean;
   /** Есть только в полной форме (repo.Lesson). */
   createdAt?: string;
+}
+
+/** T76: ответ GET /courses/{slug}/preview/{lessonId} (публичное превью). */
+export interface LessonPreview {
+  course: {
+    id: string;
+    slug: string;
+    title: string;
+  };
+  /** Публичный вид урока: без правильных ответов и скрытых тестов. */
+  lesson: Lesson;
 }
 
 /**
@@ -420,6 +436,8 @@ export interface CreateLessonInput {
   quiz?: { questions: QuizQuestionInput[] };
   /** Для kind='code'. */
   codeTask?: { language: string; template?: string; tests: CodeTest[] };
+  /** T76: доступен без записи (превью); при создании отсутствие = false. */
+  isPreview?: boolean;
 }
 
 /** Тело POST .../complete: для video/live можно не слать вообще. */
