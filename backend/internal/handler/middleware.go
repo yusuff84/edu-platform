@@ -126,13 +126,29 @@ func NewRouter(app *App) http.Handler {
 		// и число published-курсов (регистрируется до /courses/{slug}).
 		r.Get("/categories", app.ListCategories)
 		r.Get("/courses/{slug}", app.GetCourse)
+		// T75: публичный бесплатный просмотр превью-урока (P9) — без входа.
+		// Статический сегмент preview не пересекается с /courses/{id}/reviews.
+		r.Get("/courses/{slug}/preview/{lessonId}", app.GetLessonPreview)
 		// T67: публичная проверка сертификата по номеру (без авторизации).
 		// Статический сегмент /certificates не пересекается с /courses.
 		app.RegisterCertificateRoutes(r)
+		// T81: публичный профиль преподавателя (без авторизации).
+		r.Get("/teachers/{id}", app.GetTeacherProfile)
 		r.Get("/courses/{id}/reviews", app.ListReviews)
+		// T79: публичная подборка похожих курсов той же категории —
+		// GET /courses/{id}/similar?limit=4 (handler/similar_courses.go).
+		r.Get("/courses/{id}/similar", app.ListSimilarCourses)
 		r.With(app.requireAuth).Post("/courses/{id}/reviews", app.CreateReview)
 		// T63: проверка промокода на странице курса — только вошедший.
 		r.With(app.requireAuth).Post("/courses/{id}/promo/validate", app.ValidatePromoCode)
+		// T71: вопросы и ответы по урокам (handler/lesson_qa.go). Лента
+		// публичная; создание/удаление — только вошедшим (права проверяет
+		// хендлер: активная запись/владение курсом/admin).
+		r.Get("/courses/{id}/questions", app.ListLessonQuestions)
+		r.With(app.requireAuth).Post("/courses/{id}/questions", app.CreateLessonQuestion)
+		r.With(app.requireAuth).Post("/courses/{id}/questions/{questionId}/answers", app.CreateLessonAnswer)
+		r.With(app.requireAuth).Delete("/courses/{id}/questions/{questionId}", app.DeleteLessonQuestion)
+		r.With(app.requireAuth).Delete("/courses/{id}/questions/{questionId}/answers/{answerId}", app.DeleteLessonAnswer)
 
 		// Пост-P7: публичные настройки интерфейса (тогл промо-баннера) —
 		// читаются шапкой без авторизации, поэтому живут вне /admin
@@ -170,6 +186,9 @@ func NewRouter(app *App) http.Handler {
 			// T63: промокоды курса — POST/GET /courses/{id}/promo-codes,
 			// DELETE /courses/{id}/promo-codes/{promoId} (handler/promo_codes.go).
 			app.RegisterTeacherPromoRoutes(r)
+			// T77: аналитика учителя — GET /stats и /stats/courses
+			// (handler/teacher_stats.go; teacher — свои курсы, admin — все).
+			app.RegisterTeacherStatsRoutes(r)
 		})
 
 		r.Route("/admin", func(r chi.Router) {
@@ -212,6 +231,9 @@ func NewRouter(app *App) http.Handler {
 		r.With(app.requireAuth).Get("/me/courses", app.MyCourses)
 		r.With(app.requireAuth).Post("/me/courses/{id}/lessons/{lessonId}/complete", app.CompleteLesson)
 		app.RegisterMeExtraRoutes(r)
+		// T73: избранные курсы — PUT/DELETE /me/favorites/{courseId},
+		// GET /me/favorites (handler/favorites.go).
+		app.RegisterFavoritesRoutes(r)
 	})
 	return r
 }

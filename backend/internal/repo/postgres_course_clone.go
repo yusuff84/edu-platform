@@ -105,12 +105,13 @@ func (s *PostgresStore) CloneCourseAs(courseID, teacherID string) (*Course, erro
 			return nil, fmt.Errorf("копирование курса: %w", err)
 		}
 		// Уроки переносим одним INSERT..SELECT: jsonb-поля quiz/code_task
-		// копируются как значение, starts_at — как есть; id выдаёт БД.
+		// копируются как значение, starts_at — как есть, is_preview — как есть
+		// (T75: копия курса сохраняет превью-уроки); id выдаёт БД.
 		if _, err := tx.Exec(ctx,
 			`INSERT INTO lessons (module_id, title, kind, position, body_md, video_url,
-			  live_url, starts_at, quiz, code_task)
+			  live_url, starts_at, quiz, code_task, is_preview)
 			 SELECT $1::uuid, l.title, l.kind, l.position, l.body_md, l.video_url,
-			  l.live_url, l.starts_at, l.quiz, l.code_task
+			  l.live_url, l.starts_at, l.quiz, l.code_task, l.is_preview
 			 FROM lessons l WHERE l.module_id=$2::uuid`,
 			newModuleID, m.id); err != nil {
 			return nil, fmt.Errorf("копирование курса: %w", err)

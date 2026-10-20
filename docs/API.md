@@ -49,9 +49,12 @@
 | GET | `/api/v1/courses?q=&category=&price=&minRating=&sort=&page=&limit=` | публичный | → `200` конверт `{items:[CourseItem],total,page,limit}` |
 | GET | `/api/v1/categories` | публичный | → `200` `{items:[{slug,coursesCount}]}` — шесть категорий в фиксированном порядке: `programming, design, data, marketing, ai, other`; `coursesCount` — только `published` (T65) |
 | GET | `/api/v1/courses/{slug}` | публичный* | → `200` `{course, modules:[ModuleView]}`; *`draft` виден автору и админу, остальным 404 |
+| GET | `/api/v1/courses/{id}/similar?limit=4` | публичный | → `200` `{items:[CourseItem],total}` — published-курсы той же `category`, кроме самого курса; порядок: активные записи desc, `avgRating` desc, `createdAt` desc; `limit` по умолчанию 4 (максимум 12, нечисловой/`<=0` — дефолт), `total` — число отданных элементов; `404 «Курс не найден»` для неопубликованного/несуществующего `id` (T79) |
 | GET | `/api/v1/courses/{id}/reviews?rating=1..5` | публичный | `{id}` — UUID или slug; `rating` необязателен и фильтрует `items`/`total` → `200` `{items:[Review],total,avgRating,ratingsCount,breakdown:{"1".."5"}}`; `avgRating`/`ratingsCount`/`breakdown` — по всем отзывам курса; иной `rating` → `400 «Оценка должна быть числом от 1 до 5»` |
 | POST | `/api/v1/courses/{id}/reviews` | студент с активной записью | `{rating:1..5, body}` → `201` `Review` |
+| GET | `/api/v1/courses/{id}/questions?lessonId=&page=&limit=` | публичный* | → `200` `{items:[LessonQuestion],total,page,limit}`; вопросы новые первыми, ответы внутри — старые первыми; *неопубликованный курс виден только владельцу/админу, остальным `404 «Курс не найден»`; `lessonId` не из курса → `404 «Урок не найден в этом курсе»` |
 | GET | `/api/v1/certificates/{number}` | публичный | → `200` `{number,issuedAt,studentName,courseTitle,courseSlug}`; `studentName` — displayName студента (e-mail не отдаётся); `404 «Сертификат не найден»` |
+| GET | `/api/v1/teachers/{id}` | публичный | → `200 {"teacher":{id,displayName,coursesCount,studentsCount,avgRating,ratingsCount},"courses":[CourseItem]}`; только `published`-курсы, порядок — активные записи desc, затем `createdAt` desc; агрегаты — по published-курсам; `404 «Преподаватель не найден»` — пользователя нет или роль не teacher/admin (T81) |
 
 > Волна P8 (T65): `category` — слаг из `programming`, `design`, `data`,
 > `marketing`, `ai`, `other`. Необязателен при создании курса (по умолчанию
@@ -78,6 +81,9 @@
 |---|---|---|---|
 | GET | `/api/v1/me/courses` | cookie | → `200` `{items:[{course,percent,nextLesson,certificateNumber}],total}`; `certificateNumber` — пустая строка, если сертификата нет |
 | GET | `/api/v1/me/certificates` | cookie | → `200` `{items:[{number,issuedAt,courseId,courseTitle,courseSlug}]}` — новые первыми; сертификат выдаётся автоматически при первом достижении 100% прогресса (все уроки курса завершены) |
+| GET | `/api/v1/me/favorites` | cookie | → `200` `{items:[CourseItem],total}` — избранные курсы, добавленные позже первыми; архивные/неопубликованные и удалённые курсы не попадают (T73) |
+| PUT | `/api/v1/me/favorites/{courseId}` | cookie | без тела → `204`; идемпотентно; только published-курс, иначе `404 «Курс не найден»` (T73) |
+| DELETE | `/api/v1/me/favorites/{courseId}` | cookie | → `204`; идемпотентно, в т.ч. если курса или пары уже нет (T73) |
 | POST | `/api/v1/me/courses/{id}/lessons/{lessonId}/complete` | активная запись | `{quizAnswers?, code?, language?}` → `200 {passed,completed,percent,nextLesson}` или `{passed:false,message}`; для code-задач `502` при недоступном runner |
 
 ### Преподаватель (`teacher` — роли teacher/admin)
@@ -133,6 +139,62 @@
 > необязательный `promoCode`: `amountCents` — со скидкой, в платеже и журнале
 > админа появляются аддитивные `promoCode` и `discountCents`, `usedCount`
 > увеличивается один раз при успешной оплате.
+
+> Волна P9 (T71): вопросы и ответы по урокам.
+> `GET /api/v1/courses/{id}/questions` — публичная лента курса (`id` — UUID):
+> `{items:[LessonQuestion],total,page,limit}`, `page` по умолчанию 1,
+> `limit` — 20 (максимум 100, нечисловые/вне диапазона — дефолт);
+> `LessonQuestion` = `{id,courseId,lessonId,lessonTitle,studentId,studentName,
+> body,createdAt,answers:[LessonAnswer]}` (вопросы новые первыми, ответы —
+> старые первыми, `answers` всегда массив).
+> `POST /api/v1/courses/{id}/questions` (cookie) `{lessonId, body}` после trim
+> 10..2000 → `201 {"question": LessonQuestion}`; `POST
+> /api/v1/courses/{id}/questions/{questionId}/answers` (cookie) `{body}` после
+> trim 3..2000 → `201 {"answer": LessonAnswer}`. Писать могут записанные на
+> курс, владелец курса и admin; иначе `403 «Задавать вопросы могут только
+> записанные на курс»` / `403 «Отвечать могут только записанные на курс»`.
+> `LessonAnswer` = `{id,questionId,authorId,authorName,authorRole,isTeacher,
+> body,createdAt}`, где `authorRole` — `student|teacher|admin`, `isTeacher` —
+> автор является преподавателем курса или admin.
+> `DELETE …/questions/{questionId}` и `DELETE
+> …/questions/{questionId}/answers/{answerId}` — автор, владелец курса или
+> admin, иначе `403 «Нет прав на удаление»`; успех — `204` (ответы вопроса
+> удаляются каскадом). Ошибки: `404 «Курс не найден»`, `404 «Урок не найден в
+> этом курсе»`, `404 «Вопрос не найден»` (в т.ч. вопрос другого курса),
+> `404 «Ответ не найден»`, `400 «Вопрос: от 10 до 2000 символов»`,
+> `400 «Ответ: от 3 до 2000 символов»`.
+
+> Волна P9 (T75): превью-уроки. В урок добавлено аддитивное поле `isPreview`
+> (bool, всегда присутствует — не omitempty) во всех видах: страница курса,
+> полный вид владельца/админа и ответы teacher-хендлеров. `POST
+> /api/v1/teacher/courses/{id}/lessons` и `PATCH …/lessons/{lessonID}`
+> принимают необязательное `isPreview`: создание без поля — `false`, PATCH без
+> поля значение не меняет. PATCH, содержащий только `isPreview`, разрешён и
+> для опубликованного курса (преподаватель управляет превью без снятия курса с
+> публикации); любые другие поля по-прежнему требуют черновика (`409`).
+> Публичный `GET /api/v1/courses/{slug}/preview/{lessonId}`
+> без входа отдаёт `200 {"course":{"id","slug","title"},"lesson":<lessonView>}`
+> только для published-курса и урока с `isPreview=true`; урок отдаётся
+> публичным видом — без правильных ответов теста и скрытых тестов code-задания.
+> Иначе `404 «Курс не найден»` / `404 «Урок не найден»`.
+
+> Волна P9 (T77): аналитика учителя. `GET /api/v1/teacher/stats` →
+> `200 {courses:{total,published,draft,review,archived},
+> students:{total,unique}, revenue:{paidTotalCents,platformFeeCents,teacherCents},
+> completion:{completed,avgPercent}, ratings:{avgRating,ratingsCount},
+> last30d:{enrollments,revenueCents}}` — teacher видит только свои курсы,
+> admin — все. `students.total` — активные записи, `unique` — уникальные
+> ученики с активной записью; `revenue.*` — только `succeeded`-платежи;
+> `completion.avgPercent` — средний прогресс активных записей (0..100,
+> дробное, 1 знак); `ratings` — средневзвешенно по опубликованным курсам;
+> `last30d` — активные записи и `succeeded`-платежи за 30 дней.
+> `GET /api/v1/teacher/stats/courses?limit=50` →
+> `200 {"items":[{courseId,title,status,students,revenueCents,avgRating,
+> ratingsCount,avgPercent}],"total":N}` — курсы любого статуса, порядок
+> `revenueCents` desc → `students` desc → `title`; `limit` по умолчанию 50,
+> максимум 200 (`total` — все курсы в области видимости до применения limit;
+> limit только укорачивает `items`).
+> Ученику оба эндпоинта — `403` (группа `/teacher` — только teacher/admin).
 
 > В бэклоге T13: `GET/PATCH/DELETE /teacher/courses[...]`, PATCH модулей/уроков,
 > reorder — в `Task/T13-integration-wiring.md`.

@@ -1,0 +1,124 @@
+/* T74 — избранное: сердечко на карточке курса и страница /me/favorites.
+   Импортируется из CourseCard.tsx и Favorites.tsx. Общие классы (.grid,
+   .empty, .panel, .btn, .tile) переиспользуются; чужие css не меняются,
+   собственные классы скоупятся префиксами .fav-* / .favorites-*. */
+
+/* ---------- Сердечко на карточке курса ---------- */
+
+/* Карточка — точка отсчёта для кнопки: сердечко лежит поверх обложки
+   в правом верхнем углу, не сдвигая обложку, бейдж и текстовые строки. */
+.course-card {
+  position: relative;
+}
+
+.fav-btn {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 3;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  padding: 0;
+  border: 1px solid rgba(20, 20, 20, 0.12);
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.92);
+  color: var(--muted);
+  cursor: pointer;
+  box-shadow: var(--shadow-sm);
+  transition: background 0.15s, color 0.15s, transform 0.15s, box-shadow 0.15s;
+}
+
+.fav-btn:hover {
+  background: var(--surface);
+  color: var(--brand);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-pop);
+}
+
+.fav-btn:active:not(:disabled) {
+  transform: translateY(var(--press-shift));
+}
+
+/* Активное сердечко: заливка и фирменный цвет (aria-pressed = true). */
+.fav-btn.is-active {
+  color: var(--brand);
+  border-color: rgba(230, 50, 35, 0.35);
+}
+
+.fav-btn.is-active svg path {
+  fill: currentColor;
+}
+
+.fav-btn:disabled {
+  cursor: progress;
+  opacity: 0.65;
+}
+
+.fav-btn svg {
+  pointer-events: none;
+}
+
+/* ---------- Страница «Избранное» ---------- */
+
+.favorites-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin-bottom: 4px;
+}
+
+.favorites-page .grid {
+  padding-top: 20px;
+}
+
+.favorites-page .empty .btn {
+  margin-top: 4px;
+}
+
+/* Заголовок «Мои курсы» + ссылка «Избранное» (MyCourses.tsx). */
+.cab-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 14px;
+}
+
+/* ---------- Скелетоны загрузки: та же сетка, что у карточек ---------- */
+
+.fav-skeletons {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 20px;
+  padding: 20px 0 10px;
+}
+
+.fav-skeleton {
+  height: 300px;
+  border-radius: 22px;
+  background: #e6e6eb;
+  animation: fav-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes fav-pulse {
+  50% {
+    opacity: 0.45;
+  }
+}
+
+@media (max-width: 960px) {
+  .fav-skeletons {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (max-width: 620px) {
+  .fav-skeletons {
+    grid-template-columns: 1fr;
+  }
+}

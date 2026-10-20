@@ -104,6 +104,20 @@ type updateLessonRequest struct {
 	StartsAt *string          `json:"startsAt"` // "" — очистить; отсутствует — не менять
 	Quiz     *quizRequest     `json:"quiz"`
 	CodeTask *repo.CodeTask   `json:"codeTask"`
+	// IsPreview — необязательный флаг превью (T75): указатель, чтобы PATCH
+	// без поля не менял значение, а явный false снимал флаг.
+	IsPreview *bool `json:"isPreview"`
+}
+
+// onlyPreviewPatch сообщает, что PATCH содержит только isPreview (T75).
+// Такой запрос разрешён и для опубликованного курса: преподаватель управляет
+// бесплатным превью без снятия курса с публикации. Любое другое поле требует
+// черновика (requireDraft).
+func onlyPreviewPatch(req *updateLessonRequest) bool {
+	return req.IsPreview != nil &&
+		req.ModuleID == "" && req.Title == nil && req.Kind == nil &&
+		req.BodyMD == nil && req.VideoURL == nil && req.LiveURL == nil &&
+		req.StartsAt == nil && req.Quiz == nil && req.CodeTask == nil
 }
 
 // TeacherUpdateLesson — PATCH .../lessons/{lessonID}: переданные поля
@@ -116,11 +130,14 @@ func (a *App) TeacherUpdateLesson(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	if !requireDraft(w, c) {
-		return
-	}
 	var req updateLessonRequest
 	if !decodeJSON(w, r, &req) {
+		return
+	}
+	// T75: включить/снять превью можно и у опубликованного курса — иначе
+	// преподавателю пришлось бы снимать курс с публикации. Любые другие поля
+	// по-прежнему редактируются только в черновике.
+	if !onlyPreviewPatch(&req) && !requireDraft(w, c) {
 		return
 	}
 	cur, found := a.Store.GetLesson(chi.URLParam(r, "lessonID"))
@@ -137,6 +154,7 @@ func (a *App) TeacherUpdateLesson(w http.ResponseWriter, r *http.Request) {
 		ID: cur.ID, ModuleID: cur.ModuleID, Kind: cur.Kind, Position: cur.Position,
 		Title: cur.Title, BodyMD: cur.BodyMD, VideoURL: cur.VideoURL,
 		LiveURL: cur.LiveURL, StartsAt: cur.StartsAt, Quiz: cur.Quiz, CodeTask: cur.CodeTask,
+		IsPreview: cur.IsPreview,
 	}
 	if req.Title != nil {
 		title := strings.TrimSpace(*req.Title)
@@ -188,6 +206,9 @@ func (a *App) TeacherUpdateLesson(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.CodeTask != nil {
 		merged.CodeTask = req.CodeTask
+	}
+	if req.IsPreview != nil {
+		merged.IsPreview = *req.IsPreview
 	}
 	if msg := validateLessonContent(merged); msg != "" {
 		writeErr(w, http.StatusBadRequest, msg)

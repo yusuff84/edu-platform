@@ -43,11 +43,22 @@ type Store struct {
 	sessions           map[string]*Session
 	// T67: сертификаты. certIdx — уникальная пара (userID|courseID),
 	// certByNumber — публичный номер.
-	certificates    map[string]*Certificate // id -> certificate
-	certIdx         map[string]string       // userID|courseID -> certificate id
-	certByNumber    map[string]string       // number -> certificate id
+	certificates map[string]*Certificate // id -> certificate
+	certIdx      map[string]string       // userID|courseID -> certificate id
+	certByNumber map[string]string       // number -> certificate id
+	// T71: вопросы и ответы по урокам.
+	lessonQuestions map[string]*LessonQuestion // id -> вопрос
+	lessonAnswers   map[string]*LessonAnswer   // id -> ответ
+	lessonAnswerIDs map[string][]string        // questionID -> id ответов в порядке создания
+
 	commissionPct   int
 	promoBarEnabled bool
+
+	// T73: избранное — userID -> courseID -> время добавления. Вложенная
+	// карта удаляет избранное пользователя одной операцией; при удалении
+	// курса его пары вычищаются обходом (зеркало ON DELETE CASCADE).
+	favorites map[string]map[string]time.Time
+
 	// lastCreatedAt — источник монотонного времени создания в in-memory
 	// режиме: см. nextCreatedAt.
 	lastCreatedAt time.Time
@@ -89,6 +100,10 @@ func NewStore() *Store {
 		certificates:       make(map[string]*Certificate),
 		certIdx:            make(map[string]string),
 		certByNumber:       make(map[string]string),
+		lessonQuestions:    make(map[string]*LessonQuestion),
+		lessonAnswers:      make(map[string]*LessonAnswer),
+		lessonAnswerIDs:    make(map[string][]string),
+		favorites:          make(map[string]map[string]time.Time),
 		commissionPct:      15,
 		promoBarEnabled:    true,
 	}
@@ -596,6 +611,8 @@ func (s *Store) DeleteCourse(id string) error {
 	}
 	// T67: сертификаты за курс уходят каскадом (010_certificates.sql).
 	s.dropCertificatesByCourseLocked(id)
+	// T73: избранное по курсу — зеркало ON DELETE CASCADE (013_favorites.sql).
+	s.dropFavoritesByCourseLocked(id)
 	// T63: промокоды курса — зеркало ON DELETE CASCADE (008_promo_codes.sql).
 	for cid, pc := range s.promoCodes {
 		if pc.CourseID == id {
@@ -793,6 +810,9 @@ func (s *Store) UpdateLesson(l *Lesson) error {
 	cur.StartsAt = l.StartsAt
 	cur.Quiz = l.Quiz
 	cur.CodeTask = l.CodeTask
+	// T75: флаг превью — часть содержимого урока, PATCH без поля его не меняет
+	// (handler передаёт в UpdateLesson слитый урок с текущим значением).
+	cur.IsPreview = l.IsPreview
 	return nil
 }
 
@@ -1247,6 +1267,85 @@ func (s *Store) ReviewRatingBreakdown(courseID string) map[int]int {
 	return out
 }
 
+// ---- T81: публичный профиль преподавателя ----
+
+// teacherProfileCoursesLimit — максимум курсов в публичном профиле (T81):
+// пагинации нет, но ответ ограничен сотней курсов.
+const teacherProfileCoursesLimit = 100
+
+// teacherCourseBefore — порядок published-курсов в профиле преподавателя
+// (T81): активные записи по убыванию, затем createdAt по убыванию, затем
+// id по убыванию (детерминированный порядок при полном совпадении ключей).
+// Общий компаратор in-memory и Postgres — чтобы выдачи совпадали.
+func teacherCourseBefore(a, b *Course, active map[string]int) bool {
+	if active[a.ID] != active[b.ID] {
+		return active[a.ID] > active[b.ID]
+	}
+	if !a.CreatedAt.Equal(b.CreatedAt) {
+		return a.CreatedAt.After(b.CreatedAt)
+	}
+	return a.ID > b.ID
+}
+
+// GetTeacherProfile собирает публичный профиль преподавателя (T81) под одним
+// RLock: пользователь, агрегаты по published-курсам и сами курсы-снимки.
+// Роль не teacher/admin — false (handler отвечает 404). Курсы — максимум
+// teacherProfileCoursesLimit, порядок teacherCourseBefore.
+func (s *Store) GetTeacherProfile(teacherID string) (*TeacherProfileData, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	u, ok := s.users[teacherID]
+	if !ok || (u.Role != RoleTeacher && u.Role != RoleAdmin) {
+		return nil, false
+	}
+
+	// Активные записи по курсам: один проход, без запросов на каждый курс.
+	active := make(map[string]int)
+	for _, e := range s.enrollments {
+		if e.Status == EnrollmentActive {
+			active[e.CourseID]++
+		}
+	}
+
+	courses := make([]*Course, 0, len(s.courses))
+	students := 0
+	ratings := 0
+	weighted := 0.0
+	for _, c := range s.courses {
+		if c.TeacherID != teacherID || c.Status != CoursePublished {
+			continue
+		}
+		// Снимок: наружу не должен утекать живой указатель на карту хранилища.
+		snapshot := *c
+		courses = append(courses, &snapshot)
+		students += active[c.ID]
+		ratings += c.RatingsCount
+		weighted += c.AvgRating * float64(c.RatingsCount)
+	}
+
+	coursesCount := len(courses)
+	sort.SliceStable(courses, func(i, j int) bool {
+		return teacherCourseBefore(courses[i], courses[j], active)
+	})
+	if len(courses) > teacherProfileCoursesLimit {
+		courses = courses[:teacherProfileCoursesLimit]
+	}
+
+	teacher := TeacherPublic{
+		ID:            u.ID,
+		DisplayName:   u.DisplayName,
+		CoursesCount:  coursesCount,
+		StudentsCount: students,
+		RatingsCount:  ratings,
+	}
+	if ratings > 0 {
+		// Как RecalcCourseRating: среднее с одним знаком после запятой.
+		teacher.AvgRating = math.Round(weighted/float64(ratings)*10) / 10
+	}
+	return &TeacherProfileData{Teacher: teacher, Courses: courses}, true
+}
+
 // ---- Settings ----
 
 // GetCommissionPct возвращает действующую комиссию платформы.
@@ -1469,4 +1568,600 @@ func (s *Store) IncrementPromoCodeUsage(id string) bool {
 	}
 	pc.UsedCount++
 	return true
+}
+
+// ---- T71: вопросы и ответы по урокам ----
+//
+// Блок вынесен в конец файла, чтобы не конфликтовать при слиянии волн.
+// Вопросы/ответы хранятся «сырыми» (только id и текст), а вычисляемые поля
+// (lessonTitle, studentName, authorName, authorRole, isTeacher) собираются
+// при каждом чтении — как JOIN в Postgres, поэтому смена display_name сразу
+// видна в ленте. Наружу уходят снимки: живые указатели после снятия лока
+// читать нельзя.
+
+// normalizeQAPageLimit приводит пагинацию ленты вопросов к контракту P9:
+// page с 1, limit 20 по умолчанию, максимум 100. Используется обеими
+// реализациями стора (in-memory и Postgres) для одинакового поведения.
+func normalizeQAPageLimit(page, limit int) (int, int) {
+	if page < 1 {
+		page = 1
+	}
+	if limit < 1 {
+		limit = 20
+	}
+	if limit > 100 {
+		limit = 100
+	}
+	return page, limit
+}
+
+// lessonInCourseLocked проверяет, что урок принадлежит курсу (через модуль).
+// Вызывающий держит s.mu.
+func (s *Store) lessonInCourseLocked(courseID, lessonID string) (*Lesson, bool) {
+	l, ok := s.lessons[lessonID]
+	if !ok {
+		return nil, false
+	}
+	m, ok := s.modules[l.ModuleID]
+	if !ok || m.CourseID != courseID {
+		return nil, false
+	}
+	return l, true
+}
+
+// lessonAnswerSnapshotLocked собирает ответ с вычисляемыми полями автора.
+// Вызывающий держит s.mu (RLock достаточно).
+func (s *Store) lessonAnswerSnapshotLocked(a *LessonAnswer) *LessonAnswer {
+	cp := *a
+	if u, ok := s.users[a.AuthorID]; ok {
+		cp.AuthorName = u.DisplayName
+		cp.AuthorRole = string(u.Role)
+		cp.IsTeacher = u.Role == RoleAdmin
+	}
+	if q, ok := s.lessonQuestions[a.QuestionID]; ok {
+		if c, ok := s.courses[q.CourseID]; ok && c.TeacherID == a.AuthorID {
+			cp.IsTeacher = true
+		}
+	}
+	return &cp
+}
+
+// lessonQuestionSnapshotLocked собирает вопрос с заголовком урока, именем
+// студента и ответами (старые первыми). Вызывающий держит s.mu (RLock).
+func (s *Store) lessonQuestionSnapshotLocked(q *LessonQuestion) *LessonQuestion {
+	cp := *q
+	cp.Answers = make([]*LessonAnswer, 0, len(s.lessonAnswerIDs[q.ID]))
+	if l, ok := s.lessons[q.LessonID]; ok {
+		cp.LessonTitle = l.Title
+	}
+	if u, ok := s.users[q.StudentID]; ok {
+		cp.StudentName = u.DisplayName
+	}
+	answers := make([]*LessonAnswer, 0, len(s.lessonAnswerIDs[q.ID]))
+	for _, id := range s.lessonAnswerIDs[q.ID] {
+		if a, ok := s.lessonAnswers[id]; ok {
+			answers = append(answers, s.lessonAnswerSnapshotLocked(a))
+		}
+	}
+	sort.Slice(answers, func(i, j int) bool {
+		if answers[i].CreatedAt.Equal(answers[j].CreatedAt) {
+			return answers[i].ID < answers[j].ID
+		}
+		return answers[i].CreatedAt.Before(answers[j].CreatedAt)
+	})
+	cp.Answers = answers
+	return &cp
+}
+
+// CreateLessonQuestion создаёт вопрос к уроку (T71). ErrNotFound — урока нет
+// или он принадлежит другому курсу.
+func (s *Store) CreateLessonQuestion(courseID, lessonID, studentID, body string) (*LessonQuestion, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, ok := s.lessonInCourseLocked(courseID, lessonID); !ok {
+		return nil, ErrNotFound
+	}
+	q := &LessonQuestion{
+		ID:        uuid.NewString(),
+		CourseID:  courseID,
+		LessonID:  lessonID,
+		StudentID: studentID,
+		Body:      body,
+		CreatedAt: s.nextCreatedAt(),
+		Answers:   []*LessonAnswer{},
+	}
+	s.lessonQuestions[q.ID] = q
+	return s.lessonQuestionSnapshotLocked(q), nil
+}
+
+// ListLessonQuestions возвращает вопросы курса, новые первыми; lessonID "" —
+// все вопросы. Ответы внутри — старые первыми. total считается до пагинации.
+func (s *Store) ListLessonQuestions(courseID, lessonID string, page, limit int) ([]*LessonQuestion, int) {
+	page, limit = normalizeQAPageLimit(page, limit)
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	matched := make([]*LessonQuestion, 0)
+	for _, q := range s.lessonQuestions {
+		if q.CourseID != courseID {
+			continue
+		}
+		if lessonID != "" && q.LessonID != lessonID {
+			continue
+		}
+		matched = append(matched, q)
+	}
+	sort.Slice(matched, func(i, j int) bool {
+		if matched[i].CreatedAt.Equal(matched[j].CreatedAt) {
+			return matched[i].ID > matched[j].ID
+		}
+		return matched[i].CreatedAt.After(matched[j].CreatedAt)
+	})
+	total := len(matched)
+	start := (page - 1) * limit
+	if start > total {
+		start = total
+	}
+	end := start + limit
+	if end > total {
+		end = total
+	}
+	items := make([]*LessonQuestion, 0, end-start)
+	for _, q := range matched[start:end] {
+		items = append(items, s.lessonQuestionSnapshotLocked(q))
+	}
+	return items, total
+}
+
+// GetLessonQuestion возвращает вопрос курса с ответами; false — вопроса нет
+// или он принадлежит другому курсу.
+func (s *Store) GetLessonQuestion(courseID, questionID string) (*LessonQuestion, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	q, ok := s.lessonQuestions[questionID]
+	if !ok || q.CourseID != courseID {
+		return nil, false
+	}
+	return s.lessonQuestionSnapshotLocked(q), true
+}
+
+// CreateLessonAnswer создаёт ответ на вопрос (T71). ErrNotFound — вопроса нет
+// или он принадлежит другому курсу.
+func (s *Store) CreateLessonAnswer(courseID, questionID, authorID, body string) (*LessonAnswer, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	q, ok := s.lessonQuestions[questionID]
+	if !ok || q.CourseID != courseID {
+		return nil, ErrNotFound
+	}
+	a := &LessonAnswer{
+		ID:         uuid.NewString(),
+		QuestionID: questionID,
+		AuthorID:   authorID,
+		Body:       body,
+		CreatedAt:  s.nextCreatedAt(),
+	}
+	s.lessonAnswers[a.ID] = a
+	s.lessonAnswerIDs[questionID] = append(s.lessonAnswerIDs[questionID], a.ID)
+	return s.lessonAnswerSnapshotLocked(a), nil
+}
+
+// GetLessonAnswer возвращает ответ вопроса курса; false — ответа нет или он
+// относится к другому вопросу/курсу.
+func (s *Store) GetLessonAnswer(courseID, questionID, answerID string) (*LessonAnswer, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	a, ok := s.lessonAnswers[answerID]
+	if !ok || a.QuestionID != questionID {
+		return nil, false
+	}
+	q, ok := s.lessonQuestions[questionID]
+	if !ok || q.CourseID != courseID {
+		return nil, false
+	}
+	return s.lessonAnswerSnapshotLocked(a), true
+}
+
+// DeleteLessonQuestion удаляет вопрос; ответы уходят каскадом.
+// ErrNotFound — вопроса нет в этом курсе.
+func (s *Store) DeleteLessonQuestion(courseID, questionID string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	q, ok := s.lessonQuestions[questionID]
+	if !ok || q.CourseID != courseID {
+		return ErrNotFound
+	}
+	for _, id := range s.lessonAnswerIDs[questionID] {
+		delete(s.lessonAnswers, id)
+	}
+	// Страховка: ответы, созданные в обход индекса, тоже не должны осиротеть.
+	for id, a := range s.lessonAnswers {
+		if a.QuestionID == questionID {
+			delete(s.lessonAnswers, id)
+		}
+	}
+	delete(s.lessonAnswerIDs, questionID)
+	delete(s.lessonQuestions, questionID)
+	return nil
+}
+
+// DeleteLessonAnswer удаляет ответ. ErrNotFound — ответа нет в этом
+// вопросе/курсе.
+func (s *Store) DeleteLessonAnswer(courseID, questionID, answerID string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	a, ok := s.lessonAnswers[answerID]
+	if !ok || a.QuestionID != questionID {
+		return ErrNotFound
+	}
+	q, ok := s.lessonQuestions[questionID]
+	if !ok || q.CourseID != courseID {
+		return ErrNotFound
+	}
+	delete(s.lessonAnswers, answerID)
+	ids := s.lessonAnswerIDs[questionID]
+	for i, id := range ids {
+		if id == answerID {
+			s.lessonAnswerIDs[questionID] = append(ids[:i], ids[i+1:]...)
+			break
+		}
+	}
+	if len(s.lessonAnswerIDs[questionID]) == 0 {
+		delete(s.lessonAnswerIDs, questionID)
+	}
+	return nil
+}
+
+// ---- T77: аналитика учителя (in-memory) ----
+
+// clampTeacherStatsLimit приводит limit разбивки по курсам к контракту T77:
+// по умолчанию 50, максимум 200. Хендлер нормализует параметр запроса, но
+// защитный clamp нужен и при прямых вызовах хранилища (тесты, внутренние
+// потребители).
+func clampTeacherStatsLimit(limit int) int {
+	if limit <= 0 {
+		return 50
+	}
+	if limit > 200 {
+		return 200
+	}
+	return limit
+}
+
+// teacherStatsPercent — прогресс записи в процентах 0..100:
+// completed_lessons / total_lessons * 100. У курса без уроков — 0;
+// сверху ограничен 100 (страховка от рассинхрона данных).
+func teacherStatsPercent(completed, totalLessons int) float64 {
+	if totalLessons <= 0 {
+		return 0
+	}
+	p := float64(completed) * 100 / float64(totalLessons)
+	if p > 100 {
+		p = 100
+	}
+	if p < 0 {
+		p = 0
+	}
+	return p
+}
+
+// roundTeacherStat округляет дробный агрегат до 1 знака — так же, как
+// RecalcCourseRating округляет avgRating, чтобы ответы были стабильными
+// и совпадали между in-memory и Postgres.
+func roundTeacherStat(v float64) float64 {
+	return math.Round(v*10) / 10
+}
+
+// teacherStatsScopeLocked собирает курсы области видимости аналитики:
+// all=true — все курсы платформы (admin), иначе — только курсы teacherID.
+// Вызывать только под удерживаемым RLock: вложенные методы Store взяли бы
+// RLock повторно, а RWMutex не реентерабелен.
+func teacherStatsScopeLocked(s *Store, teacherID string, all bool) map[string]*Course {
+	scoped := make(map[string]*Course)
+	for id, c := range s.courses {
+		if all || c.TeacherID == teacherID {
+			scoped[id] = c
+		}
+	}
+	return scoped
+}
+
+// teacherStatsProgressLocked готовит счётчики программы и прогресса по
+// курсам области видимости одним проходом по картам: courseID → всего
+// уроков и "studentID|courseID" → пройдено уроков. Вызывать под RLock.
+func teacherStatsProgressLocked(s *Store, scoped map[string]*Course) (totalLessons map[string]int, completedByEnrollment map[string]int) {
+	moduleCourse := make(map[string]string, len(s.modules))
+	for id, m := range s.modules {
+		moduleCourse[id] = m.CourseID
+	}
+	lessonCourse := make(map[string]string, len(s.lessons))
+	totalLessons = make(map[string]int, len(scoped))
+	for id, l := range s.lessons {
+		cid, ok := moduleCourse[l.ModuleID]
+		if !ok {
+			continue
+		}
+		if _, inScope := scoped[cid]; !inScope {
+			continue
+		}
+		lessonCourse[id] = cid
+		totalLessons[cid]++
+	}
+	completedByEnrollment = make(map[string]int)
+	for _, p := range s.progress {
+		if p.CompletedAt.IsZero() {
+			continue
+		}
+		cid, ok := lessonCourse[p.LessonID]
+		if !ok {
+			continue
+		}
+		completedByEnrollment[p.StudentID+"|"+cid]++
+	}
+	return totalLessons, completedByEnrollment
+}
+
+// TeacherOverview собирает сводку преподавателя одним проходом по картам
+// (in-memory; в Postgres — SQL-агрегатами, см. postgres_store.go).
+//
+// Активными считаются только записи со статусом active: revoked/refunded
+// доступа не имеют и в учеников, завершаемость и last30d не попадают.
+// Выручка — исключительно succeeded-платежи, суммы берутся из полей платежа
+// (platform_fee_cents/teacher_amount_cents), а не пересчитываются от текущей
+// комиссии. Рейтинг — средневзвешенный по опубликованным курсам области
+// видимости (вес — ratings_count курса).
+func (s *Store) TeacherOverview(teacherID string, all bool) (*TeacherOverview, error) {
+	now := time.Now().UTC()
+	cutoff30 := now.AddDate(0, 0, -30)
+
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	scoped := teacherStatsScopeLocked(s, teacherID, all)
+	out := &TeacherOverview{}
+
+	for _, c := range scoped {
+		out.Courses.Total++
+		switch c.Status {
+		case CourseDraft:
+			out.Courses.Draft++
+		case CourseReview:
+			out.Courses.Review++
+		case CoursePublished:
+			out.Courses.Published++
+		case CourseArchived:
+			out.Courses.Archived++
+		}
+	}
+
+	totalLessons, completedByEnrollment := teacherStatsProgressLocked(s, scoped)
+
+	uniqueStudents := make(map[string]struct{})
+	sumPercent := 0.0
+	activeEnrollments := 0
+	for _, e := range s.enrollments {
+		if e.Status != EnrollmentActive {
+			continue
+		}
+		if _, inScope := scoped[e.CourseID]; !inScope {
+			continue
+		}
+		activeEnrollments++
+		out.Students.Total++
+		uniqueStudents[e.StudentID] = struct{}{}
+		if !e.CreatedAt.Before(cutoff30) {
+			out.Last30d.Enrollments++
+		}
+		percent := teacherStatsPercent(completedByEnrollment[e.StudentID+"|"+e.CourseID], totalLessons[e.CourseID])
+		sumPercent += percent
+		if percent >= 100 {
+			out.Completion.Completed++
+		}
+	}
+	out.Students.Unique = len(uniqueStudents)
+	if activeEnrollments > 0 {
+		out.Completion.AvgPercent = roundTeacherStat(sumPercent / float64(activeEnrollments))
+	}
+
+	for _, p := range s.payments {
+		if p.Status != PaymentSucceeded {
+			continue
+		}
+		if _, inScope := scoped[p.CourseID]; !inScope {
+			continue
+		}
+		out.Revenue.PaidTotalCents += p.AmountCents
+		out.Revenue.PlatformFeeCents += p.PlatformFeeCents
+		out.Revenue.TeacherCents += p.TeacherAmountCents
+		if !p.CreatedAt.Before(cutoff30) {
+			out.Last30d.RevenueCents += p.AmountCents
+		}
+	}
+
+	var ratingSum float64
+	for _, c := range scoped {
+		if c.Status != CoursePublished {
+			continue
+		}
+		out.Ratings.RatingsCount += c.RatingsCount
+		ratingSum += c.AvgRating * float64(c.RatingsCount)
+	}
+	if out.Ratings.RatingsCount > 0 {
+		out.Ratings.AvgRating = roundTeacherStat(ratingSum / float64(out.Ratings.RatingsCount))
+	}
+	return out, nil
+}
+
+// TeacherCourseStats возвращает разбивку по курсам области видимости
+// (in-memory; в Postgres — один агрегирующий запрос). Входят курсы любого
+// статуса; students/avgPercent считаются по активным записям, revenueCents —
+// по succeeded-платежам. Порядок строго по контракту T77: revenueCents desc,
+// затем students desc, затем title (без учёта регистра; id — детерминированный
+// tie-break для одинаковых названий). limit — 50 по умолчанию, максимум 200.
+// TeacherCourseStatsTotal — число курсов в области видимости аналитики до
+// применения limit (T77). Считается по тому же scope, что и разбивка.
+func (s *Store) TeacherCourseStatsTotal(teacherID string, all bool) int {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return len(teacherStatsScopeLocked(s, teacherID, all))
+}
+
+func (s *Store) TeacherCourseStats(teacherID string, all bool, limit int) []*TeacherCourseStat {
+	limit = clampTeacherStatsLimit(limit)
+
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	scoped := teacherStatsScopeLocked(s, teacherID, all)
+	totalLessons, completedByEnrollment := teacherStatsProgressLocked(s, scoped)
+
+	studentsByCourse := make(map[string]int, len(scoped))
+	sumPercentByCourse := make(map[string]float64, len(scoped))
+	for _, e := range s.enrollments {
+		if e.Status != EnrollmentActive {
+			continue
+		}
+		if _, inScope := scoped[e.CourseID]; !inScope {
+			continue
+		}
+		studentsByCourse[e.CourseID]++
+		sumPercentByCourse[e.CourseID] += teacherStatsPercent(
+			completedByEnrollment[e.StudentID+"|"+e.CourseID], totalLessons[e.CourseID])
+	}
+
+	revenueByCourse := make(map[string]int, len(scoped))
+	for _, p := range s.payments {
+		if p.Status != PaymentSucceeded {
+			continue
+		}
+		if _, inScope := scoped[p.CourseID]; !inScope {
+			continue
+		}
+		revenueByCourse[p.CourseID] += p.AmountCents
+	}
+
+	items := make([]*TeacherCourseStat, 0, len(scoped))
+	for _, c := range scoped {
+		item := &TeacherCourseStat{
+			CourseID:     c.ID,
+			Title:        c.Title,
+			Status:       c.Status,
+			Students:     studentsByCourse[c.ID],
+			RevenueCents: revenueByCourse[c.ID],
+			AvgRating:    c.AvgRating,
+			RatingsCount: c.RatingsCount,
+		}
+		if item.Students > 0 {
+			item.AvgPercent = roundTeacherStat(sumPercentByCourse[c.ID] / float64(item.Students))
+		}
+		items = append(items, item)
+	}
+
+	sort.Slice(items, func(i, j int) bool {
+		a, b := items[i], items[j]
+		if a.RevenueCents != b.RevenueCents {
+			return a.RevenueCents > b.RevenueCents
+		}
+		if a.Students != b.Students {
+			return a.Students > b.Students
+		}
+		at, bt := strings.ToLower(a.Title), strings.ToLower(b.Title)
+		if at != bt {
+			return at < bt
+		}
+		return a.CourseID < b.CourseID
+	})
+	if len(items) > limit {
+		items = items[:limit]
+	}
+	return items
+}
+
+// ---- T79: похожие курсы ----
+
+// similarCoursesDefaultLimit и similarCoursesMaxLimit — границы параметра
+// limit эндпоинта GET /courses/{id}/similar (контракт T79): по умолчанию 4,
+// максимум 12. Те же значения дублирует хендлер; store приводит limit ещё
+// раз, чтобы прямой вызов метода не мог выдать неограниченную выборку.
+const (
+	similarCoursesDefaultLimit = 4
+	similarCoursesMaxLimit     = 12
+)
+
+// normalizeSimilarCoursesLimit приводит limit к контракту T79: нечисловой
+// (<= 0 после Atoi) — 4, больше 12 — 12.
+func normalizeSimilarCoursesLimit(limit int) int {
+	if limit <= 0 {
+		return similarCoursesDefaultLimit
+	}
+	if limit > similarCoursesMaxLimit {
+		return similarCoursesMaxLimit
+	}
+	return limit
+}
+
+// similarCourseCategory нормализует категорию так же, как каталог: пустая
+// (у старых объектов in-memory поле могло не заполняться) — "other".
+func similarCourseCategory(c *Course) string {
+	category := strings.TrimSpace(c.Category)
+	if category == "" {
+		return "other"
+	}
+	return category
+}
+
+// ListSimilarCourses возвращает published-курсы той же категории, что и
+// courseID, кроме самого курса (T79). Порядок: число активных записей по
+// убыванию, затем avgRating по убыванию, затем createdAt по убыванию; при
+// полном совпадении ключей — id по убыванию (детерминированный хвост,
+// совпадает с ORDER BY SQL-ветки).
+//
+// limit нормализуется (по умолчанию 4, максимум 12). Если исходного курса
+// нет или он не published — nil: хендлер отдаёт 404 «Курс не найден».
+func (s *Store) ListSimilarCourses(courseID string, limit int) []*Course {
+	limit = normalizeSimilarCoursesLimit(limit)
+
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	src, ok := s.courses[courseID]
+	if !ok || src.Status != CoursePublished {
+		return nil
+	}
+	category := similarCourseCategory(src)
+
+	// Число активных записей — первичный ключ сортировки.
+	active := make(map[string]int)
+	for _, e := range s.enrollments {
+		if e.Status == EnrollmentActive {
+			active[e.CourseID]++
+		}
+	}
+
+	out := make([]*Course, 0, limit)
+	for _, c := range s.courses {
+		if c.ID == courseID || c.Status != CoursePublished {
+			continue
+		}
+		if similarCourseCategory(c) != category {
+			continue
+		}
+		out = append(out, c)
+	}
+	sort.SliceStable(out, func(i, j int) bool {
+		a, b := out[i], out[j]
+		if active[a.ID] != active[b.ID] {
+			return active[a.ID] > active[b.ID]
+		}
+		if a.AvgRating != b.AvgRating {
+			return a.AvgRating > b.AvgRating
+		}
+		if !a.CreatedAt.Equal(b.CreatedAt) {
+			return a.CreatedAt.After(b.CreatedAt)
+		}
+		return a.ID > b.ID
+	})
+	if len(out) > limit {
+		out = out[:limit]
+	}
+	return out
 }

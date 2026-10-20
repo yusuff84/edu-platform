@@ -686,7 +686,7 @@ func scanLesson(scan func(dest ...any) error) (*Lesson, error) {
 	var quizRaw, codeRaw *string
 	var created time.Time
 	if err := scan(&l.ID, &moduleID, &title, &kind, &pos, &body, &video, &live,
-		&starts, &quizRaw, &codeRaw, &created); err != nil {
+		&starts, &quizRaw, &codeRaw, &created, &l.IsPreview); err != nil {
 		return nil, err
 	}
 	l.ModuleID = moduleID
@@ -715,7 +715,7 @@ func scanLesson(scan func(dest ...any) error) (*Lesson, error) {
 
 const lessonCols = `l.id::text, l.module_id::text, l.title, l.kind, l.position,
 	COALESCE(l.body_md,''), COALESCE(l.video_url,''), COALESCE(l.live_url,''),
-	l.starts_at, l.quiz::text, l.code_task::text, l.created_at`
+	l.starts_at, l.quiz::text, l.code_task::text, l.created_at, l.is_preview`
 
 func (s *PostgresStore) CreateLesson(l *Lesson) *Lesson {
 	ctx, cancel := s.ctx()
@@ -730,13 +730,14 @@ func (s *PostgresStore) CreateLesson(l *Lesson) *Lesson {
 		ModuleID: l.ModuleID, Title: l.Title, Kind: l.Kind,
 		BodyMD: l.BodyMD, VideoURL: l.VideoURL, LiveURL: l.LiveURL,
 		StartsAt: l.StartsAt, Quiz: l.Quiz, CodeTask: l.CodeTask,
+		IsPreview: l.IsPreview,
 	}
 	err := s.pool.QueryRow(ctx,
-		`INSERT INTO lessons (module_id, title, kind, position, body_md, video_url, live_url, starts_at, quiz, code_task)
-		 SELECT $1::uuid, $2, $3, COALESCE(MAX(position),0)+1, $4, $5, $6, $7, $8::jsonb, $9::jsonb
+		`INSERT INTO lessons (module_id, title, kind, position, body_md, video_url, live_url, starts_at, quiz, code_task, is_preview)
+		 SELECT $1::uuid, $2, $3, COALESCE(MAX(position),0)+1, $4, $5, $6, $7, $8::jsonb, $9::jsonb, $10
 		 FROM lessons WHERE module_id=$1::uuid
 		 RETURNING id::text, position, created_at`,
-		l.ModuleID, l.Title, string(l.Kind), body, video, live, starts, quiz, code).
+		l.ModuleID, l.Title, string(l.Kind), body, video, live, starts, quiz, code, l.IsPreview).
 		Scan(&nl.ID, &nl.Position, &nl.CreatedAt)
 	if err != nil {
 		log.Printf("postgres CreateLesson: %v", err)
@@ -1552,9 +1553,9 @@ func (s *PostgresStore) UpdateLesson(l *Lesson) error {
 	}
 	tag, err := s.pool.Exec(ctx,
 		`UPDATE lessons SET title=$2, body_md=$3, video_url=$4, live_url=$5,
-		 starts_at=$6, quiz=$7::jsonb, code_task=$8::jsonb
+		 starts_at=$6, quiz=$7::jsonb, code_task=$8::jsonb, is_preview=$9
 		 WHERE id=$1::uuid`,
-		l.ID, l.Title, body, video, live, starts, quiz, code)
+		l.ID, l.Title, body, video, live, starts, quiz, code, l.IsPreview)
 	if err != nil {
 		return fmt.Errorf("не удалось обновить урок: %w", err)
 	}
@@ -1787,4 +1788,642 @@ func (s *PostgresStore) IncrementPromoCodeUsage(id string) bool {
 		return false
 	}
 	return tag.RowsAffected() > 0
+}
+
+// ---- T71: вопросы и ответы по урокам ----
+//
+// Блок вынесен в конец файла (как T63/T69), чтобы не конфликтовать при
+// слиянии волн. Вычисляемые поля (заголовок урока, имя и роль автора,
+// isTeacher) собираются JOIN-ами при каждом чтении — та же семантика, что
+// у in-memory Store.
+
+// lessonQuestionCols — колонки LessonQuestion в форме контракта T71.
+const lessonQuestionCols = `q.id::text, q.course_id::text, q.lesson_id::text, l.title,
+	q.student_id::text, COALESCE(u.display_name,''), q.body, q.created_at`
+
+// scanLessonQuestion собирает вопрос из строки выборки lessonQuestionCols.
+// Answers инициализируется пустым не-nil срезом.
+func scanLessonQuestion(scan func(dest ...any) error) (*LessonQuestion, error) {
+	q := &LessonQuestion{Answers: []*LessonAnswer{}}
+	if err := scan(&q.ID, &q.CourseID, &q.LessonID, &q.LessonTitle,
+		&q.StudentID, &q.StudentName, &q.Body, &q.CreatedAt); err != nil {
+		return nil, err
+	}
+	return q, nil
+}
+
+// loadLessonAnswers читает ответы для набора вопросов одним запросом (без
+// N+1) и раскладывает их по questionId; внутри — старые первыми.
+func (s *PostgresStore) loadLessonAnswers(ctx context.Context, questionIDs []string) map[string][]*LessonAnswer {
+	out := make(map[string][]*LessonAnswer, len(questionIDs))
+	if len(questionIDs) == 0 {
+		return out
+	}
+	ph := make([]string, 0, len(questionIDs))
+	args := make([]any, 0, len(questionIDs))
+	for i, id := range questionIDs {
+		ph = append(ph, fmt.Sprintf("$%d::uuid", i+1))
+		args = append(args, id)
+	}
+	rows, err := s.pool.Query(ctx,
+		`SELECT a.id::text, a.question_id::text, a.author_id::text,
+		        COALESCE(u.display_name,''), u.role,
+		        (a.author_id = c.teacher_id OR u.role = 'admin') AS is_teacher,
+		        a.body, a.created_at
+		 FROM lesson_answers a
+		 JOIN lesson_questions q ON q.id = a.question_id
+		 JOIN courses c ON c.id = q.course_id
+		 JOIN users u ON u.id = a.author_id
+		 WHERE a.question_id IN (`+strings.Join(ph, ",")+`)
+		 ORDER BY a.created_at ASC, a.id ASC`, args...)
+	if err != nil {
+		log.Printf("postgres loadLessonAnswers: %v", err)
+		return out
+	}
+	defer rows.Close()
+	for rows.Next() {
+		a := &LessonAnswer{}
+		if err := rows.Scan(&a.ID, &a.QuestionID, &a.AuthorID, &a.AuthorName,
+			&a.AuthorRole, &a.IsTeacher, &a.Body, &a.CreatedAt); err != nil {
+			log.Printf("postgres loadLessonAnswers scan: %v", err)
+			continue
+		}
+		out[a.QuestionID] = append(out[a.QuestionID], a)
+	}
+	return out
+}
+
+// CreateLessonQuestion создаёт вопрос к уроку (T71). ErrNotFound — урока нет
+// или он принадлежит другому курсу.
+func (s *PostgresStore) CreateLessonQuestion(courseID, lessonID, studentID, body string) (*LessonQuestion, error) {
+	if !validUUID(courseID) || !validUUID(lessonID) || !validUUID(studentID) {
+		return nil, ErrNotFound
+	}
+	ctx, cancel := s.ctx()
+	defer cancel()
+	row := s.pool.QueryRow(ctx,
+		`WITH ins AS (
+		   INSERT INTO lesson_questions (course_id, lesson_id, student_id, body)
+		   SELECT $1::uuid, l.id, $3::uuid, $4
+		   FROM lessons l
+		   JOIN modules m ON m.id = l.module_id
+		   WHERE l.id=$2::uuid AND m.course_id=$1::uuid
+		   RETURNING id, course_id, lesson_id, student_id, body, created_at
+		 )
+		 SELECT ins.id::text, ins.course_id::text, ins.lesson_id::text, l.title,
+		        ins.student_id::text, COALESCE(u.display_name,''), ins.body, ins.created_at
+		 FROM ins
+		 JOIN lessons l ON l.id = ins.lesson_id
+		 JOIN users u ON u.id = ins.student_id`,
+		courseID, lessonID, studentID, body)
+	q, err := scanLessonQuestion(row.Scan)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("не удалось сохранить вопрос: %w", err)
+	}
+	return q, nil
+}
+
+// ListLessonQuestions — вопросы курса, новые первыми; lessonID "" — все.
+// total считается до пагинации. Никогда не возвращает nil-срез.
+func (s *PostgresStore) ListLessonQuestions(courseID, lessonID string, page, limit int) ([]*LessonQuestion, int) {
+	empty := []*LessonQuestion{}
+	if !validUUID(courseID) {
+		return empty, 0
+	}
+	page, limit = normalizeQAPageLimit(page, limit)
+	ctx, cancel := s.ctx()
+	defer cancel()
+
+	where := "q.course_id=$1::uuid"
+	args := []any{courseID}
+	if lessonID != "" {
+		if !validUUID(lessonID) {
+			return empty, 0
+		}
+		where += " AND q.lesson_id=$2::uuid"
+		args = append(args, lessonID)
+	}
+	var total int
+	if err := s.pool.QueryRow(ctx,
+		`SELECT COUNT(*)::int FROM lesson_questions q WHERE `+where, args...).Scan(&total); err != nil {
+		log.Printf("postgres ListLessonQuestions count: %v", err)
+		return empty, 0
+	}
+	offset := (page - 1) * limit
+	query := fmt.Sprintf(
+		`SELECT %s
+		 FROM lesson_questions q
+		 JOIN lessons l ON l.id = q.lesson_id
+		 JOIN users u ON u.id = q.student_id
+		 WHERE %s
+		 ORDER BY q.created_at DESC, q.id DESC
+		 LIMIT $%d OFFSET $%d`, lessonQuestionCols, where, len(args)+1, len(args)+2)
+	args = append(args, limit, offset)
+	rows, err := s.pool.Query(ctx, query, args...)
+	if err != nil {
+		log.Printf("postgres ListLessonQuestions: %v", err)
+		return empty, 0
+	}
+	defer rows.Close()
+	items := make([]*LessonQuestion, 0, limit)
+	ids := make([]string, 0, limit)
+	for rows.Next() {
+		q, err := scanLessonQuestion(rows.Scan)
+		if err != nil {
+			log.Printf("postgres ListLessonQuestions scan: %v", err)
+			continue
+		}
+		items = append(items, q)
+		ids = append(ids, q.ID)
+	}
+	answers := s.loadLessonAnswers(ctx, ids)
+	for _, q := range items {
+		if list, ok := answers[q.ID]; ok {
+			q.Answers = list
+		}
+	}
+	return items, total
+}
+
+// GetLessonQuestion — вопрос курса с ответами; false — вопроса нет или он
+// принадлежит другому курсу.
+func (s *PostgresStore) GetLessonQuestion(courseID, questionID string) (*LessonQuestion, bool) {
+	if !validUUID(courseID) || !validUUID(questionID) {
+		return nil, false
+	}
+	ctx, cancel := s.ctx()
+	defer cancel()
+	row := s.pool.QueryRow(ctx,
+		`SELECT `+lessonQuestionCols+`
+		 FROM lesson_questions q
+		 JOIN lessons l ON l.id = q.lesson_id
+		 JOIN users u ON u.id = q.student_id
+		 WHERE q.id=$1::uuid AND q.course_id=$2::uuid`, questionID, courseID)
+	q, err := scanLessonQuestion(row.Scan)
+	if err != nil {
+		return nil, false
+	}
+	if list, ok := s.loadLessonAnswers(ctx, []string{q.ID})[q.ID]; ok {
+		q.Answers = list
+	}
+	return q, true
+}
+
+// CreateLessonAnswer создаёт ответ на вопрос (T71). ErrNotFound — вопроса нет
+// или он принадлежит другому курсу.
+func (s *PostgresStore) CreateLessonAnswer(courseID, questionID, authorID, body string) (*LessonAnswer, error) {
+	if !validUUID(courseID) || !validUUID(questionID) || !validUUID(authorID) {
+		return nil, ErrNotFound
+	}
+	ctx, cancel := s.ctx()
+	defer cancel()
+	row := s.pool.QueryRow(ctx,
+		`WITH ins AS (
+		   INSERT INTO lesson_answers (question_id, author_id, body)
+		   SELECT q.id, $3::uuid, $4
+		   FROM lesson_questions q
+		   WHERE q.id=$2::uuid AND q.course_id=$1::uuid
+		   RETURNING id, question_id, author_id, body, created_at
+		 )
+		 SELECT ins.id::text, ins.question_id::text, ins.author_id::text,
+		        COALESCE(u.display_name,''), u.role,
+		        (ins.author_id = c.teacher_id OR u.role = 'admin') AS is_teacher,
+		        ins.body, ins.created_at
+		 FROM ins
+		 JOIN users u ON u.id = ins.author_id
+		 JOIN lesson_questions q ON q.id = ins.question_id
+		 JOIN courses c ON c.id = q.course_id`,
+		courseID, questionID, authorID, body)
+	a := &LessonAnswer{}
+	err := row.Scan(&a.ID, &a.QuestionID, &a.AuthorID, &a.AuthorName,
+		&a.AuthorRole, &a.IsTeacher, &a.Body, &a.CreatedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("не удалось сохранить ответ: %w", err)
+	}
+	return a, nil
+}
+
+// GetLessonAnswer — ответ вопроса курса; false — ответа нет или он относится
+// к другому вопросу/курсу.
+func (s *PostgresStore) GetLessonAnswer(courseID, questionID, answerID string) (*LessonAnswer, bool) {
+	if !validUUID(courseID) || !validUUID(questionID) || !validUUID(answerID) {
+		return nil, false
+	}
+	ctx, cancel := s.ctx()
+	defer cancel()
+	a := &LessonAnswer{}
+	err := s.pool.QueryRow(ctx,
+		`SELECT a.id::text, a.question_id::text, a.author_id::text,
+		        COALESCE(u.display_name,''), u.role,
+		        (a.author_id = c.teacher_id OR u.role = 'admin') AS is_teacher,
+		        a.body, a.created_at
+		 FROM lesson_answers a
+		 JOIN lesson_questions q ON q.id = a.question_id
+		 JOIN courses c ON c.id = q.course_id
+		 JOIN users u ON u.id = a.author_id
+		 WHERE a.id=$1::uuid AND a.question_id=$2::uuid AND q.course_id=$3::uuid`,
+		answerID, questionID, courseID).
+		Scan(&a.ID, &a.QuestionID, &a.AuthorID, &a.AuthorName,
+			&a.AuthorRole, &a.IsTeacher, &a.Body, &a.CreatedAt)
+	if err != nil {
+		return nil, false
+	}
+	return a, true
+}
+
+// DeleteLessonQuestion удаляет вопрос; ответы уходят каскадом (FK 012).
+// ErrNotFound — вопроса нет в этом курсе.
+func (s *PostgresStore) DeleteLessonQuestion(courseID, questionID string) error {
+	if !validUUID(courseID) || !validUUID(questionID) {
+		return ErrNotFound
+	}
+	ctx, cancel := s.ctx()
+	defer cancel()
+	tag, err := s.pool.Exec(ctx,
+		`DELETE FROM lesson_questions WHERE id=$1::uuid AND course_id=$2::uuid`,
+		questionID, courseID)
+	if err != nil {
+		return fmt.Errorf("не удалось удалить вопрос: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+// DeleteLessonAnswer удаляет ответ. ErrNotFound — ответа нет в этом
+// вопросе/курсе.
+func (s *PostgresStore) DeleteLessonAnswer(courseID, questionID, answerID string) error {
+	if !validUUID(courseID) || !validUUID(questionID) || !validUUID(answerID) {
+		return ErrNotFound
+	}
+	ctx, cancel := s.ctx()
+	defer cancel()
+	tag, err := s.pool.Exec(ctx,
+		`DELETE FROM lesson_answers
+		 WHERE id=$1::uuid AND question_id=$2::uuid
+		 AND EXISTS (SELECT 1 FROM lesson_questions q
+		             WHERE q.id = lesson_answers.question_id AND q.course_id=$3::uuid)`,
+		answerID, questionID, courseID)
+	if err != nil {
+		return fmt.Errorf("не удалось удалить ответ: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+// ---- T77: аналитика учителя (Postgres) ----
+
+// teacherStatsTeacherID нормализует teacherID для SQL-фильтра. При all=true
+// id не участвует в выборке: невалидный/пустой id (например, служебный
+// вызов) заменяется нулевым UUID, чтобы каст $1::uuid не ронял запрос.
+// При all=false невалидный id означает «такого преподавателя нет» — вызывающий
+// получает пустой результат без обращения к БД.
+func teacherStatsTeacherID(teacherID string, all bool) (string, bool) {
+	if _, err := uuid.Parse(strings.TrimSpace(teacherID)); err == nil {
+		return teacherID, true
+	}
+	if all {
+		return "00000000-0000-0000-0000-000000000000", true
+	}
+	return "", false
+}
+
+// TeacherOverview собирает сводку преподавателя одним SQL-запросом из
+// скалярных подзапросов по CTE scoped (курсы области видимости) и active
+// (активные записи с прогрессом). Без N+1: уроки и пройденные уроки
+// считаются LATERAL-подзапросами по записи, деньги — SUM по succeeded-
+// платежам, рейтинг — средневзвешенный по опубликованным курсам.
+// Ошибка БД не глотается: handler отвечает 500.
+func (s *PostgresStore) TeacherOverview(teacherID string, all bool) (*TeacherOverview, error) {
+	teacherID, ok := teacherStatsTeacherID(teacherID, all)
+	if !ok {
+		return &TeacherOverview{}, nil
+	}
+	ctx, cancel := s.ctx()
+	defer cancel()
+
+	out := &TeacherOverview{}
+	err := s.pool.QueryRow(ctx, `
+		WITH scoped AS (
+		  SELECT c.id, c.status, COALESCE(c.avg_rating, 0)::float8 AS avg_rating,
+		         c.ratings_count
+		  FROM courses c
+		  WHERE $2::bool OR c.teacher_id = $1::uuid
+		),
+		active AS (
+		  SELECT e.student_id, e.course_id, e.created_at,
+		         CASE WHEN tot.lessons > 0
+		              THEN LEAST(100.0, done.completed * 100.0 / tot.lessons)
+		              ELSE 0.0
+		         END AS percent
+		  FROM enrollments e
+		  JOIN scoped s ON s.id = e.course_id
+		  CROSS JOIN LATERAL (
+		    SELECT COUNT(*)::int AS lessons
+		    FROM modules m
+		    JOIN lessons l ON l.module_id = m.id
+		    WHERE m.course_id = e.course_id
+		  ) tot
+		  CROSS JOIN LATERAL (
+		    SELECT COUNT(*)::int AS completed
+		    FROM lesson_progress lp
+		    JOIN lessons l ON l.id = lp.lesson_id
+		    JOIN modules m ON m.id = l.module_id
+		    WHERE m.course_id = e.course_id
+		      AND lp.student_id = e.student_id
+		      AND lp.completed_at IS NOT NULL
+		  ) done
+		  WHERE e.status = 'active'
+		)
+		SELECT
+		  (SELECT COUNT(*)::int FROM scoped),
+		  (SELECT COUNT(*)::int FROM scoped WHERE status = 'published'),
+		  (SELECT COUNT(*)::int FROM scoped WHERE status = 'draft'),
+		  (SELECT COUNT(*)::int FROM scoped WHERE status = 'review'),
+		  (SELECT COUNT(*)::int FROM scoped WHERE status = 'archived'),
+		  (SELECT COUNT(*)::int FROM active),
+		  (SELECT COUNT(DISTINCT student_id)::int FROM active),
+		  (SELECT COALESCE(SUM(p.amount_cents), 0)::int
+		     FROM payments p JOIN scoped s ON s.id = p.course_id
+		     WHERE p.status = 'succeeded'),
+		  (SELECT COALESCE(SUM(p.platform_fee_cents), 0)::int
+		     FROM payments p JOIN scoped s ON s.id = p.course_id
+		     WHERE p.status = 'succeeded'),
+		  (SELECT COALESCE(SUM(p.teacher_amount_cents), 0)::int
+		     FROM payments p JOIN scoped s ON s.id = p.course_id
+		     WHERE p.status = 'succeeded'),
+		  (SELECT COUNT(*)::int FROM active WHERE percent >= 100),
+		  (SELECT COALESCE(ROUND(AVG(percent)::numeric, 1), 0)::float8 FROM active),
+		  (SELECT COALESCE(ROUND((SUM(avg_rating * ratings_count)
+		            / NULLIF(SUM(ratings_count), 0))::numeric, 1), 0)::float8
+		     FROM scoped WHERE status = 'published'),
+		  (SELECT COALESCE(SUM(ratings_count), 0)::int
+		     FROM scoped WHERE status = 'published'),
+		  (SELECT COUNT(*)::int FROM active
+		     WHERE created_at >= now() - interval '30 days'),
+		  (SELECT COALESCE(SUM(p.amount_cents), 0)::int
+		     FROM payments p JOIN scoped s ON s.id = p.course_id
+		     WHERE p.status = 'succeeded'
+		       AND p.created_at >= now() - interval '30 days')
+	`, teacherID, all).Scan(
+		&out.Courses.Total, &out.Courses.Published, &out.Courses.Draft,
+		&out.Courses.Review, &out.Courses.Archived,
+		&out.Students.Total, &out.Students.Unique,
+		&out.Revenue.PaidTotalCents, &out.Revenue.PlatformFeeCents, &out.Revenue.TeacherCents,
+		&out.Completion.Completed, &out.Completion.AvgPercent,
+		&out.Ratings.AvgRating, &out.Ratings.RatingsCount,
+		&out.Last30d.Enrollments, &out.Last30d.RevenueCents,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("сводка преподавателя: %w", err)
+	}
+	return out, nil
+}
+
+// TeacherCourseStats возвращает разбивку по курсам одним агрегирующим
+// запросом: по каждому курсу области видимости — активные ученики, средний
+// прогресс (LATERAL по записям), succeeded-выручка и рейтинг из карточки
+// курса. Порядок — revenueCents desc, students desc, title без учёта
+// регистра (id — детерминированный tie-break); limit 50 по умолчанию,
+// максимум 200. Ошибки БД логируются и дают пустой список — как у остальных
+// методов StoreAPI без error в сигнатуре.
+// TeacherCourseStatsTotal — общее число курсов в области видимости аналитики
+// до применения limit (T77). Отдельный COUNT вместо выборки всех строк.
+func (s *PostgresStore) TeacherCourseStatsTotal(teacherID string, all bool) int {
+	teacherID, ok := teacherStatsTeacherID(teacherID, all)
+	if !ok {
+		return 0
+	}
+	ctx, cancel := s.ctx()
+	defer cancel()
+	var total int
+	err := s.pool.QueryRow(ctx,
+		`SELECT COUNT(*)::int FROM courses c
+		 WHERE $2::bool OR c.teacher_id = $1::uuid`, teacherID, all).Scan(&total)
+	if err != nil {
+		log.Printf("postgres TeacherCourseStatsTotal: %v", err)
+		return 0
+	}
+	return total
+}
+
+func (s *PostgresStore) TeacherCourseStats(teacherID string, all bool, limit int) []*TeacherCourseStat {
+	teacherID, ok := teacherStatsTeacherID(teacherID, all)
+	if !ok {
+		return []*TeacherCourseStat{}
+	}
+	limit = clampTeacherStatsLimit(limit)
+	ctx, cancel := s.ctx()
+	defer cancel()
+
+	rows, err := s.pool.Query(ctx, `
+		WITH scoped AS (
+		  SELECT c.id, c.title, c.status,
+		         COALESCE(c.avg_rating, 0)::float8 AS avg_rating,
+		         c.ratings_count
+		  FROM courses c
+		  WHERE $2::bool OR c.teacher_id = $1::uuid
+		)
+		SELECT s.id::text, s.title, s.status, s.avg_rating, s.ratings_count,
+		       COALESCE(en.students, 0)::int,
+		       COALESCE(en.avg_percent, 0)::float8,
+		       COALESCE(pay.revenue_cents, 0)::int
+		FROM scoped s
+		LEFT JOIN LATERAL (
+		  SELECT COUNT(*)::int AS students,
+		         COALESCE(ROUND(AVG(
+		           CASE WHEN tot.lessons > 0
+		                THEN LEAST(100.0, done.completed * 100.0 / tot.lessons)
+		                ELSE 0.0
+		           END)::numeric, 1), 0) AS avg_percent
+		  FROM enrollments e
+		  CROSS JOIN LATERAL (
+		    SELECT COUNT(*)::int AS lessons
+		    FROM modules m
+		    JOIN lessons l ON l.module_id = m.id
+		    WHERE m.course_id = s.id
+		  ) tot
+		  CROSS JOIN LATERAL (
+		    SELECT COUNT(*)::int AS completed
+		    FROM lesson_progress lp
+		    JOIN lessons l ON l.id = lp.lesson_id
+		    JOIN modules m ON m.id = l.module_id
+		    WHERE m.course_id = s.id
+		      AND lp.student_id = e.student_id
+		      AND lp.completed_at IS NOT NULL
+		  ) done
+		  WHERE e.course_id = s.id AND e.status = 'active'
+		) en ON true
+		LEFT JOIN LATERAL (
+		  SELECT SUM(p.amount_cents)::int AS revenue_cents
+		  FROM payments p
+		  WHERE p.course_id = s.id AND p.status = 'succeeded'
+		) pay ON true
+		ORDER BY COALESCE(pay.revenue_cents, 0) DESC,
+		         COALESCE(en.students, 0) DESC,
+		         lower(s.title) ASC,
+		         s.id ASC
+		LIMIT $3
+	`, teacherID, all, limit)
+	if err != nil {
+		log.Printf("postgres TeacherCourseStats: %v", err)
+		return []*TeacherCourseStat{}
+	}
+	defer rows.Close()
+
+	items := make([]*TeacherCourseStat, 0, limit)
+	for rows.Next() {
+		item := &TeacherCourseStat{}
+		if err := rows.Scan(&item.CourseID, &item.Title, &item.Status,
+			&item.AvgRating, &item.RatingsCount, &item.Students,
+			&item.AvgPercent, &item.RevenueCents); err != nil {
+			log.Printf("postgres TeacherCourseStats scan: %v", err)
+			continue
+		}
+		items = append(items, item)
+	}
+	if err := rows.Err(); err != nil {
+		log.Printf("postgres TeacherCourseStats rows: %v", err)
+	}
+	return items
+}
+
+// ---- T79: похожие курсы ----
+
+// ListSimilarCourses — SQL-реализация T79: ОДИН агрегирующий запрос без N+1.
+//
+// JOIN courses src находит исходный курс и одновременно требует, чтобы он был
+// published; LEFT JOIN агрегирует активные записи по курсам, поэтому число
+// записей считается в том же запросе, а не отдельными обращениями к БД.
+// Категория сравнивается с нормализацией пустой строки в "other" — так же,
+// как in-memory similarCourseCategory (у схемы NOT NULL DEFAULT 'other', но
+// старые/ручные строки не должны ломать parity).
+//
+// Порядок полностью повторяет in-memory: активные записи DESC, avgRating
+// DESC, createdAt DESC, id DESC. limit нормализуется (по умолчанию 4,
+// максимум 12). Нет исходного published-курса — пустой результат.
+func (s *PostgresStore) ListSimilarCourses(courseID string, limit int) []*Course {
+	limit = normalizeSimilarCoursesLimit(limit)
+	if _, err := uuid.Parse(strings.TrimSpace(courseID)); err != nil {
+		return nil
+	}
+	ctx, cancel := s.ctx()
+	defer cancel()
+	rows, err := s.pool.Query(ctx,
+		`SELECT `+courseColsJoined+`
+		 FROM courses c
+		 JOIN courses src ON src.id = $1::uuid AND src.status = 'published'
+		 LEFT JOIN (
+		     SELECT course_id, COUNT(*)::int AS active_count
+		     FROM enrollments
+		     WHERE status = 'active'
+		     GROUP BY course_id
+		 ) e ON e.course_id = c.id
+		 WHERE c.status = 'published'
+		   AND c.id <> src.id
+		   AND COALESCE(NULLIF(TRIM(c.category), ''), 'other')
+		       = COALESCE(NULLIF(TRIM(src.category), ''), 'other')
+		 ORDER BY COALESCE(e.active_count, 0) DESC,
+		          COALESCE(c.avg_rating, 0) DESC,
+		          c.created_at DESC,
+		          c.id DESC
+		 LIMIT $2`, courseID, limit)
+	if err != nil {
+		log.Printf("postgres ListSimilarCourses: %v", err)
+		return nil
+	}
+	defer rows.Close()
+	var out []*Course
+	for rows.Next() {
+		if c, err := scanCourse(rows.Scan); err == nil {
+			out = append(out, c)
+		}
+	}
+	return out
+}
+
+// ---- T81: публичный профиль преподавателя ----
+
+// GetTeacherProfile собирает публичный профиль преподавателя (T81) тремя
+// запросами с постоянным их числом (без N+1): пользователь, агрегаты по
+// published-курсам и сами курсы с числом активных записей для сортировки.
+// false — пользователя нет, роль не teacher/admin или БД отказала.
+func (s *PostgresStore) GetTeacherProfile(teacherID string) (*TeacherProfileData, bool) {
+	if _, err := uuid.Parse(strings.TrimSpace(teacherID)); err != nil {
+		return nil, false
+	}
+	ctx, cancel := s.ctx()
+	defer cancel()
+
+	teacher := TeacherPublic{}
+	var role Role
+	err := s.pool.QueryRow(ctx,
+		`SELECT id::text, COALESCE(display_name,''), role FROM users WHERE id=$1::uuid`, teacherID).
+		Scan(&teacher.ID, &teacher.DisplayName, &role)
+	if err != nil {
+		return nil, false
+	}
+	if role != RoleTeacher && role != RoleAdmin {
+		return nil, false
+	}
+
+	// Агрегаты по published-курсам одним запросом: число курсов, активные
+	// записи на них, средневзвешенная оценка (как RecalcCourseRating — до
+	// одного знака) и суммарное число оценок.
+	err = s.pool.QueryRow(ctx, `
+		SELECT COUNT(*)::int,
+		       COALESCE(SUM(COALESCE(ea.cnt, 0)), 0)::int,
+		       COALESCE(ROUND(SUM(c.avg_rating * c.ratings_count)
+		                      / NULLIF(SUM(c.ratings_count), 0), 1), 0)::float8,
+		       COALESCE(SUM(c.ratings_count), 0)::int
+		FROM courses c
+		LEFT JOIN (
+		    SELECT course_id, COUNT(*)::int AS cnt
+		    FROM enrollments
+		    WHERE status = 'active'
+		    GROUP BY course_id
+		) ea ON ea.course_id = c.id
+		WHERE c.teacher_id = $1::uuid AND c.status = 'published'`, teacherID).
+		Scan(&teacher.CoursesCount, &teacher.StudentsCount,
+			&teacher.AvgRating, &teacher.RatingsCount)
+	if err != nil {
+		log.Printf("postgres GetTeacherProfile stats: %v", err)
+		return nil, false
+	}
+
+	rows, err := s.pool.Query(ctx,
+		`SELECT `+courseCols+`
+		 FROM courses c
+		 LEFT JOIN (
+		     SELECT course_id, COUNT(*)::int AS cnt
+		     FROM enrollments
+		     WHERE status = 'active'
+		     GROUP BY course_id
+		 ) ea ON ea.course_id = c.id
+		 WHERE c.teacher_id = $1::uuid AND c.status = 'published'
+		 ORDER BY COALESCE(ea.cnt, 0) DESC, c.created_at DESC, c.id DESC
+		 LIMIT $2`,
+		teacherID, teacherProfileCoursesLimit)
+	if err != nil {
+		log.Printf("postgres GetTeacherProfile courses: %v", err)
+		return nil, false
+	}
+	defer rows.Close()
+
+	courses := make([]*Course, 0, teacher.CoursesCount)
+	for rows.Next() {
+		if c, err := scanCourse(rows.Scan); err == nil {
+			courses = append(courses, c)
+		}
+	}
+	return &TeacherProfileData{Teacher: teacher, Courses: courses}, true
 }

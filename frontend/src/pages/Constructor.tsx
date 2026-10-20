@@ -51,6 +51,7 @@ import {
   listPromoCodes,
   myTeaching,
   submitCourse,
+  updateLesson,
 } from '../api/client';
 import type {
   Course,
@@ -87,6 +88,7 @@ import { t } from '../i18n/t';
 import '../styles/constructor.css';
 import '../styles/constructorExtra.css';
 import '../styles/promo.css';
+import '../styles/preview.css';
 
 // ---------- Константы ----------
 
@@ -219,10 +221,9 @@ function patchLesson(
   lessonId: string,
   body: Record<string, unknown>,
 ): Promise<Lesson> {
-  return crudFetch<Lesson>(`/teacher/courses/${courseId}/lessons/${lessonId}`, {
-    method: 'PATCH',
-    body: JSON.stringify(body),
-  });
+  // T76: транспорт PATCH вынесен в api/client.ts (updateLesson) — контракт
+  // isPreview проверяется контрактными тестами клиента.
+  return updateLesson(courseId, lessonId, body);
 }
 
 function deleteCourse(courseId: string): Promise<void> {
@@ -302,6 +303,8 @@ interface LessonDraft {
   title: string;
   kind: LessonKind;
   moduleId: string;
+  /** T76: урок доступен без записи (публичное превью). */
+  isPreview: boolean;
   // video_text
   bodyMd: string;
   videoUrl: string;
@@ -322,6 +325,7 @@ function emptyLesson(moduleId: string): LessonDraft {
     title: '',
     kind: 'video_text',
     moduleId,
+    isPreview: false,
     bodyMd: '',
     videoUrl: '',
     liveUrl: '',
@@ -354,6 +358,7 @@ function lessonToDraft(l: Lesson, moduleId: string): LessonDraft {
   const d = emptyLesson(moduleId);
   d.title = l.title;
   d.kind = l.kind;
+  d.isPreview = Boolean(l.isPreview);
   d.bodyMd = l.bodyMd ?? '';
   d.videoUrl = l.videoUrl ?? '';
   d.liveUrl = l.liveUrl ?? '';
@@ -495,7 +500,13 @@ function toIso(local: string): string | undefined {
 
 /** Собирает CreateLessonInput строго из полей выбранного kind. */
 function buildLessonInput(d: LessonDraft): CreateLessonInput {
-  const base = { moduleId: d.moduleId, title: d.title.trim(), kind: d.kind };
+  // T76: isPreview — общий флаг для любого kind, уходит и при создании.
+  const base = {
+    moduleId: d.moduleId,
+    title: d.title.trim(),
+    kind: d.kind,
+    isPreview: d.isPreview,
+  };
   switch (d.kind) {
     case 'video_text': {
       const input: CreateLessonInput = { ...base };
@@ -555,6 +566,9 @@ function buildLessonPatchBody(d: LessonDraft): Record<string, unknown> {
     moduleId: d.moduleId,
     title: d.title.trim(),
     kind: d.kind,
+    // T76: PATCH без поля не меняет флаг, поэтому шлём всегда — чекбокс
+    // отражает текущее значение урока.
+    isPreview: d.isPreview,
   };
   switch (d.kind) {
     case 'video_text':
@@ -2240,6 +2254,24 @@ export default function Constructor(): JSX.Element {
                         ))}
                       </select>
 
+                      {/* T76: флаг публичного превью — общий для всех kind.
+                          В режиме правки чекбокс показывает текущее значение
+                          урока и уходит в PATCH; при создании — в POST. */}
+                      <div className="preview-toggle-box">
+                        <label className="teach-check preview-toggle" htmlFor="lesson-is-preview">
+                          <input
+                            id="lesson-is-preview"
+                            type="checkbox"
+                            checked={lesson.isPreview}
+                            onChange={(e) => setLessonField('isPreview', e.target.checked)}
+                          />
+                          {t('p9.preview.toggle')}
+                        </label>
+                        <p className="teach-note ce-field-hint preview-toggle-hint">
+                          {t('p9.preview.toggleHint')}
+                        </p>
+                      </div>
+
                       {lesson.kind === 'video_text' && (
                         <div id="lesson-body" className="teach-focusable" tabIndex={-1}>
                           <label htmlFor="lesson-body-md">{t('teach.bodyMd')}</label>
@@ -2629,6 +2661,9 @@ export default function Constructor(): JSX.Element {
                               <li key={l.id} className="teach-lesson-row">
                                 <span className="teach-lesson-kind">{t(`kind.${l.kind}`)}</span>
                                 <span className="teach-lesson-name">{l.title}</span>
+                                {l.isPreview && (
+                                  <span className="preview-badge">{t('p9.preview.badge')}</span>
+                                )}
                                 {editable && (
                                   <span className="teach-row-actions">
                                     <button

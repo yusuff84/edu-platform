@@ -146,6 +146,9 @@ type CodeTask struct {
 	Tests    []CodeTest `json:"tests"`
 }
 
+// Lesson — урок программы курса. IsPreview (T75) — урок открыт для
+// бесплатного публичного просмотра: GET /courses/{slug}/preview/{lessonId}.
+// Поле аддитивное и всегда присутствует во всех видах урока (не omitempty).
 type Lesson struct {
 	ID        string     `json:"id"`
 	ModuleID  string     `json:"moduleId"`
@@ -158,6 +161,7 @@ type Lesson struct {
 	StartsAt  *time.Time `json:"startsAt,omitempty"`
 	Quiz      *QuizData  `json:"quiz,omitempty"`
 	CodeTask  *CodeTask  `json:"codeTask,omitempty"`
+	IsPreview bool       `json:"isPreview"`
 	CreatedAt time.Time  `json:"createdAt"`
 }
 
@@ -267,4 +271,138 @@ type CertificateDetails struct {
 	StudentName string    `json:"studentName"`
 	CourseTitle string    `json:"courseTitle"`
 	CourseSlug  string    `json:"courseSlug"`
+}
+
+// ---- T71: вопросы и ответы по урокам ----
+
+// LessonQuestion — вопрос ученика к уроку (T71). LessonTitle/StudentName —
+// вычисляемые поля: заголовок урока и display_name автора читаются из
+// lessons/users при каждом чтении (в Postgres — JOIN, в in-memory — из карт).
+// Answers — ответы вопроса старыми первыми; всегда не nil (в JSON []).
+type LessonQuestion struct {
+	ID          string          `json:"id"`
+	CourseID    string          `json:"courseId"`
+	LessonID    string          `json:"lessonId"`
+	LessonTitle string          `json:"lessonTitle"`
+	StudentID   string          `json:"studentId"`
+	StudentName string          `json:"studentName"`
+	Body        string          `json:"body"`
+	CreatedAt   time.Time       `json:"createdAt"`
+	Answers     []*LessonAnswer `json:"answers"`
+}
+
+// LessonAnswer — ответ на вопрос по уроку (T71). AuthorRole — роль автора
+// ("student" | "teacher" | "admin"); IsTeacher — автор является
+// преподавателем курса или администратором (публичный бейдж «преподаватель»).
+type LessonAnswer struct {
+	ID         string    `json:"id"`
+	QuestionID string    `json:"questionId"`
+	AuthorID   string    `json:"authorId"`
+	AuthorName string    `json:"authorName"`
+	AuthorRole string    `json:"authorRole"`
+	IsTeacher  bool      `json:"isTeacher"`
+	Body       string    `json:"body"`
+	CreatedAt  time.Time `json:"createdAt"`
+}
+
+// ---- T77: аналитика учителя ----
+
+// TeacherOverview — сводка GET /teacher/stats (T77). Поля и вложенные
+// объекты — ровно по контракту волны P9:
+//
+//	courses    — курсы в области видимости по статусам;
+//	students   — активные записи и уникальные ученики с активной записью;
+//	revenue    — только succeeded-платежи (amount/platform_fee/teacher_amount);
+//	completion — активные записи с прогрессом 100% и средний прогресс (0..100);
+//	ratings    — средневзвешенный рейтинг и суммарное число оценок
+//	             по опубликованным курсам;
+//	last30d    — активные записи и succeeded-платежи за последние 30 дней.
+type TeacherOverview struct {
+	Courses    TeacherOverviewCourses    `json:"courses"`
+	Students   TeacherOverviewStudents   `json:"students"`
+	Revenue    TeacherOverviewRevenue    `json:"revenue"`
+	Completion TeacherOverviewCompletion `json:"completion"`
+	Ratings    TeacherOverviewRatings    `json:"ratings"`
+	Last30d    TeacherOverviewLast30d    `json:"last30d"`
+}
+
+// TeacherOverviewCourses — число курсов в области видимости по статусам.
+type TeacherOverviewCourses struct {
+	Total     int `json:"total"`
+	Published int `json:"published"`
+	Draft     int `json:"draft"`
+	Review    int `json:"review"`
+	Archived  int `json:"archived"`
+}
+
+// TeacherOverviewStudents — активные записи (Total) и уникальные ученики
+// с активной записью (Unique).
+type TeacherOverviewStudents struct {
+	Total  int `json:"total"`
+	Unique int `json:"unique"`
+}
+
+// TeacherOverviewRevenue — денежные суммы только по succeeded-платежам.
+type TeacherOverviewRevenue struct {
+	PaidTotalCents   int `json:"paidTotalCents"`
+	PlatformFeeCents int `json:"platformFeeCents"`
+	TeacherCents     int `json:"teacherCents"`
+}
+
+// TeacherOverviewCompletion — завершённые активные записи (прогресс 100%)
+// и средний прогресс активных записей, дробный 0..100.
+type TeacherOverviewCompletion struct {
+	Completed  int     `json:"completed"`
+	AvgPercent float64 `json:"avgPercent"`
+}
+
+// TeacherOverviewRatings — средневзвешенный рейтинг опубликованных курсов
+// и суммарное число оценок.
+type TeacherOverviewRatings struct {
+	AvgRating    float64 `json:"avgRating"`
+	RatingsCount int     `json:"ratingsCount"`
+}
+
+// TeacherOverviewLast30d — активные записи и succeeded-платежи за 30 дней.
+type TeacherOverviewLast30d struct {
+	Enrollments  int `json:"enrollments"`
+	RevenueCents int `json:"revenueCents"`
+}
+
+// TeacherCourseStat — элемент GET /teacher/stats/courses (T77): агрегаты
+// одного курса любого статуса. Students — активные записи; RevenueCents —
+// только succeeded-платежи; AvgRating/RatingsCount — из карточки курса
+// (пересчитываются при изменении отзывов); AvgPercent — средний прогресс
+// активных записей, дробный 0..100.
+type TeacherCourseStat struct {
+	CourseID     string       `json:"courseId"`
+	Title        string       `json:"title"`
+	Status       CourseStatus `json:"status"`
+	Students     int          `json:"students"`
+	RevenueCents int          `json:"revenueCents"`
+	AvgRating    float64      `json:"avgRating"`
+	RatingsCount int          `json:"ratingsCount"`
+	AvgPercent   float64      `json:"avgPercent"`
+}
+
+// TeacherPublic — публичная карточка преподавателя (T81):
+// GET /teachers/{id}. Агрегаты считаются только по published-курсам:
+// CoursesCount — их число, StudentsCount — активные записи на них,
+// AvgRating/RatingsCount — средневзвешенная оценка и суммарное число оценок.
+// DisplayName — пустая строка, если имя не задано (e-mail наружу не отдаётся).
+type TeacherPublic struct {
+	ID            string  `json:"id"`
+	DisplayName   string  `json:"displayName"`
+	CoursesCount  int     `json:"coursesCount"`
+	StudentsCount int     `json:"studentsCount"`
+	AvgRating     float64 `json:"avgRating"`
+	RatingsCount  int     `json:"ratingsCount"`
+}
+
+// TeacherProfileData — данные публичного профиля преподавателя (T81):
+// карточка Teacher и все его published-курсы (отсортированы и ограничены
+// хранилищем, см. StoreAPI.GetTeacherProfile).
+type TeacherProfileData struct {
+	Teacher TeacherPublic `json:"teacher"`
+	Courses []*Course     `json:"courses"`
 }

@@ -1,10 +1,20 @@
-import { Link } from 'react-router-dom';
+import type { MouseEvent } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { CourseItem } from '../api/client';
-import { formatPrice } from '../api/client';
+import {
+  ApiError,
+  addFavorite,
+  formatPrice,
+  myFavorites,
+  removeFavorite,
+} from '../api/client';
 import { coverUrl } from '../api/teacherCover';
+import { meQueryOptions } from './RouteGuards';
 import { t } from '../i18n/t';
 import type { RuKey } from '../i18n/t';
 import '../styles/catalog.css';
+import '../styles/favorites.css';
 
 const COVERS = ['cover-py', 'cover-html', 'cover-js', 'cover-sql', 'cover-fig', 'cover-linux'];
 
@@ -51,6 +61,66 @@ export function Stars({ value }: { value: number }): JSX.Element {
  * обложка детерминирована от slug/id через coverFor.
  */
 export default function CourseCard({ course }: { course: CourseItem }): JSX.Element {
+  const navigate = useNavigate();
+  const qc = useQueryClient();
+
+  // Сессия — общий ['me'] (Layout/RouteGuards): гостю сердечко только ведёт
+  // на вход, запрос избранного для него не отправляем.
+  const meQuery = useQuery(meQueryOptions);
+  const user = meQuery.data;
+
+  // Признака isFavorite в CourseItem нет (контракт T73): состояние берём из
+  // общего списка ['favorites']. React Query дедуплицирует запрос по ключу,
+  // поэтому все карточки страницы используют один ответ.
+  const favoritesQuery = useQuery({
+    queryKey: ['favorites'],
+    queryFn: myFavorites,
+    enabled: Boolean(user),
+    retry: false,
+    staleTime: 60_000,
+  });
+  const favorite = Boolean(favoritesQuery.data?.some((c) => c.id === course.id));
+
+  // Toggle: оптимистично правим кэш ['favorites'] (сердечко откликается
+  // сразу), при ошибке откатываем, после ответа инвалидируем — список и
+  // состояние сходятся с сервером.
+  const toggleFavorite = useMutation({
+    mutationFn: () =>
+      favorite ? removeFavorite(course.id) : addFavorite(course.id),
+    onMutate: async () => {
+      await qc.cancelQueries({ queryKey: ['favorites'] });
+      const prev = qc.getQueryData<CourseItem[]>(['favorites']);
+      if (prev) {
+        qc.setQueryData<CourseItem[]>(
+          ['favorites'],
+          favorite ? prev.filter((c) => c.id !== course.id) : [course, ...prev],
+        );
+      } else if (!favorite) {
+        qc.setQueryData<CourseItem[]>(['favorites'], [course]);
+      }
+      return { prev };
+    },
+    onError: (err, _vars, ctx) => {
+      if (ctx?.prev !== undefined) qc.setQueryData(['favorites'], ctx.prev);
+      // Сессия истекла — как и гостю, предлагаем войти заново.
+      if (err instanceof ApiError && err.status === 401) navigate('/login');
+    },
+    onSettled: () => qc.invalidateQueries({ queryKey: ['favorites'] }),
+  });
+
+  /** Клик по сердечку: не открывает курс и не шлёт запрос гостю. */
+  function onFavoriteClick(e: MouseEvent<HTMLButtonElement>): void {
+    e.preventDefault();
+    e.stopPropagation();
+    // Пока сессия определяется, не уводим возможного пользователя на логин.
+    if (meQuery.isLoading) return;
+    if (!user) {
+      navigate('/login');
+      return;
+    }
+    if (!toggleFavorite.isPending) toggleFavorite.mutate();
+  }
+
   const desc =
     course.description.length > 140
       ? `${course.description.slice(0, 140)}…`
@@ -64,7 +134,28 @@ export default function CourseCard({ course }: { course: CourseItem }): JSX.Elem
     .filter(Boolean)
     .join(' · ');
   return (
-    <article>
+    <article className="course-card">
+      {/* T74: кнопка — сосед ссылки, а не вложенный в неё интерактив:
+          клик по сердечку не открывает курс (плюс stopPropagation). */}
+      <button
+        type="button"
+        className={`fav-btn${favorite ? ' is-active' : ''}`}
+        aria-label={t(favorite ? 'p9.fav.remove' : 'p9.fav.add')}
+        aria-pressed={favorite}
+        title={user ? undefined : t('p9.fav.loginHint')}
+        disabled={toggleFavorite.isPending}
+        onClick={onFavoriteClick}
+      >
+        <svg viewBox="0 0 24 24" width="19" height="19" aria-hidden="true">
+          <path
+            d="M12 20.6 4.9 15.6C2 13.5 1.5 9.5 3.6 6.9a5 5 0 0 1 7.5-.3l.9.9.9-.9a5 5 0 0 1 7.5.3c2.1 2.6 1.6 6.6-1.3 8.7Z"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.7"
+            strokeLinejoin="round"
+          />
+        </svg>
+      </button>
       <Link className="tile" to={`/courses/${course.slug}`} aria-label={course.title}>
         {/* T57: есть coverPath (T54) — подложку рисует настоящий кадр; из-за
             градиента-подложки и onError плитка не «ломается», если файл

@@ -255,6 +255,97 @@ type StoreAPI interface {
 	// false — промокода нет. Вызывается ровно один раз при первом переходе
 	// платежа в succeeded (идемпотентность обеспечивает handler).
 	IncrementPromoCodeUsage(id string) bool
+
+	// ---- T71: вопросы и ответы по урокам ----
+
+	// CreateLessonQuestion создаёт вопрос ученика к уроку. LessonID должен
+	// принадлежать курсу CourseID, иначе ErrNotFound (handler отдаёт 404
+	// «Урок не найден в этом курсе»); права проверяет handler.
+	// LessonTitle/StudentName заполняются из lessons.title и
+	// users.display_name; Answers — пустой не-nil срез.
+	CreateLessonQuestion(courseID, lessonID, studentID, body string) (*LessonQuestion, error)
+	// ListLessonQuestions — вопросы курса, новые первыми; пустой lessonID —
+	// все вопросы курса. Вопросы отдаются с ответами (старые первыми).
+	// page 1-based, limit 20 по умолчанию; total — до пагинации. Никогда не
+	// возвращает nil-срез.
+	ListLessonQuestions(courseID, lessonID string, page, limit int) (items []*LessonQuestion, total int)
+	// GetLessonQuestion — вопрос курса с ответами; false — вопроса нет или
+	// он принадлежит другому курсу.
+	GetLessonQuestion(courseID, questionID string) (*LessonQuestion, bool)
+	// CreateLessonAnswer создаёт ответ на вопрос. QuestionID должен
+	// принадлежать курсу CourseID, иначе ErrNotFound (handler отдаёт 404
+	// «Вопрос не найден», в т.ч. для вопроса другого курса). AuthorName,
+	// AuthorRole и IsTeacher вычисляются из users/course. Права проверяет
+	// handler.
+	CreateLessonAnswer(courseID, questionID, authorID, body string) (*LessonAnswer, error)
+	// GetLessonAnswer — ответ вопроса курса; false — ответа нет или он
+	// относится к другому вопросу/курсу.
+	GetLessonAnswer(courseID, questionID, answerID string) (*LessonAnswer, bool)
+	// DeleteLessonQuestion удаляет вопрос; ответы уходят каскадом.
+	// ErrNotFound — вопроса нет в этом курсе.
+	DeleteLessonQuestion(courseID, questionID string) error
+	// DeleteLessonAnswer удаляет ответ. ErrNotFound — ответа нет в этом
+	// вопросе/курсе.
+	DeleteLessonAnswer(courseID, questionID, answerID string) error
+
+	// ---- T73: избранные курсы ----
+
+	// AddFavorite идемпотентно добавляет курс в избранное пользователя:
+	// повторный вызов для пары (user, course) — успех без дубликата и без
+	// изменения времени добавления. ErrNotFound — пользователя или курса нет
+	// (в Postgres то же поведение даёт нарушение FK). Проверку published и
+	// ответ 404 выполняет handler.
+	AddFavorite(userID, courseID string) error
+	// RemoveFavorite идемпотентно удаляет курс из избранного: отсутствие
+	// пары — успех (в т.ч. если курса уже нет).
+	RemoveFavorite(userID, courseID string) error
+	// ListFavoriteCoursesByUser — published-курсы из избранного пользователя,
+	// добавленные позже первыми. Архивные, черновики и удалённые курсы в
+	// список не попадают. Никогда не nil (пустой слайс — избранного нет).
+	ListFavoriteCoursesByUser(userID string) []*Course
+
+	// ---- T77: аналитика учителя ----
+
+	// TeacherOverview — сводка преподавателя одним вызовом: курсы по
+	// статусам, активные записи и уникальные ученики, выручка только по
+	// succeeded-платежам, завершаемость и средний прогресс активных записей,
+	// рейтинг опубликованных курсов, активность за 30 дней.
+	// all=true — все курсы платформы (admin), иначе — только курсы teacherID.
+	// В Postgres агрегаты считаются SQL-ом (без N+1), в in-memory — одним
+	// проходом по картам под RLock. Ошибка возможна только у Postgres.
+	TeacherOverview(teacherID string, all bool) (*TeacherOverview, error)
+	// TeacherCourseStats — разбивка по курсам одним вызовом: активные
+	// ученики, succeeded-выручка, рейтинг и средний прогресс по каждому курсу
+	// (включая draft/review/archived). Сортировка — revenueCents desc,
+	// затем students desc, затем title (без учёта регистра). limit по
+	// умолчанию 50, максимум 200. all=true — все курсы платформы (admin).
+	TeacherCourseStats(teacherID string, all bool, limit int) []*TeacherCourseStat
+	// TeacherCourseStatsTotal — общее число курсов в области видимости
+	// аналитики (любой статус, до применения limit). Нужен для total в ответе
+	// /teacher/stats/courses: он не зависит от limit.
+	TeacherCourseStatsTotal(teacherID string, all bool) int
+
+	// ---- T79: похожие курсы ----
+
+	// ListSimilarCourses — published-курсы той же category, что и courseID,
+	// кроме самого курса (контракт T79). Сортировка: число АКТИВНЫХ записей
+	// по убыванию, затем avgRating по убыванию, затем createdAt по убыванию
+	// (при полном совпадении — id по убыванию, чтобы порядок был
+	// детерминированным и совпадал у in-memory и Postgres).
+	// limit приводится к контракту: <= 0 — 4, больше 12 — 12.
+	// Исходный курс должен существовать и быть published, иначе пустой
+	// результат (хендлер отвечает 404 «Курс не найден»).
+	ListSimilarCourses(courseID string, limit int) []*Course
+
+	// ---- T81: публичный профиль преподавателя ----
+
+	// GetTeacherProfile собирает публичный профиль преподавателя одним
+	// вызовом (T81): карточка TeacherPublic с агрегатами по published-курсам
+	// и сами published-курсы (максимум 100) в порядке «активные записи desc,
+	// затем createdAt desc». false — пользователя нет или его роль не
+	// teacher/admin (handler отвечает 404). Агрегаты считаются без N+1:
+	// in-memory — одним проходом по картам, Postgres — агрегирующими SQL.
+	GetTeacherProfile(teacherID string) (*TeacherProfileData, bool)
 }
 
 // PaymentFilter — параметры журнала платежей для админки (US6, T31).

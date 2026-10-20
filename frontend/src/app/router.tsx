@@ -16,6 +16,8 @@ import '../styles/shell.css';
 // входа/роли или встречаются редко — их чанки подгружаются по факту рендера
 // (после прохождения гвардов), из главного чанка они исключены.
 const MyCourses = lazy(() => import('../pages/MyCourses'));
+// T74: избранное — личный раздел вошедшего, отдельный чанк.
+const Favorites = lazy(() => import('../pages/Favorites'));
 const Learn = lazy(() => import('../pages/Learn'));
 const Constructor = lazy(() => import('../pages/Constructor'));
 const Admin = lazy(() => import('../pages/Admin'));
@@ -29,9 +31,13 @@ const AdminCourseDetail = lazy(() => import('../pages/AdminCourseDetail'));
 // T49: экран «Записи на курсы» — отдельная страница подраздела.
 const AdminEnrollments = lazy(() => import('../pages/AdminEnrollments'));
 const CourseStudents = lazy(() => import('../pages/CourseStudents'));
+// T78: аналитика преподавателя — отдельный чанк подраздела кабинета.
+const TeacherStats = lazy(() => import('../pages/TeacherStats'));
 const Profile = lazy(() => import('../pages/Profile'));
 // T68: публичная страница сертификата — редкая, отдельный чанк.
 const Certificate = lazy(() => import('../pages/Certificate'));
+// T82: публичный профиль преподавателя — отдельный чанк.
+const TeacherProfile = lazy(() => import('../pages/TeacherProfile'));
 // В Cabinets.tsx нет default-экспорта — берём именованный TeacherCab.
 const TeacherCab = lazy(async () => {
   const m = await import('../pages/Cabinets');
@@ -114,6 +120,15 @@ function Layout(): JSX.Element {
             {user && (
               <NavLink to="/me" className={({ isActive }) => (isActive ? 'active' : '')}>
                 {t('nav.myCourses')}
+              </NavLink>
+            )}
+            {/* T74: «Избранное» — рядом с «Мои курсы», только вошедшим. */}
+            {user && (
+              <NavLink
+                to="/me/favorites"
+                className={({ isActive }) => (isActive ? 'active' : '')}
+              >
+                {t('p9.fav.title')}
               </NavLink>
             )}
             {user && (
@@ -228,14 +243,21 @@ export const router = createBrowserRouter([
     children: [
       { path: '/', element: <Catalog /> },
       { path: '/courses/:slug', element: <Course /> },
+      // T82: профиль преподавателя публичный — доступен без входа.
+      { path: '/teachers/:id', element: <TeacherProfile /> },
       // T68: сертификат публичный — доступен без входа, можно делиться ссылкой.
       { path: '/certificates/:number', element: <Certificate /> },
       { path: '/login', element: <Login /> },
       { path: '/register', element: <Register /> },
       // Кабинеты и обучение — за гвардами (RouteGuards.tsx, query ['me']).
       { path: '/me', element: <RequireAuth><MyCourses /></RequireAuth> },
+      // T74: избранное — личный раздел, только вошедшим.
+      { path: '/me/favorites', element: <RequireAuth><Favorites /></RequireAuth> },
       { path: '/teach', element: <RequireRole roles={['teacher', 'admin']}><TeacherCab /></RequireRole> },
       { path: '/teach/new', element: <RequireRole roles={['teacher', 'admin']}><Constructor /></RequireRole> },
+      // T78: /teach/stats обязан идти ДО /teach/:id, иначе параметрический
+      // маршрут перехватит «stats» и откроет конструктор.
+      { path: '/teach/stats', element: <RequireRole roles={['teacher', 'admin']}><TeacherStats /></RequireRole> },
       { path: '/teach/:id', element: <RequireRole roles={['teacher', 'admin']}><Constructor /></RequireRole> },
       { path: '/admin', element: <RequireRole roles={['admin']}><Admin /></RequireRole> },
       // Подразделы супер-админки — отдельные страницы со своим роутом

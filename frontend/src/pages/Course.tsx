@@ -1,22 +1,27 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { CourseStatus, PromoValidation } from '../api/client';
+import type { CourseStatus, Lesson, PromoValidation } from '../api/client';
 import {
   ApiError,
   enroll,
+  formatDate,
   formatMoney,
   formatPrice,
   getCourse,
+  getLessonPreview,
   me,
   myCourses,
   validatePromoCode,
 } from '../api/client';
 import { coverUrl } from '../api/teacherCover';
+import { Markdown } from '../components/LessonView';
 import Reviews from '../components/Reviews';
+import SimilarCourses from '../components/SimilarCourses';
 import { t } from '../i18n/t';
 import '../styles/catalog.css';
+import '../styles/preview.css';
 import '../styles/promo.css';
 
 /** Человеческая подпись статуса курса (для баннера автора/админа). */
@@ -55,6 +60,11 @@ export default function Course(): JSX.Element {
   const [promoInput, setPromoInput] = useState('');
   const [promoValidation, setPromoValidation] = useState<PromoValidation | null>(null);
   const [promoError, setPromoError] = useState('');
+  // T76: урок, открытый в модалке публичного превью (доступен без записи).
+  const [previewLesson, setPreviewLesson] = useState<Lesson | null>(null);
+  const previewDialogRef = useRef<HTMLDivElement | null>(null);
+  const previewCloseRef = useRef<HTMLButtonElement | null>(null);
+  const previewTriggerRef = useRef<HTMLElement | null>(null);
   // После T01 getCourse распаковывает конверт { course, modules } в CourseDetail.
   const courseQuery = useQuery({
     queryKey: ['course', slug],
@@ -63,6 +73,13 @@ export default function Course(): JSX.Element {
     retry: false,
   });
   const meQuery = useQuery({ queryKey: ['me'], queryFn: me, retry: false });
+  // T76: содержимое превью грузится только при открытой модалке.
+  const previewQuery = useQuery({
+    queryKey: ['lesson-preview', slug, previewLesson?.id],
+    queryFn: () => getLessonPreview(slug, previewLesson?.id ?? ''),
+    enabled: Boolean(slug && previewLesson),
+    retry: false,
+  });
   // Активная запись: /me/courses после T01 — массив MyCourse (курс лежит в m.course).
   const myQuery = useQuery({
     queryKey: ['my-courses'],
@@ -123,6 +140,17 @@ export default function Course(): JSX.Element {
     setPromoError('');
   }
 
+  /** T76: открыть публичное превью урока; запоминаем кнопку для возврата фокуса. */
+  function openPreview(lesson: Lesson): void {
+    previewTriggerRef.current =
+      document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    setPreviewLesson(lesson);
+  }
+
+  function closePreview(): void {
+    setPreviewLesson(null);
+  }
+
   // При переходе между курсами slug меняется, а компонент остаётся тем же:
   // применённый промокод относится только к предыдущему курсу — сбрасываем.
   const courseId = courseQuery.data?.id;
@@ -133,6 +161,43 @@ export default function Course(): JSX.Element {
     setPromoError('');
     setMessage('');
   }, [courseId]);
+
+  // T76: модалка превью — Esc, минимальный фокус-трап (Tab по кругу внутри
+  // диалога) и возврат фокуса на кнопку, открывшую окно.
+  useEffect(() => {
+    if (!previewLesson) return undefined;
+    const previous = previewTriggerRef.current;
+    previewCloseRef.current?.focus();
+    function onKeyDown(e: KeyboardEvent): void {
+      if (e.key === 'Escape') {
+        setPreviewLesson(null);
+        return;
+      }
+      if (e.key !== 'Tab') return;
+      const root = previewDialogRef.current;
+      if (!root) return;
+      const focusable = Array.from(
+        root.querySelectorAll<HTMLElement>(
+          'button, a[href], video, input, select, textarea, [tabindex]:not([tabindex="-1"])',
+        ),
+      ).filter((el) => !el.hasAttribute('disabled'));
+      if (focusable.length === 0) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    }
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('keydown', onKeyDown);
+      previous?.focus();
+    };
+  }, [previewLesson]);
 
   if (courseQuery.isLoading)
     return (
@@ -245,6 +310,10 @@ export default function Course(): JSX.Element {
               )}
               <h1 style={{ marginTop: 12 }}>{course.title}</h1>
               <p className="muted">{course.description}</p>
+              {/* T82: публичный профиль автора курса (teacherId есть в Course). */}
+              <p className="meta">
+                <Link to={`/teachers/${course.teacherId}`}>{t('p9.teacher.openProfile')}</Link>
+              </p>
               <div className="meta">
                 <span className="rating">★ {(course.avgRating ?? 0).toFixed(1)}</span>
                 <span>({course.ratingsCount ?? 0})</span>
@@ -302,13 +371,28 @@ export default function Course(): JSX.Element {
                                 to={`/learn/${course.id}/${l.id}`}
                               >
                                 <span>{l.title}</span>
+                                {l.isPreview && (
+                                  <span className="preview-badge">{t('p9.preview.badge')}</span>
+                                )}
                                 <span className="pill">{t(`kind.${l.kind}`)}</span>
                               </Link>
                             ) : (
-                              <span key={l.id} className="lesson-link">
+                              <div key={l.id} className="lesson-link preview-lesson-row">
                                 <span>{l.title}</span>
+                                {l.isPreview && (
+                                  <span className="preview-badge">{t('p9.preview.badge')}</span>
+                                )}
                                 <span className="pill">{t(`kind.${l.kind}`)}</span>
-                              </span>
+                                {l.isPreview && (
+                                  <button
+                                    type="button"
+                                    className="preview-watch"
+                                    onClick={() => openPreview(l)}
+                                  >
+                                    {t('p9.preview.watch')}
+                                  </button>
+                                )}
+                              </div>
                             ),
                           )}
                         </div>
@@ -330,6 +414,9 @@ export default function Course(): JSX.Element {
             </section>
 
             <Reviews courseId={course.id} canReply={isAuthor || isAdmin} />
+
+            {/* T80: похожие курсы той же категории — под блоком отзывов. */}
+            <SimilarCourses courseId={course.id} category={course.category} />
           </div>
 
           <aside className="panel buybox">
@@ -456,6 +543,123 @@ export default function Course(): JSX.Element {
             <p className="notice">Возврат в течение 7 дней без лишних вопросов.</p>
           </aside>
         </div>
+
+        {/* T76: модалка публичного превью урока. Закрытие — крестик, фон или
+            Esc; фокус-трап и возврат фокуса — в useEffect выше. */}
+        {previewLesson && (
+          <div
+            className="preview-overlay"
+            onMouseDown={(e) => {
+              if (e.target === e.currentTarget) closePreview();
+            }}
+          >
+            <div
+              className="preview-modal"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="preview-modal-title"
+              ref={previewDialogRef}
+            >
+              <div className="preview-modal-head">
+                <div>
+                  <h2 id="preview-modal-title">{t('p9.preview.title')}</h2>
+                  <p className="preview-modal-sub">
+                    {previewQuery.data?.course.title ?? previewLesson.title}
+                  </p>
+                </div>
+                <button
+                  ref={previewCloseRef}
+                  type="button"
+                  className="preview-close"
+                  onClick={closePreview}
+                  aria-label={t('p9.preview.close')}
+                  title={t('p9.preview.close')}
+                >
+                  ×
+                </button>
+              </div>
+
+              {previewQuery.isLoading && (
+                <p role="status" className="preview-state">
+                  {t('common.loading')}
+                </p>
+              )}
+
+              {previewQuery.isError && (
+                <div className="preview-state" role="alert">
+                  <p className="error">
+                    {previewQuery.error instanceof ApiError
+                      ? previewQuery.error.message
+                      : t('common.error')}
+                  </p>
+                  <button
+                    type="button"
+                    className="btn"
+                    onClick={() => void previewQuery.refetch()}
+                    disabled={previewQuery.isFetching}
+                  >
+                    {t('common.retry')}
+                  </button>
+                </div>
+              )}
+
+              {previewQuery.data && (
+                <div className="preview-body">
+                  <div className="preview-meta">
+                    <span className="preview-badge">{t('p9.preview.badge')}</span>
+                    <span className="pill">{t(`kind.${previewQuery.data.lesson.kind}`)}</span>
+                  </div>
+                  <h3 className="preview-lesson-title">{previewQuery.data.lesson.title}</h3>
+                  <p className="preview-hint">{t('p9.preview.hint')}</p>
+
+                  {previewQuery.data.lesson.videoUrl && (
+                    <video
+                      className="preview-video"
+                      controls
+                      preload="metadata"
+                      src={previewQuery.data.lesson.videoUrl}
+                    >
+                      <a
+                        href={previewQuery.data.lesson.videoUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        {previewQuery.data.lesson.videoUrl}
+                      </a>
+                    </video>
+                  )}
+
+                  {previewQuery.data.lesson.bodyMd && (
+                    <div className="preview-text">
+                      <Markdown source={previewQuery.data.lesson.bodyMd} />
+                    </div>
+                  )}
+
+                  {previewQuery.data.lesson.kind === 'live' && (
+                    <div className="preview-live">
+                      {previewQuery.data.lesson.startsAt && (
+                        <p className="muted">
+                          {t('lesson.liveWhen')}:{' '}
+                          {formatDate(previewQuery.data.lesson.startsAt)}
+                        </p>
+                      )}
+                      {previewQuery.data.lesson.liveUrl && (
+                        <a
+                          className="btn btn-primary"
+                          href={previewQuery.data.lesson.liveUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          {t('lesson.liveLink')}
+                        </a>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
       </main>
     </div>
   );

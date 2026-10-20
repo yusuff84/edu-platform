@@ -95,6 +95,11 @@ export interface Course {
   title: string;
   description: string;
   /**
+   * T65: категория каталога (слаг фиксированного списка). Бэкенд отдаёт
+   * поле во всех видах курса; для старых курсов — "other".
+   */
+  category?: string;
+  /**
    * T54: путь к обложке "/uploads/covers/<имя>"; отсутствует или null,
    * если обложки нет (omitempty на бэкенде после DELETE → пусто).
    */
@@ -117,6 +122,44 @@ export interface Course {
  */
 export interface CourseDetail extends Course {
   modules: Module[];
+}
+
+/**
+ * P9/T73: конверт GET /me/favorites. Клиент (myFavorites) распаковывает
+ * items в CourseItem[]; порядок — добавленные позже первыми.
+ */
+export interface FavoritesPage {
+  items: CourseItem[];
+  total: number;
+}
+
+// ---------- Публичный профиль преподавателя (P9, T82) ----------
+
+/**
+ * Шапка публичного профиля (GET /teachers/{id}, контракт T81).
+ * displayName может быть пустым — UI показывает нейтральное «Преподаватель».
+ */
+export interface TeacherPublic {
+  id: string;
+  /** Отображаемое имя; пустая строка, если не задано. */
+  displayName: string;
+  /** Число published-курсов преподавателя. */
+  coursesCount: number;
+  /** Активные записи на published-курсы. */
+  studentsCount: number;
+  /** Средневзвешенный рейтинг по published-курсам; 0 — оценок нет. */
+  avgRating: number;
+  /** Суммарное число оценок по published-курсам. */
+  ratingsCount: number;
+}
+
+/**
+ * Ответ GET /teachers/{id}: шапка профиля и все published-курсы.
+ * Порядок курсов серверный (активные записи desc, затем createdAt desc).
+ */
+export interface TeacherProfile {
+  teacher: TeacherPublic;
+  courses: CourseItem[];
 }
 
 // ---------- Структура курса ----------
@@ -150,8 +193,24 @@ export interface Lesson {
   quiz?: QuizData;
   /** Кодовое задание; в публичном виде приходят только тесты с hidden != true. */
   codeTask?: CodeTask;
+  /**
+   * T76 (P9/T75): урок доступен без записи на курс (публичное превью).
+   * Аддитивное поле во всех видах урока; false/отсутствие — превью нет.
+   */
+  isPreview?: boolean;
   /** Есть только в полной форме (repo.Lesson). */
   createdAt?: string;
+}
+
+/** T76: ответ GET /courses/{slug}/preview/{lessonId} (публичное превью). */
+export interface LessonPreview {
+  course: {
+    id: string;
+    slug: string;
+    title: string;
+  };
+  /** Публичный вид урока: без правильных ответов и скрытых тестов. */
+  lesson: Lesson;
 }
 
 /**
@@ -187,6 +246,43 @@ export interface CodeTask {
   language: string;
   template?: string;
   tests: CodeTest[];
+}
+
+// ---------- P9: вопросы и ответы по урокам ----------
+
+/** Ответ на вопрос урока (P9, контракт T71). */
+export interface LessonAnswer {
+  id: string;
+  questionId: string;
+  authorId: string;
+  authorName: string;
+  /** Роль автора ответа: student | teacher | admin. */
+  authorRole: Role;
+  /** true — автор ответа преподаватель курса или admin. */
+  isTeacher: boolean;
+  body: string;
+  createdAt: string;
+}
+
+/** Вопрос к уроку (P9, контракт T71); answers — старые первыми. */
+export interface LessonQuestion {
+  id: string;
+  courseId: string;
+  lessonId: string;
+  lessonTitle: string;
+  studentId: string;
+  studentName: string;
+  body: string;
+  createdAt: string;
+  answers: LessonAnswer[];
+}
+
+/** Страница вопросов курса/урока: те же поля, что у Paged. */
+export interface LessonQuestionsPage {
+  items: LessonQuestion[];
+  total: number;
+  page: number;
+  limit: number;
 }
 
 // ---------- Отзывы ----------
@@ -420,6 +516,8 @@ export interface CreateLessonInput {
   quiz?: { questions: QuizQuestionInput[] };
   /** Для kind='code'. */
   codeTask?: { language: string; template?: string; tests: CodeTest[] };
+  /** T76: доступен без записи (превью); при создании отсутствие = false. */
+  isPreview?: boolean;
 }
 
 /** Тело POST .../complete: для video/live можно не слать вообще. */
@@ -430,4 +528,81 @@ export interface CompleteLessonInput {
   code?: string;
   /** Необязательно: если пусто, backend берёт язык из задания урока. */
   language?: string;
+}
+
+// ---------- P9: аналитика учителя (T77) ----------
+
+/** Счётчики курсов преподавателя по статусам (GET /teacher/stats). */
+export interface TeacherOverviewCourses {
+  total: number;
+  published: number;
+  draft: number;
+  review: number;
+  archived: number;
+}
+
+/** Записи на курсы преподавателя: всего активных и уникальных учеников. */
+export interface TeacherOverviewStudents {
+  /** Активные записи (один ученик может быть записан на несколько курсов). */
+  total: number;
+  /** Уникальные ученики с активной записью. */
+  unique: number;
+}
+
+/** Деньги только по succeeded-платежам, в копейках. */
+export interface TeacherOverviewRevenue {
+  paidTotalCents: number;
+  platformFeeCents: number;
+  teacherCents: number;
+}
+
+/** Завершаемость: число записей с прогрессом 100 % и средний прогресс (0..100). */
+export interface TeacherOverviewCompletion {
+  completed: number;
+  avgPercent: number;
+}
+
+/** Рейтинг по опубликованным курсам (средневзвешенный) и число оценок. */
+export interface TeacherOverviewRatings {
+  avgRating: number;
+  ratingsCount: number;
+}
+
+/** Активность за последние 30 дней: записи и succeeded-платежи. */
+export interface TeacherOverviewLast30d {
+  enrollments: number;
+  revenueCents: number;
+}
+
+/**
+ * Сводка кабинета преподавателя (GET /teacher/stats).
+ * Teacher видит только свои курсы, admin — все курсы платформы.
+ */
+export interface TeacherOverview {
+  courses: TeacherOverviewCourses;
+  students: TeacherOverviewStudents;
+  revenue: TeacherOverviewRevenue;
+  completion: TeacherOverviewCompletion;
+  ratings: TeacherOverviewRatings;
+  last30d: TeacherOverviewLast30d;
+}
+
+/** Строка таблицы «По курсам» (GET /teacher/stats/courses). */
+export interface TeacherCourseStat {
+  courseId: string;
+  title: string;
+  status: CourseStatus;
+  /** Активные записи на курс. */
+  students: number;
+  revenueCents: number;
+  avgRating: number;
+  ratingsCount: number;
+  /** Средний прогресс активных записей, 0..100. */
+  avgPercent: number;
+}
+
+/** Ответ GET /teacher/stats/courses: элементы и общее число курсов. */
+export interface TeacherCourseStatsPage {
+  items: TeacherCourseStat[];
+  total: number;
 }

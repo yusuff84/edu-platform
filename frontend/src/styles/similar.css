@@ -1,0 +1,69 @@
+/* T80 — блок «Похожие курсы» на странице курса.
+   Базовые классы (.panel, .grid, .tile, .sr-only) и дизайн-токены берутся
+   из styles.css, обложки/плитки — из styles.css + catalog.css.
+   Правила скоупятся корнем .similar-courses, глобальные классы не меняются. */
+
+.similar-courses {
+  margin-top: 0;
+}
+
+/* Заголовок и ссылка «Все курсы категории» в одну строку; на узких экранах
+   ссылка переносится под заголовок. */
+.similar-courses-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--sp-2) var(--sp-4);
+  flex-wrap: wrap;
+}
+
+.similar-courses-head h2 {
+  margin: 0;
+}
+
+.similar-courses-all {
+  color: var(--brand);
+  font-size: 14px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.similar-courses-all:hover {
+  color: var(--brand-dark);
+}
+
+/* Сетка карточек: в колонке страницы курса помещаются две карточки в ряд,
+   четыре из лимита складываются в аккуратный прямоугольник 2×2. */
+.similar-courses .similar-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+  padding: 18px 0 2px;
+}
+
+/* Скелетон повторяет высоту плитки каталога (300px), чтобы при загрузке
+   блок не «прыгал» после подстановки карточек. */
+.similar-skeleton {
+  height: 300px;
+  border-radius: 22px;
+  background: var(--line-soft);
+  animation: similar-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes similar-pulse {
+  50% {
+    opacity: 0.45;
+  }
+}
+
+@media (max-width: 640px) {
+  .similar-courses .similar-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Пользователи с отключёнными анимациями: скелетон просто статичен. */
+@media (prefers-reduced-motion: reduce) {
+  .similar-skeleton {
+    animation: none;
+  }
+}

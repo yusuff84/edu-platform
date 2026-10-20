@@ -20,9 +20,14 @@ import type {
   CourseSort,
   CreateLessonInput,
   EnrollmentResult,
+  FavoritesPage,
   Invite,
   Module,
   Lesson,
+  LessonAnswer,
+  LessonPreview,
+  LessonQuestion,
+  LessonQuestionsPage,
   MyCertificate,
   MyCourse,
   Paged,
@@ -34,6 +39,9 @@ import type {
   PublicSettings,
   ModerationDecision,
   Review,
+  TeacherCourseStatsPage,
+  TeacherOverview,
+  TeacherProfile,
   User,
 } from './types';
 
@@ -56,9 +64,14 @@ export type {
   CourseStatus,
   CreateLessonInput,
   EnrollmentResult,
+  FavoritesPage,
   Invite,
   Lesson,
+  LessonAnswer,
   LessonKind,
+  LessonPreview,
+  LessonQuestion,
+  LessonQuestionsPage,
   Module,
   ModerationDecision,
   MyCertificate,
@@ -79,6 +92,11 @@ export type {
   Review,
   ReviewBreakdown,
   Role,
+  TeacherCourseStat,
+  TeacherCourseStatsPage,
+  TeacherOverview,
+  TeacherProfile,
+  TeacherPublic,
   User,
 } from './types';
 
@@ -212,6 +230,39 @@ export function getCourse(slug: string): Promise<CourseDetail> {
   ).then((res) => ({ ...res.course, modules: res.modules }));
 }
 
+/**
+ * T80: похожие курсы (T79): GET /courses/{id}/similar?limit=N.
+ * id — UUID курса (не slug), поэтому кодируется в пути. Конверт
+ * { items, total } распаковывается в массив CourseItem; пустой список —
+ * пустой массив. limit необязателен (по контракту по умолчанию 4).
+ */
+export function getSimilarCourses(
+  courseId: string,
+  limit?: number,
+): Promise<CourseItem[]> {
+  return apiFetch<{ items: CourseItem[]; total: number }>(
+    `/courses/${encodeURIComponent(courseId)}/similar${buildQuery({ limit })}`,
+  ).then((res) => res.items);
+}
+
+/**
+ * T76: публичное превью урока (P9/T75). Доступно без записи, если курс
+ * published, а урок помечен isPreview; иначе backend отвечает 404.
+ */
+export function getLessonPreview(slug: string, lessonId: string): Promise<LessonPreview> {
+  return apiFetch<LessonPreview>(
+    `/courses/${encodeURIComponent(slug)}/preview/${encodeURIComponent(lessonId)}`,
+  );
+}
+
+/**
+ * T82: публичный профиль преподавателя (GET /teachers/{id}).
+ * Конверт { teacher, courses } возвращается как есть; 404 — профиля нет.
+ */
+export function getTeacherProfile(id: string): Promise<TeacherProfile> {
+  return apiFetch<TeacherProfile>(`/teachers/${encodeURIComponent(id)}`);
+}
+
 // ---------- Учитель ----------
 
 export function createCourse(input: {
@@ -290,8 +341,27 @@ export function createLesson(
       }
       break;
   }
+  // T76: флаг превью — аддитивное поле контракта T75. Отправляем только если
+  // он явно задан: отсутствие при создании backend трактует как false.
+  if (input.isPreview !== undefined) body.isPreview = input.isPreview;
   return apiFetch<Lesson>(`/teacher/courses/${courseId}/lessons`, {
     method: 'POST',
+    body: JSON.stringify(body),
+  });
+}
+
+/**
+ * T76: PATCH урока (тело собирает страница конструктора строго по kind).
+ * Отдельная функция в клиенте — чтобы контракт обновления (включая isPreview)
+ * проверялся тестами API-клиента, а не только UI.
+ */
+export function updateLesson(
+  courseId: string,
+  lessonId: string,
+  body: Record<string, unknown>,
+): Promise<Lesson> {
+  return apiFetch<Lesson>(`/teacher/courses/${courseId}/lessons/${lessonId}`, {
+    method: 'PATCH',
     body: JSON.stringify(body),
   });
 }
@@ -471,6 +541,36 @@ export function myCourses(): Promise<MyCourse[]> {
   );
 }
 
+// ---------- P9: избранное (T73/T74) ----------
+
+/**
+ * Добавить курс в избранное: PUT /me/favorites/{courseId}.
+ * Только вошедший; идемпотентно (204, тела нет).
+ */
+export function addFavorite(courseId: string): Promise<void> {
+  return apiFetch<void>(`/me/favorites/${encodeURIComponent(courseId)}`, {
+    method: 'PUT',
+  });
+}
+
+/**
+ * Убрать курс из избранного: DELETE /me/favorites/{courseId}.
+ * Только вошедший; идемпотентно (204, в том числе если курса уже нет).
+ */
+export function removeFavorite(courseId: string): Promise<void> {
+  return apiFetch<void>(`/me/favorites/${encodeURIComponent(courseId)}`, {
+    method: 'DELETE',
+  });
+}
+
+/**
+ * Моё избранное: GET /me/favorites. Конверт { items, total } распаковывается
+ * в CourseItem[]; порядок сервера — добавленные позже первыми.
+ */
+export function myFavorites(): Promise<CourseItem[]> {
+  return apiFetch<FavoritesPage>('/me/favorites').then((res) => res.items);
+}
+
 // ---------- Сертификаты ----------
 
 /** Публичный сертификат по номеру (без авторизации). 404 — сертификата нет. */
@@ -574,6 +674,100 @@ export function deleteReviewReply(
   return apiFetch<void>(
     `/teacher/courses/${encodeURIComponent(courseId)}/reviews/${encodeURIComponent(reviewId)}/reply`,
     { method: 'DELETE' },
+  );
+}
+
+// ---------- P9: вопросы и ответы по урокам ----------
+
+/**
+ * Вопросы курса или одного урока (T71): конверт с пагинацией возвращается
+ * целиком (items/total/page/limit). `lessonId` пустой — все вопросы курса.
+ * Вопросы приходят новыми первыми, ответы внутри — старыми первыми.
+ */
+export function listLessonQuestions(
+  courseId: string,
+  lessonId?: string,
+  page?: number,
+): Promise<LessonQuestionsPage> {
+  return apiFetch<LessonQuestionsPage>(
+    `/courses/${encodeURIComponent(courseId)}/questions${buildQuery({
+      lessonId,
+      page,
+    })}`,
+  );
+}
+
+/** Задать вопрос к уроку; конверт ответа { question } разворачивается. */
+export function askQuestion(
+  courseId: string,
+  lessonId: string,
+  body: string,
+): Promise<LessonQuestion> {
+  return apiFetch<{ question: LessonQuestion }>(
+    `/courses/${encodeURIComponent(courseId)}/questions`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ lessonId, body }),
+    },
+  ).then((res) => res.question);
+}
+
+/** Ответить на вопрос; конверт ответа { answer } разворачивается. */
+export function answerQuestion(
+  courseId: string,
+  questionId: string,
+  body: string,
+): Promise<LessonAnswer> {
+  return apiFetch<{ answer: LessonAnswer }>(
+    `/courses/${encodeURIComponent(courseId)}/questions/${encodeURIComponent(questionId)}/answers`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ body }),
+    },
+  ).then((res) => res.answer);
+}
+
+/** Удалить вопрос вместе с ответами; успех — 204. */
+export function deleteQuestion(
+  courseId: string,
+  questionId: string,
+): Promise<void> {
+  return apiFetch<void>(
+    `/courses/${encodeURIComponent(courseId)}/questions/${encodeURIComponent(questionId)}`,
+    { method: 'DELETE' },
+  );
+}
+
+/** Удалить ответ на вопрос; успех — 204. */
+export function deleteAnswer(
+  courseId: string,
+  questionId: string,
+  answerId: string,
+): Promise<void> {
+  return apiFetch<void>(
+    `/courses/${encodeURIComponent(courseId)}/questions/${encodeURIComponent(questionId)}/answers/${encodeURIComponent(answerId)}`,
+    { method: 'DELETE' },
+  );
+}
+
+// ---------- P9: аналитика учителя (T77) ----------
+
+/**
+ * Сводка кабинета преподавателя (GET /teacher/stats): KPI по курсам,
+ * ученикам, выручке, завершаемости, рейтингу и активности за 30 дней.
+ */
+export function teacherOverview(): Promise<TeacherOverview> {
+  return apiFetch<TeacherOverview>('/teacher/stats');
+}
+
+/**
+ * Разбивка по курсам (GET /teacher/stats/courses). Порядок задаёт сервер:
+ * выручка desc, затем ученики desc, затем название. `limit` по умолчанию 50,
+ * максимум 200; пустой параметр не отправляется.
+ */
+export function teacherCourseStats(limit?: number): Promise<TeacherCourseStatsPage> {
+  return apiFetch<TeacherCourseStatsPage>(
+    `/teacher/stats/courses${buildQuery({ limit })}`,
   );
 }
 
