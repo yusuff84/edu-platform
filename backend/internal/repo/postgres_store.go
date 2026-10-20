@@ -1788,3 +1788,200 @@ func (s *PostgresStore) IncrementPromoCodeUsage(id string) bool {
 	}
 	return tag.RowsAffected() > 0
 }
+
+// ---- T77: аналитика учителя (Postgres) ----
+
+// teacherStatsTeacherID нормализует teacherID для SQL-фильтра. При all=true
+// id не участвует в выборке: невалидный/пустой id (например, служебный
+// вызов) заменяется нулевым UUID, чтобы каст $1::uuid не ронял запрос.
+// При all=false невалидный id означает «такого преподавателя нет» — вызывающий
+// получает пустой результат без обращения к БД.
+func teacherStatsTeacherID(teacherID string, all bool) (string, bool) {
+	if _, err := uuid.Parse(strings.TrimSpace(teacherID)); err == nil {
+		return teacherID, true
+	}
+	if all {
+		return "00000000-0000-0000-0000-000000000000", true
+	}
+	return "", false
+}
+
+// TeacherOverview собирает сводку преподавателя одним SQL-запросом из
+// скалярных подзапросов по CTE scoped (курсы области видимости) и active
+// (активные записи с прогрессом). Без N+1: уроки и пройденные уроки
+// считаются LATERAL-подзапросами по записи, деньги — SUM по succeeded-
+// платежам, рейтинг — средневзвешенный по опубликованным курсам.
+// Ошибка БД не глотается: handler отвечает 500.
+func (s *PostgresStore) TeacherOverview(teacherID string, all bool) (*TeacherOverview, error) {
+	teacherID, ok := teacherStatsTeacherID(teacherID, all)
+	if !ok {
+		return &TeacherOverview{}, nil
+	}
+	ctx, cancel := s.ctx()
+	defer cancel()
+
+	out := &TeacherOverview{}
+	err := s.pool.QueryRow(ctx, `
+		WITH scoped AS (
+		  SELECT c.id, c.status, COALESCE(c.avg_rating, 0)::float8 AS avg_rating,
+		         c.ratings_count
+		  FROM courses c
+		  WHERE $2::bool OR c.teacher_id = $1::uuid
+		),
+		active AS (
+		  SELECT e.student_id, e.course_id, e.created_at,
+		         CASE WHEN tot.lessons > 0
+		              THEN LEAST(100.0, done.completed * 100.0 / tot.lessons)
+		              ELSE 0.0
+		         END AS percent
+		  FROM enrollments e
+		  JOIN scoped s ON s.id = e.course_id
+		  CROSS JOIN LATERAL (
+		    SELECT COUNT(*)::int AS lessons
+		    FROM modules m
+		    JOIN lessons l ON l.module_id = m.id
+		    WHERE m.course_id = e.course_id
+		  ) tot
+		  CROSS JOIN LATERAL (
+		    SELECT COUNT(*)::int AS completed
+		    FROM lesson_progress lp
+		    JOIN lessons l ON l.id = lp.lesson_id
+		    JOIN modules m ON m.id = l.module_id
+		    WHERE m.course_id = e.course_id
+		      AND lp.student_id = e.student_id
+		      AND lp.completed_at IS NOT NULL
+		  ) done
+		  WHERE e.status = 'active'
+		)
+		SELECT
+		  (SELECT COUNT(*)::int FROM scoped),
+		  (SELECT COUNT(*)::int FROM scoped WHERE status = 'published'),
+		  (SELECT COUNT(*)::int FROM scoped WHERE status = 'draft'),
+		  (SELECT COUNT(*)::int FROM scoped WHERE status = 'review'),
+		  (SELECT COUNT(*)::int FROM scoped WHERE status = 'archived'),
+		  (SELECT COUNT(*)::int FROM active),
+		  (SELECT COUNT(DISTINCT student_id)::int FROM active),
+		  (SELECT COALESCE(SUM(p.amount_cents), 0)::int
+		     FROM payments p JOIN scoped s ON s.id = p.course_id
+		     WHERE p.status = 'succeeded'),
+		  (SELECT COALESCE(SUM(p.platform_fee_cents), 0)::int
+		     FROM payments p JOIN scoped s ON s.id = p.course_id
+		     WHERE p.status = 'succeeded'),
+		  (SELECT COALESCE(SUM(p.teacher_amount_cents), 0)::int
+		     FROM payments p JOIN scoped s ON s.id = p.course_id
+		     WHERE p.status = 'succeeded'),
+		  (SELECT COUNT(*)::int FROM active WHERE percent >= 100),
+		  (SELECT COALESCE(ROUND(AVG(percent)::numeric, 1), 0)::float8 FROM active),
+		  (SELECT COALESCE(ROUND((SUM(avg_rating * ratings_count)
+		            / NULLIF(SUM(ratings_count), 0))::numeric, 1), 0)::float8
+		     FROM scoped WHERE status = 'published'),
+		  (SELECT COALESCE(SUM(ratings_count), 0)::int
+		     FROM scoped WHERE status = 'published'),
+		  (SELECT COUNT(*)::int FROM active
+		     WHERE created_at >= now() - interval '30 days'),
+		  (SELECT COALESCE(SUM(p.amount_cents), 0)::int
+		     FROM payments p JOIN scoped s ON s.id = p.course_id
+		     WHERE p.status = 'succeeded'
+		       AND p.created_at >= now() - interval '30 days')
+	`, teacherID, all).Scan(
+		&out.Courses.Total, &out.Courses.Published, &out.Courses.Draft,
+		&out.Courses.Review, &out.Courses.Archived,
+		&out.Students.Total, &out.Students.Unique,
+		&out.Revenue.PaidTotalCents, &out.Revenue.PlatformFeeCents, &out.Revenue.TeacherCents,
+		&out.Completion.Completed, &out.Completion.AvgPercent,
+		&out.Ratings.AvgRating, &out.Ratings.RatingsCount,
+		&out.Last30d.Enrollments, &out.Last30d.RevenueCents,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("сводка преподавателя: %w", err)
+	}
+	return out, nil
+}
+
+// TeacherCourseStats возвращает разбивку по курсам одним агрегирующим
+// запросом: по каждому курсу области видимости — активные ученики, средний
+// прогресс (LATERAL по записям), succeeded-выручка и рейтинг из карточки
+// курса. Порядок — revenueCents desc, students desc, title без учёта
+// регистра (id — детерминированный tie-break); limit 50 по умолчанию,
+// максимум 200. Ошибки БД логируются и дают пустой список — как у остальных
+// методов StoreAPI без error в сигнатуре.
+func (s *PostgresStore) TeacherCourseStats(teacherID string, all bool, limit int) []*TeacherCourseStat {
+	teacherID, ok := teacherStatsTeacherID(teacherID, all)
+	if !ok {
+		return []*TeacherCourseStat{}
+	}
+	limit = clampTeacherStatsLimit(limit)
+	ctx, cancel := s.ctx()
+	defer cancel()
+
+	rows, err := s.pool.Query(ctx, `
+		WITH scoped AS (
+		  SELECT c.id, c.title, c.status,
+		         COALESCE(c.avg_rating, 0)::float8 AS avg_rating,
+		         c.ratings_count
+		  FROM courses c
+		  WHERE $2::bool OR c.teacher_id = $1::uuid
+		)
+		SELECT s.id::text, s.title, s.status, s.avg_rating, s.ratings_count,
+		       COALESCE(en.students, 0)::int,
+		       COALESCE(en.avg_percent, 0)::float8,
+		       COALESCE(pay.revenue_cents, 0)::int
+		FROM scoped s
+		LEFT JOIN LATERAL (
+		  SELECT COUNT(*)::int AS students,
+		         COALESCE(ROUND(AVG(
+		           CASE WHEN tot.lessons > 0
+		                THEN LEAST(100.0, done.completed * 100.0 / tot.lessons)
+		                ELSE 0.0
+		           END)::numeric, 1), 0) AS avg_percent
+		  FROM enrollments e
+		  CROSS JOIN LATERAL (
+		    SELECT COUNT(*)::int AS lessons
+		    FROM modules m
+		    JOIN lessons l ON l.module_id = m.id
+		    WHERE m.course_id = s.id
+		  ) tot
+		  CROSS JOIN LATERAL (
+		    SELECT COUNT(*)::int AS completed
+		    FROM lesson_progress lp
+		    JOIN lessons l ON l.id = lp.lesson_id
+		    JOIN modules m ON m.id = l.module_id
+		    WHERE m.course_id = s.id
+		      AND lp.student_id = e.student_id
+		      AND lp.completed_at IS NOT NULL
+		  ) done
+		  WHERE e.course_id = s.id AND e.status = 'active'
+		) en ON true
+		LEFT JOIN LATERAL (
+		  SELECT SUM(p.amount_cents)::int AS revenue_cents
+		  FROM payments p
+		  WHERE p.course_id = s.id AND p.status = 'succeeded'
+		) pay ON true
+		ORDER BY COALESCE(pay.revenue_cents, 0) DESC,
+		         COALESCE(en.students, 0) DESC,
+		         lower(s.title) ASC,
+		         s.id ASC
+		LIMIT $3
+	`, teacherID, all, limit)
+	if err != nil {
+		log.Printf("postgres TeacherCourseStats: %v", err)
+		return []*TeacherCourseStat{}
+	}
+	defer rows.Close()
+
+	items := make([]*TeacherCourseStat, 0, limit)
+	for rows.Next() {
+		item := &TeacherCourseStat{}
+		if err := rows.Scan(&item.CourseID, &item.Title, &item.Status,
+			&item.AvgRating, &item.RatingsCount, &item.Students,
+			&item.AvgPercent, &item.RevenueCents); err != nil {
+			log.Printf("postgres TeacherCourseStats scan: %v", err)
+			continue
+		}
+		items = append(items, item)
+	}
+	if err := rows.Err(); err != nil {
+		log.Printf("postgres TeacherCourseStats rows: %v", err)
+	}
+	return items
+}

@@ -268,3 +268,83 @@ type CertificateDetails struct {
 	CourseTitle string    `json:"courseTitle"`
 	CourseSlug  string    `json:"courseSlug"`
 }
+
+// ---- T77: аналитика учителя ----
+
+// TeacherOverview — сводка GET /teacher/stats (T77). Поля и вложенные
+// объекты — ровно по контракту волны P9:
+//
+//	courses    — курсы в области видимости по статусам;
+//	students   — активные записи и уникальные ученики с активной записью;
+//	revenue    — только succeeded-платежи (amount/platform_fee/teacher_amount);
+//	completion — активные записи с прогрессом 100% и средний прогресс (0..100);
+//	ratings    — средневзвешенный рейтинг и суммарное число оценок
+//	             по опубликованным курсам;
+//	last30d    — активные записи и succeeded-платежи за последние 30 дней.
+type TeacherOverview struct {
+	Courses    TeacherOverviewCourses    `json:"courses"`
+	Students   TeacherOverviewStudents   `json:"students"`
+	Revenue    TeacherOverviewRevenue    `json:"revenue"`
+	Completion TeacherOverviewCompletion `json:"completion"`
+	Ratings    TeacherOverviewRatings    `json:"ratings"`
+	Last30d    TeacherOverviewLast30d    `json:"last30d"`
+}
+
+// TeacherOverviewCourses — число курсов в области видимости по статусам.
+type TeacherOverviewCourses struct {
+	Total     int `json:"total"`
+	Published int `json:"published"`
+	Draft     int `json:"draft"`
+	Review    int `json:"review"`
+	Archived  int `json:"archived"`
+}
+
+// TeacherOverviewStudents — активные записи (Total) и уникальные ученики
+// с активной записью (Unique).
+type TeacherOverviewStudents struct {
+	Total  int `json:"total"`
+	Unique int `json:"unique"`
+}
+
+// TeacherOverviewRevenue — денежные суммы только по succeeded-платежам.
+type TeacherOverviewRevenue struct {
+	PaidTotalCents   int `json:"paidTotalCents"`
+	PlatformFeeCents int `json:"platformFeeCents"`
+	TeacherCents     int `json:"teacherCents"`
+}
+
+// TeacherOverviewCompletion — завершённые активные записи (прогресс 100%)
+// и средний прогресс активных записей, дробный 0..100.
+type TeacherOverviewCompletion struct {
+	Completed  int     `json:"completed"`
+	AvgPercent float64 `json:"avgPercent"`
+}
+
+// TeacherOverviewRatings — средневзвешенный рейтинг опубликованных курсов
+// и суммарное число оценок.
+type TeacherOverviewRatings struct {
+	AvgRating    float64 `json:"avgRating"`
+	RatingsCount int     `json:"ratingsCount"`
+}
+
+// TeacherOverviewLast30d — активные записи и succeeded-платежи за 30 дней.
+type TeacherOverviewLast30d struct {
+	Enrollments  int `json:"enrollments"`
+	RevenueCents int `json:"revenueCents"`
+}
+
+// TeacherCourseStat — элемент GET /teacher/stats/courses (T77): агрегаты
+// одного курса любого статуса. Students — активные записи; RevenueCents —
+// только succeeded-платежи; AvgRating/RatingsCount — из карточки курса
+// (пересчитываются при изменении отзывов); AvgPercent — средний прогресс
+// активных записей, дробный 0..100.
+type TeacherCourseStat struct {
+	CourseID     string       `json:"courseId"`
+	Title        string       `json:"title"`
+	Status       CourseStatus `json:"status"`
+	Students     int          `json:"students"`
+	RevenueCents int          `json:"revenueCents"`
+	AvgRating    float64      `json:"avgRating"`
+	RatingsCount int          `json:"ratingsCount"`
+	AvgPercent   float64      `json:"avgPercent"`
+}

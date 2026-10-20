@@ -1449,3 +1449,260 @@ func (s *Store) IncrementPromoCodeUsage(id string) bool {
 	pc.UsedCount++
 	return true
 }
+
+// ---- T77: аналитика учителя (in-memory) ----
+
+// clampTeacherStatsLimit приводит limit разбивки по курсам к контракту T77:
+// по умолчанию 50, максимум 200. Хендлер нормализует параметр запроса, но
+// защитный clamp нужен и при прямых вызовах хранилища (тесты, внутренние
+// потребители).
+func clampTeacherStatsLimit(limit int) int {
+	if limit <= 0 {
+		return 50
+	}
+	if limit > 200 {
+		return 200
+	}
+	return limit
+}
+
+// teacherStatsPercent — прогресс записи в процентах 0..100:
+// completed_lessons / total_lessons * 100. У курса без уроков — 0;
+// сверху ограничен 100 (страховка от рассинхрона данных).
+func teacherStatsPercent(completed, totalLessons int) float64 {
+	if totalLessons <= 0 {
+		return 0
+	}
+	p := float64(completed) * 100 / float64(totalLessons)
+	if p > 100 {
+		p = 100
+	}
+	if p < 0 {
+		p = 0
+	}
+	return p
+}
+
+// roundTeacherStat округляет дробный агрегат до 1 знака — так же, как
+// RecalcCourseRating округляет avgRating, чтобы ответы были стабильными
+// и совпадали между in-memory и Postgres.
+func roundTeacherStat(v float64) float64 {
+	return math.Round(v*10) / 10
+}
+
+// teacherStatsScopeLocked собирает курсы области видимости аналитики:
+// all=true — все курсы платформы (admin), иначе — только курсы teacherID.
+// Вызывать только под удерживаемым RLock: вложенные методы Store взяли бы
+// RLock повторно, а RWMutex не реентерабелен.
+func teacherStatsScopeLocked(s *Store, teacherID string, all bool) map[string]*Course {
+	scoped := make(map[string]*Course)
+	for id, c := range s.courses {
+		if all || c.TeacherID == teacherID {
+			scoped[id] = c
+		}
+	}
+	return scoped
+}
+
+// teacherStatsProgressLocked готовит счётчики программы и прогресса по
+// курсам области видимости одним проходом по картам: courseID → всего
+// уроков и "studentID|courseID" → пройдено уроков. Вызывать под RLock.
+func teacherStatsProgressLocked(s *Store, scoped map[string]*Course) (totalLessons map[string]int, completedByEnrollment map[string]int) {
+	moduleCourse := make(map[string]string, len(s.modules))
+	for id, m := range s.modules {
+		moduleCourse[id] = m.CourseID
+	}
+	lessonCourse := make(map[string]string, len(s.lessons))
+	totalLessons = make(map[string]int, len(scoped))
+	for id, l := range s.lessons {
+		cid, ok := moduleCourse[l.ModuleID]
+		if !ok {
+			continue
+		}
+		if _, inScope := scoped[cid]; !inScope {
+			continue
+		}
+		lessonCourse[id] = cid
+		totalLessons[cid]++
+	}
+	completedByEnrollment = make(map[string]int)
+	for _, p := range s.progress {
+		if p.CompletedAt.IsZero() {
+			continue
+		}
+		cid, ok := lessonCourse[p.LessonID]
+		if !ok {
+			continue
+		}
+		completedByEnrollment[p.StudentID+"|"+cid]++
+	}
+	return totalLessons, completedByEnrollment
+}
+
+// TeacherOverview собирает сводку преподавателя одним проходом по картам
+// (in-memory; в Postgres — SQL-агрегатами, см. postgres_store.go).
+//
+// Активными считаются только записи со статусом active: revoked/refunded
+// доступа не имеют и в учеников, завершаемость и last30d не попадают.
+// Выручка — исключительно succeeded-платежи, суммы берутся из полей платежа
+// (platform_fee_cents/teacher_amount_cents), а не пересчитываются от текущей
+// комиссии. Рейтинг — средневзвешенный по опубликованным курсам области
+// видимости (вес — ratings_count курса).
+func (s *Store) TeacherOverview(teacherID string, all bool) (*TeacherOverview, error) {
+	now := time.Now().UTC()
+	cutoff30 := now.AddDate(0, 0, -30)
+
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	scoped := teacherStatsScopeLocked(s, teacherID, all)
+	out := &TeacherOverview{}
+
+	for _, c := range scoped {
+		out.Courses.Total++
+		switch c.Status {
+		case CourseDraft:
+			out.Courses.Draft++
+		case CourseReview:
+			out.Courses.Review++
+		case CoursePublished:
+			out.Courses.Published++
+		case CourseArchived:
+			out.Courses.Archived++
+		}
+	}
+
+	totalLessons, completedByEnrollment := teacherStatsProgressLocked(s, scoped)
+
+	uniqueStudents := make(map[string]struct{})
+	sumPercent := 0.0
+	activeEnrollments := 0
+	for _, e := range s.enrollments {
+		if e.Status != EnrollmentActive {
+			continue
+		}
+		if _, inScope := scoped[e.CourseID]; !inScope {
+			continue
+		}
+		activeEnrollments++
+		out.Students.Total++
+		uniqueStudents[e.StudentID] = struct{}{}
+		if !e.CreatedAt.Before(cutoff30) {
+			out.Last30d.Enrollments++
+		}
+		percent := teacherStatsPercent(completedByEnrollment[e.StudentID+"|"+e.CourseID], totalLessons[e.CourseID])
+		sumPercent += percent
+		if percent >= 100 {
+			out.Completion.Completed++
+		}
+	}
+	out.Students.Unique = len(uniqueStudents)
+	if activeEnrollments > 0 {
+		out.Completion.AvgPercent = roundTeacherStat(sumPercent / float64(activeEnrollments))
+	}
+
+	for _, p := range s.payments {
+		if p.Status != PaymentSucceeded {
+			continue
+		}
+		if _, inScope := scoped[p.CourseID]; !inScope {
+			continue
+		}
+		out.Revenue.PaidTotalCents += p.AmountCents
+		out.Revenue.PlatformFeeCents += p.PlatformFeeCents
+		out.Revenue.TeacherCents += p.TeacherAmountCents
+		if !p.CreatedAt.Before(cutoff30) {
+			out.Last30d.RevenueCents += p.AmountCents
+		}
+	}
+
+	var ratingSum float64
+	for _, c := range scoped {
+		if c.Status != CoursePublished {
+			continue
+		}
+		out.Ratings.RatingsCount += c.RatingsCount
+		ratingSum += c.AvgRating * float64(c.RatingsCount)
+	}
+	if out.Ratings.RatingsCount > 0 {
+		out.Ratings.AvgRating = roundTeacherStat(ratingSum / float64(out.Ratings.RatingsCount))
+	}
+	return out, nil
+}
+
+// TeacherCourseStats возвращает разбивку по курсам области видимости
+// (in-memory; в Postgres — один агрегирующий запрос). Входят курсы любого
+// статуса; students/avgPercent считаются по активным записям, revenueCents —
+// по succeeded-платежам. Порядок строго по контракту T77: revenueCents desc,
+// затем students desc, затем title (без учёта регистра; id — детерминированный
+// tie-break для одинаковых названий). limit — 50 по умолчанию, максимум 200.
+func (s *Store) TeacherCourseStats(teacherID string, all bool, limit int) []*TeacherCourseStat {
+	limit = clampTeacherStatsLimit(limit)
+
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	scoped := teacherStatsScopeLocked(s, teacherID, all)
+	totalLessons, completedByEnrollment := teacherStatsProgressLocked(s, scoped)
+
+	studentsByCourse := make(map[string]int, len(scoped))
+	sumPercentByCourse := make(map[string]float64, len(scoped))
+	for _, e := range s.enrollments {
+		if e.Status != EnrollmentActive {
+			continue
+		}
+		if _, inScope := scoped[e.CourseID]; !inScope {
+			continue
+		}
+		studentsByCourse[e.CourseID]++
+		sumPercentByCourse[e.CourseID] += teacherStatsPercent(
+			completedByEnrollment[e.StudentID+"|"+e.CourseID], totalLessons[e.CourseID])
+	}
+
+	revenueByCourse := make(map[string]int, len(scoped))
+	for _, p := range s.payments {
+		if p.Status != PaymentSucceeded {
+			continue
+		}
+		if _, inScope := scoped[p.CourseID]; !inScope {
+			continue
+		}
+		revenueByCourse[p.CourseID] += p.AmountCents
+	}
+
+	items := make([]*TeacherCourseStat, 0, len(scoped))
+	for _, c := range scoped {
+		item := &TeacherCourseStat{
+			CourseID:     c.ID,
+			Title:        c.Title,
+			Status:       c.Status,
+			Students:     studentsByCourse[c.ID],
+			RevenueCents: revenueByCourse[c.ID],
+			AvgRating:    c.AvgRating,
+			RatingsCount: c.RatingsCount,
+		}
+		if item.Students > 0 {
+			item.AvgPercent = roundTeacherStat(sumPercentByCourse[c.ID] / float64(item.Students))
+		}
+		items = append(items, item)
+	}
+
+	sort.Slice(items, func(i, j int) bool {
+		a, b := items[i], items[j]
+		if a.RevenueCents != b.RevenueCents {
+			return a.RevenueCents > b.RevenueCents
+		}
+		if a.Students != b.Students {
+			return a.Students > b.Students
+		}
+		at, bt := strings.ToLower(a.Title), strings.ToLower(b.Title)
+		if at != bt {
+			return at < bt
+		}
+		return a.CourseID < b.CourseID
+	})
+	if len(items) > limit {
+		items = items[:limit]
+	}
+	return items
+}

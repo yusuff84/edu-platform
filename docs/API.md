@@ -134,6 +134,23 @@
 > админа появляются аддитивные `promoCode` и `discountCents`, `usedCount`
 > увеличивается один раз при успешной оплате.
 
+> Волна P9 (T77): аналитика учителя. `GET /api/v1/teacher/stats` →
+> `200 {courses:{total,published,draft,review,archived},
+> students:{total,unique}, revenue:{paidTotalCents,platformFeeCents,teacherCents},
+> completion:{completed,avgPercent}, ratings:{avgRating,ratingsCount},
+> last30d:{enrollments,revenueCents}}` — teacher видит только свои курсы,
+> admin — все. `students.total` — активные записи, `unique` — уникальные
+> ученики с активной записью; `revenue.*` — только `succeeded`-платежи;
+> `completion.avgPercent` — средний прогресс активных записей (0..100,
+> дробное, 1 знак); `ratings` — средневзвешенно по опубликованным курсам;
+> `last30d` — активные записи и `succeeded`-платежи за 30 дней.
+> `GET /api/v1/teacher/stats/courses?limit=50` →
+> `200 {"items":[{courseId,title,status,students,revenueCents,avgRating,
+> ratingsCount,avgPercent}],"total":N}` — курсы любого статуса, порядок
+> `revenueCents` desc → `students` desc → `title`; `limit` по умолчанию 50,
+> максимум 200 (`total` — число возвращённых элементов после limit).
+> Ученику оба эндпоинта — `403` (группа `/teacher` — только teacher/admin).
+
 > В бэклоге T13: `GET/PATCH/DELETE /teacher/courses[...]`, PATCH модулей/уроков,
 > reorder — в `Task/T13-integration-wiring.md`.
 

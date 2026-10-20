@@ -255,6 +255,23 @@ type StoreAPI interface {
 	// false — промокода нет. Вызывается ровно один раз при первом переходе
 	// платежа в succeeded (идемпотентность обеспечивает handler).
 	IncrementPromoCodeUsage(id string) bool
+
+	// ---- T77: аналитика учителя ----
+
+	// TeacherOverview — сводка преподавателя одним вызовом: курсы по
+	// статусам, активные записи и уникальные ученики, выручка только по
+	// succeeded-платежам, завершаемость и средний прогресс активных записей,
+	// рейтинг опубликованных курсов, активность за 30 дней.
+	// all=true — все курсы платформы (admin), иначе — только курсы teacherID.
+	// В Postgres агрегаты считаются SQL-ом (без N+1), в in-memory — одним
+	// проходом по картам под RLock. Ошибка возможна только у Postgres.
+	TeacherOverview(teacherID string, all bool) (*TeacherOverview, error)
+	// TeacherCourseStats — разбивка по курсам одним вызовом: активные
+	// ученики, succeeded-выручка, рейтинг и средний прогресс по каждому курсу
+	// (включая draft/review/archived). Сортировка — revenueCents desc,
+	// затем students desc, затем title (без учёта регистра). limit по
+	// умолчанию 50, максимум 200. all=true — все курсы платформы (admin).
+	TeacherCourseStats(teacherID string, all bool, limit int) []*TeacherCourseStat
 }
 
 // PaymentFilter — параметры журнала платежей для админки (US6, T31).
