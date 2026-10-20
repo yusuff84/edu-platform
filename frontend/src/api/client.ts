@@ -20,6 +20,7 @@ import type {
   CourseSort,
   CreateLessonInput,
   EnrollmentResult,
+  FavoritesPage,
   Invite,
   Module,
   Lesson,
@@ -59,6 +60,7 @@ export type {
   CourseStatus,
   CreateLessonInput,
   EnrollmentResult,
+  FavoritesPage,
   Invite,
   Lesson,
   LessonAnswer,
@@ -490,6 +492,36 @@ export function myCourses(): Promise<MyCourse[]> {
   return apiFetch<{ items: MyCourse[]; total: number }>('/me/courses').then(
     (res) => res.items,
   );
+}
+
+// ---------- P9: избранное (T73/T74) ----------
+
+/**
+ * Добавить курс в избранное: PUT /me/favorites/{courseId}.
+ * Только вошедший; идемпотентно (204, тела нет).
+ */
+export function addFavorite(courseId: string): Promise<void> {
+  return apiFetch<void>(`/me/favorites/${encodeURIComponent(courseId)}`, {
+    method: 'PUT',
+  });
+}
+
+/**
+ * Убрать курс из избранного: DELETE /me/favorites/{courseId}.
+ * Только вошедший; идемпотентно (204, в том числе если курса уже нет).
+ */
+export function removeFavorite(courseId: string): Promise<void> {
+  return apiFetch<void>(`/me/favorites/${encodeURIComponent(courseId)}`, {
+    method: 'DELETE',
+  });
+}
+
+/**
+ * Моё избранное: GET /me/favorites. Конверт { items, total } распаковывается
+ * в CourseItem[]; порядок сервера — добавленные позже первыми.
+ */
+export function myFavorites(): Promise<CourseItem[]> {
+  return apiFetch<FavoritesPage>('/me/favorites').then((res) => res.items);
 }
 
 // ---------- Сертификаты ----------

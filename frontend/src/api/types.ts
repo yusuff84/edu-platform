@@ -124,6 +124,15 @@ export interface CourseDetail extends Course {
   modules: Module[];
 }
 
+/**
+ * P9/T73: конверт GET /me/favorites. Клиент (myFavorites) распаковывает
+ * items в CourseItem[]; порядок — добавленные позже первыми.
+ */
+export interface FavoritesPage {
+  items: CourseItem[];
+  total: number;
+}
+
 // ---------- Структура курса ----------
 
 /** Модуль в виде курса (handler.moduleView). */
