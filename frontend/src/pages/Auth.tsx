@@ -11,8 +11,16 @@ import { ApiError, login, register } from '../api/client';
 import { meQueryOptions } from '../components/RouteGuards';
 import { t } from '../i18n/t';
 
+// Логин не требует полноценного e-mail: демо- и QA-аккаунты (admin@local,
+// teacher@local) заводятся с локальным доменом, а проверку учётных данных
+// всё равно делает сервер. Достаточно непустой строки с «@» — иначе
+// браузерная валидация блокировала вход в документированные демо-учётки.
 const loginSchema = z.object({
-  email: z.string().min(1, 'Укажите email').email('Некорректный email'),
+  email: z
+    .string()
+    .trim()
+    .min(1, 'Укажите email')
+    .refine((v) => v.includes('@'), 'Некорректный email'),
   password: z.string().min(1, 'Укажите пароль'),
 });
 
