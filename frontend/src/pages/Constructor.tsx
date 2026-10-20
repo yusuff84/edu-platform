@@ -85,6 +85,7 @@ import {
 import LessonPreview from '../components/LessonPreview';
 import type { LessonPreviewData } from '../components/LessonPreview';
 import { t } from '../i18n/t';
+import { useSeo } from '../app/useSeo';
 import '../styles/constructor.css';
 import '../styles/constructorExtra.css';
 import '../styles/promo.css';
@@ -677,6 +678,7 @@ function focusField(id: string): void {
 // ---------- Компонент ----------
 
 export default function Constructor(): JSX.Element {
+  useSeo('Конструктор курса — Edu Platform');
   const { id } = useParams();
   const isNew = !id || id === 'new';
   const navigate = useNavigate();

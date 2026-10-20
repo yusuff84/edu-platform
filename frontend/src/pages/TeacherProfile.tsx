@@ -8,6 +8,7 @@ import { useQuery } from '@tanstack/react-query';
 import { ApiError, getTeacherProfile } from '../api/client';
 import CourseCard from '../components/CourseCard';
 import { t } from '../i18n/t';
+import { DEFAULT_DESCRIPTION, useSeo } from '../app/useSeo';
 import '../styles/teacherProfile.css';
 
 /** KPI-рейтинг: без оценок показываем «—», иначе одну цифру после запятой. */
@@ -54,6 +55,13 @@ export default function TeacherProfile(): JSX.Element {
     enabled: Boolean(id),
     retry: false,
   });
+  const teacherName = query.data?.teacher.displayName?.trim() || t('p9.teacher.title');
+  useSeo(
+    query.data ? `${teacherName} — Edu Platform` : 'Преподаватель — Edu Platform',
+    query.data
+      ? `Курсы преподавателя ${teacherName}: программа, отзывы и запись на обучение.`
+      : DEFAULT_DESCRIPTION,
+  );
 
   if (query.isLoading) {
     return (

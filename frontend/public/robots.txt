@@ -1,0 +1,11 @@
+User-agent: *
+Allow: /
+
+# Личные кабинеты, обучение и модерация не индексируются.
+Disallow: /admin
+Disallow: /teach
+Disallow: /me
+Disallow: /profile
+Disallow: /learn
+Disallow: /login
+Disallow: /register

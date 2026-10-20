@@ -32,6 +32,7 @@ import { courseProgress } from '../api/meExtra';
 import LessonView from '../components/LessonView';
 import Questions from '../components/Questions';
 import { t } from '../i18n/t';
+import { useSeo } from '../app/useSeo';
 import '../styles/learn.css';
 import '../styles/profile.css';
 import '../styles/certificate.css';
@@ -62,6 +63,7 @@ function errorText(e: unknown): string {
 }
 
 export default function Learn(): JSX.Element {
+  useSeo('Обучение — Edu Platform');
   const { courseId = '', lessonId } = useParams();
   const qc = useQueryClient();
 

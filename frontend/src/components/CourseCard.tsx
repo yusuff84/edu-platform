@@ -157,7 +157,9 @@ export default function CourseCard({ course }: { course: CourseItem }): JSX.Elem
           />
         </svg>
       </button>
-      <Link className="tile" to={`/courses/${course.slug}`} aria-label={course.title}>
+      {/* Без aria-label: доступное имя собирается из видимого текста карточки
+          (название, рейтинг, цена), иначе Lighthouse видит несовпадение. */}
+      <Link className="tile" to={`/courses/${course.slug}`}>
         {/* T57: есть coverPath (T54) — подложку рисует настоящий кадр; из-за
             градиента-подложки и onError плитка не «ломается», если файл
             недоступен (показывается прежний вид). */}

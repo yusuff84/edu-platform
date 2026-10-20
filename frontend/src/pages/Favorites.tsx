@@ -9,12 +9,14 @@ import { useQuery } from '@tanstack/react-query';
 import { myFavorites } from '../api/client';
 import CourseCard from '../components/CourseCard';
 import { t } from '../i18n/t';
+import { useSeo } from '../app/useSeo';
 import '../styles/favorites.css';
 
 /** Сколько скелетонов показывать, пока список грузится. */
 const SKELETONS = 6;
 
 export default function Favorites(): JSX.Element {
+  useSeo('Избранное — Edu Platform');
   const query = useQuery({
     queryKey: ['favorites'],
     queryFn: myFavorites,

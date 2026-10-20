@@ -29,6 +29,7 @@ import type {
   PaymentStatus,
 } from '../api/client';
 import { t } from '../i18n/t';
+import { useSeo } from '../app/useSeo';
 import type { RuKey } from '../i18n/t';
 // Стили страницы изолированы в styles/admin.css — общий styles.css не трогаем.
 import '../styles/admin.css';
@@ -213,6 +214,7 @@ function downloadTextFile(fileName: string, content: string, mimeType: string): 
 // ---------- Страница ----------
 
 export default function Admin(): JSX.Element {
+  useSeo('Админ-панель — Edu Platform');
   const qc = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
 

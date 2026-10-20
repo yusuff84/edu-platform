@@ -19,6 +19,7 @@ import {
 } from '../components/marketing';
 import { t } from '../i18n/t';
 import type { RuKey } from '../i18n/t';
+import { useSeo } from '../app/useSeo';
 import '../styles/catalog.css';
 import '../styles/catalog-filters.css';
 
@@ -99,6 +100,8 @@ function categoryLabel(slug: string): string {
 }
 
 export default function Catalog(): JSX.Element {
+  // Каталог — точка входа: возвращаем базовые title/description после карточек.
+  useSeo();
   const [searchParams, setSearchParams] = useSearchParams();
 
   // Единственный источник истины для активных фильтров — URL (ссылка шарится,

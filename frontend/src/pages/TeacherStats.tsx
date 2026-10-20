@@ -14,6 +14,7 @@ import {
 } from '../api/client';
 import type { CourseStatus, TeacherCourseStat } from '../api/client';
 import { t } from '../i18n/t';
+import { useSeo } from '../app/useSeo';
 import type { RuKey } from '../i18n/t';
 // Стили страницы изолированы в styles/teacherStats.css (префикс .tstats-).
 import '../styles/teacherStats.css';
@@ -152,6 +153,7 @@ function CourseRow({ row }: { row: TeacherCourseStat }): JSX.Element {
 }
 
 export default function TeacherStats(): JSX.Element {
+  useSeo('Аналитика преподавателя — Edu Platform');
   const overview = useQuery({
     queryKey: ['teacher-stats'],
     queryFn: teacherOverview,

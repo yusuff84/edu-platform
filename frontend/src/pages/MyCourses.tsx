@@ -14,11 +14,13 @@ import { ApiError, myCourses } from '../api/client';
 import { courseProgress } from '../api/meExtra';
 import { coverFor } from '../components/CourseCard';
 import { t } from '../i18n/t';
+import { useSeo } from '../app/useSeo';
 import '../styles/profile.css';
 import '../styles/certificate.css';
 import '../styles/favorites.css';
 
 export default function MyCourses(): JSX.Element {
+  useSeo('Мои курсы — Edu Platform');
   const query = useQuery({ queryKey: ['my-courses'], queryFn: myCourses });
   const items = query.data ?? [];
 

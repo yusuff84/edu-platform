@@ -10,6 +10,7 @@ import { ApiError, login, register } from '../api/client';
 // а shell.css уже подключён через router.tsx — новых стилей не появляется.
 import { meQueryOptions } from '../components/RouteGuards';
 import { t } from '../i18n/t';
+import { useSeo } from '../app/useSeo';
 
 // Логин не требует полноценного e-mail: демо- и QA-аккаунты (admin@local,
 // teacher@local) заводятся с локальным доменом, а проверку учётных данных
@@ -82,6 +83,7 @@ function resolveRedirectFrom(state: unknown): string | null {
 }
 
 export function Login(): JSX.Element {
+  useSeo('Вход — Edu Platform', 'Войдите в Edu Platform, чтобы продолжить обучение.');
   const navigate = useNavigate();
   const location = useLocation();
   const qc = useQueryClient();
@@ -177,6 +179,7 @@ export function Login(): JSX.Element {
 }
 
 export function Register(): JSX.Element {
+  useSeo('Регистрация — Edu Platform', 'Создайте аккаунт Edu Platform и начните учиться.');
   const navigate = useNavigate();
   const location = useLocation();
   const qc = useQueryClient();

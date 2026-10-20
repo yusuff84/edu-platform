@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { me, myTeaching } from '../api/client';
 import { t } from '../i18n/t';
+import { useSeo } from '../app/useSeo';
 import MyCoursesPage from './MyCourses';
 import AdminPage from './Admin';
 
@@ -50,6 +51,7 @@ export function RequireRole({
 }
 
 export function StudentCab(): JSX.Element {
+  useSeo('Кабинет ученика — Edu Platform');
   return (
     <RequireRole roles={['student', 'teacher', 'admin']}>
       <MyCoursesPage />
@@ -64,6 +66,7 @@ export function StudentCab(): JSX.Element {
  * и AdminCab сохранены — их использует такая разводка маршрутов.
  */
 export function TeacherCab(): JSX.Element {
+  useSeo('Кабинет преподавателя — Edu Platform');
   return (
     <RequireRole roles={['teacher', 'admin']}>
       <div className="wrap">

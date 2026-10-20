@@ -8,6 +8,7 @@ import { Link, useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { ApiError, getCertificate } from '../api/client';
 import { t } from '../i18n/t';
+import { DEFAULT_DESCRIPTION, useSeo } from '../app/useSeo';
 import '../styles/certificate.css';
 
 /** Копирование в буфер обмена: Clipboard API, иначе запасной способ. */
@@ -79,6 +80,12 @@ export default function Certificate(): JSX.Element {
     enabled: Boolean(number),
     retry: false,
   });
+  useSeo(
+    query.data ? `Сертификат ${query.data.number} — Edu Platform` : 'Сертификат — Edu Platform',
+    query.data
+      ? `Сертификат о прохождении курса «${query.data.courseTitle}» на Edu Platform.`
+      : DEFAULT_DESCRIPTION,
+  );
 
   // При переходе на другой номер (если страница не размонтировалась) —
   // подсказка о копировании не должна «переезжать» на новый сертификат.

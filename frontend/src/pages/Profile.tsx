@@ -8,6 +8,7 @@ import { ApiError, formatDate, formatMoney } from '../api/client';
 import type { PaymentStatus, Role } from '../api/client';
 import { meProfile, myPayments, updateProfile } from '../api/meExtra';
 import { t } from '../i18n/t';
+import { useSeo } from '../app/useSeo';
 import type { RuKey } from '../i18n/t';
 import '../styles/profile.css';
 
@@ -41,6 +42,7 @@ function errorText(e: unknown): string {
 }
 
 export default function Profile(): JSX.Element {
+  useSeo('Профиль — Edu Platform');
   const qc = useQueryClient();
 
   // ---------- Профиль ----------

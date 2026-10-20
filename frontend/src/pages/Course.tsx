@@ -21,6 +21,7 @@ import Reviews from '../components/Reviews';
 import SimilarCourses from '../components/SimilarCourses';
 import { t } from '../i18n/t';
 import { pluralRu } from '../i18n/plural';
+import { DEFAULT_DESCRIPTION, useSeo } from '../app/useSeo';
 import '../styles/catalog.css';
 import '../styles/preview.css';
 import '../styles/promo.css';
@@ -73,6 +74,10 @@ export default function Course(): JSX.Element {
     enabled: Boolean(slug),
     retry: false,
   });
+  useSeo(
+    courseQuery.data ? `${courseQuery.data.title} — Edu Platform` : 'Курс — Edu Platform',
+    courseQuery.data?.description || DEFAULT_DESCRIPTION,
+  );
   const meQuery = useQuery({ queryKey: ['me'], queryFn: me, retry: false });
   // T76: содержимое превью грузится только при открытой модалке.
   const previewQuery = useQuery({

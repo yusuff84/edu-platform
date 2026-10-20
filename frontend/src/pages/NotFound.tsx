@@ -1,11 +1,13 @@
 import { Link } from 'react-router-dom';
 import { t } from '../i18n/t';
+import { useSeo } from '../app/useSeo';
 import '../styles/shell.css';
 
 /**
  * 404 для неизвестных URL (SPA — HTTP-кода нет, текст и ссылка обязательны).
  */
 export default function NotFound(): JSX.Element {
+  useSeo('Страница не найдена — Edu Platform');
   return (
     <main className="shell-center">
       <h1>{t('error.notFound')}</h1>
