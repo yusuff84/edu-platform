@@ -119,6 +119,35 @@ export interface CourseDetail extends Course {
   modules: Module[];
 }
 
+// ---------- Публичный профиль преподавателя (P9, T82) ----------
+
+/**
+ * Шапка публичного профиля (GET /teachers/{id}, контракт T81).
+ * displayName может быть пустым — UI показывает нейтральное «Преподаватель».
+ */
+export interface TeacherPublic {
+  id: string;
+  /** Отображаемое имя; пустая строка, если не задано. */
+  displayName: string;
+  /** Число published-курсов преподавателя. */
+  coursesCount: number;
+  /** Активные записи на published-курсы. */
+  studentsCount: number;
+  /** Средневзвешенный рейтинг по published-курсам; 0 — оценок нет. */
+  avgRating: number;
+  /** Суммарное число оценок по published-курсам. */
+  ratingsCount: number;
+}
+
+/**
+ * Ответ GET /teachers/{id}: шапка профиля и все published-курсы.
+ * Порядок курсов серверный (активные записи desc, затем createdAt desc).
+ */
+export interface TeacherProfile {
+  teacher: TeacherPublic;
+  courses: CourseItem[];
+}
+
 // ---------- Структура курса ----------
 
 /** Модуль в виде курса (handler.moduleView). */

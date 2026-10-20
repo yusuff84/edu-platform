@@ -34,6 +34,7 @@ import type {
   PublicSettings,
   ModerationDecision,
   Review,
+  TeacherProfile,
   User,
 } from './types';
 
@@ -79,6 +80,8 @@ export type {
   Review,
   ReviewBreakdown,
   Role,
+  TeacherProfile,
+  TeacherPublic,
   User,
 } from './types';
 
@@ -210,6 +213,14 @@ export function getCourse(slug: string): Promise<CourseDetail> {
   return apiFetch<{ course: Course; modules: Module[] }>(
     `/courses/${encodeURIComponent(slug)}`,
   ).then((res) => ({ ...res.course, modules: res.modules }));
+}
+
+/**
+ * T82: публичный профиль преподавателя (GET /teachers/{id}).
+ * Конверт { teacher, courses } возвращается как есть; 404 — профиля нет.
+ */
+export function getTeacherProfile(id: string): Promise<TeacherProfile> {
+  return apiFetch<TeacherProfile>(`/teachers/${encodeURIComponent(id)}`);
 }
 
 // ---------- Учитель ----------
