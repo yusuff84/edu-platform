@@ -431,3 +431,80 @@ export interface CompleteLessonInput {
   /** Необязательно: если пусто, backend берёт язык из задания урока. */
   language?: string;
 }
+
+// ---------- P9: аналитика учителя (T77) ----------
+
+/** Счётчики курсов преподавателя по статусам (GET /teacher/stats). */
+export interface TeacherOverviewCourses {
+  total: number;
+  published: number;
+  draft: number;
+  review: number;
+  archived: number;
+}
+
+/** Записи на курсы преподавателя: всего активных и уникальных учеников. */
+export interface TeacherOverviewStudents {
+  /** Активные записи (один ученик может быть записан на несколько курсов). */
+  total: number;
+  /** Уникальные ученики с активной записью. */
+  unique: number;
+}
+
+/** Деньги только по succeeded-платежам, в копейках. */
+export interface TeacherOverviewRevenue {
+  paidTotalCents: number;
+  platformFeeCents: number;
+  teacherCents: number;
+}
+
+/** Завершаемость: число записей с прогрессом 100 % и средний прогресс (0..100). */
+export interface TeacherOverviewCompletion {
+  completed: number;
+  avgPercent: number;
+}
+
+/** Рейтинг по опубликованным курсам (средневзвешенный) и число оценок. */
+export interface TeacherOverviewRatings {
+  avgRating: number;
+  ratingsCount: number;
+}
+
+/** Активность за последние 30 дней: записи и succeeded-платежи. */
+export interface TeacherOverviewLast30d {
+  enrollments: number;
+  revenueCents: number;
+}
+
+/**
+ * Сводка кабинета преподавателя (GET /teacher/stats).
+ * Teacher видит только свои курсы, admin — все курсы платформы.
+ */
+export interface TeacherOverview {
+  courses: TeacherOverviewCourses;
+  students: TeacherOverviewStudents;
+  revenue: TeacherOverviewRevenue;
+  completion: TeacherOverviewCompletion;
+  ratings: TeacherOverviewRatings;
+  last30d: TeacherOverviewLast30d;
+}
+
+/** Строка таблицы «По курсам» (GET /teacher/stats/courses). */
+export interface TeacherCourseStat {
+  courseId: string;
+  title: string;
+  status: CourseStatus;
+  /** Активные записи на курс. */
+  students: number;
+  revenueCents: number;
+  avgRating: number;
+  ratingsCount: number;
+  /** Средний прогресс активных записей, 0..100. */
+  avgPercent: number;
+}
+
+/** Ответ GET /teacher/stats/courses: элементы и общее число курсов. */
+export interface TeacherCourseStatsPage {
+  items: TeacherCourseStat[];
+  total: number;
+}

@@ -34,6 +34,8 @@ import type {
   PublicSettings,
   ModerationDecision,
   Review,
+  TeacherCourseStatsPage,
+  TeacherOverview,
   User,
 } from './types';
 
@@ -79,6 +81,9 @@ export type {
   Review,
   ReviewBreakdown,
   Role,
+  TeacherCourseStat,
+  TeacherCourseStatsPage,
+  TeacherOverview,
   User,
 } from './types';
 
@@ -574,6 +579,27 @@ export function deleteReviewReply(
   return apiFetch<void>(
     `/teacher/courses/${encodeURIComponent(courseId)}/reviews/${encodeURIComponent(reviewId)}/reply`,
     { method: 'DELETE' },
+  );
+}
+
+// ---------- P9: аналитика учителя (T77) ----------
+
+/**
+ * Сводка кабинета преподавателя (GET /teacher/stats): KPI по курсам,
+ * ученикам, выручке, завершаемости, рейтингу и активности за 30 дней.
+ */
+export function teacherOverview(): Promise<TeacherOverview> {
+  return apiFetch<TeacherOverview>('/teacher/stats');
+}
+
+/**
+ * Разбивка по курсам (GET /teacher/stats/courses). Порядок задаёт сервер:
+ * выручка desc, затем ученики desc, затем название. `limit` по умолчанию 50,
+ * максимум 200; пустой параметр не отправляется.
+ */
+export function teacherCourseStats(limit?: number): Promise<TeacherCourseStatsPage> {
+  return apiFetch<TeacherCourseStatsPage>(
+    `/teacher/stats/courses${buildQuery({ limit })}`,
   );
 }
 
