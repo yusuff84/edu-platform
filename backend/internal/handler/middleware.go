@@ -133,6 +133,14 @@ func NewRouter(app *App) http.Handler {
 		r.With(app.requireAuth).Post("/courses/{id}/reviews", app.CreateReview)
 		// T63: проверка промокода на странице курса — только вошедший.
 		r.With(app.requireAuth).Post("/courses/{id}/promo/validate", app.ValidatePromoCode)
+		// T71: вопросы и ответы по урокам (handler/lesson_qa.go). Лента
+		// публичная; создание/удаление — только вошедшим (права проверяет
+		// хендлер: активная запись/владение курсом/admin).
+		r.Get("/courses/{id}/questions", app.ListLessonQuestions)
+		r.With(app.requireAuth).Post("/courses/{id}/questions", app.CreateLessonQuestion)
+		r.With(app.requireAuth).Post("/courses/{id}/questions/{questionId}/answers", app.CreateLessonAnswer)
+		r.With(app.requireAuth).Delete("/courses/{id}/questions/{questionId}", app.DeleteLessonQuestion)
+		r.With(app.requireAuth).Delete("/courses/{id}/questions/{questionId}/answers/{answerId}", app.DeleteLessonAnswer)
 
 		// Пост-P7: публичные настройки интерфейса (тогл промо-баннера) —
 		// читаются шапкой без авторизации, поэтому живут вне /admin

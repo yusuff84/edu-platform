@@ -46,8 +46,12 @@ type Store struct {
 	certificates map[string]*Certificate // id -> certificate
 	certIdx      map[string]string       // userID|courseID -> certificate id
 	certByNumber map[string]string       // number -> certificate id
-	commissionPct      int
-	promoBarEnabled    bool
+	// T71: вопросы и ответы по урокам.
+	lessonQuestions map[string]*LessonQuestion // id -> вопрос
+	lessonAnswers   map[string]*LessonAnswer   // id -> ответ
+	lessonAnswerIDs map[string][]string        // questionID -> id ответов в порядке создания
+	commissionPct   int
+	promoBarEnabled bool
 }
 
 // NewStore создаёт пустое хранилище.
@@ -71,6 +75,9 @@ func NewStore() *Store {
 		certificates:       make(map[string]*Certificate),
 		certIdx:            make(map[string]string),
 		certByNumber:       make(map[string]string),
+		lessonQuestions:    make(map[string]*LessonQuestion),
+		lessonAnswers:      make(map[string]*LessonAnswer),
+		lessonAnswerIDs:    make(map[string][]string),
 		commissionPct:      15,
 		promoBarEnabled:    true,
 	}
@@ -1448,4 +1455,245 @@ func (s *Store) IncrementPromoCodeUsage(id string) bool {
 	}
 	pc.UsedCount++
 	return true
+}
+
+// ---- T71: вопросы и ответы по урокам ----
+//
+// Блок вынесен в конец файла, чтобы не конфликтовать при слиянии волн.
+// Вопросы/ответы хранятся «сырыми» (только id и текст), а вычисляемые поля
+// (lessonTitle, studentName, authorName, authorRole, isTeacher) собираются
+// при каждом чтении — как JOIN в Postgres, поэтому смена display_name сразу
+// видна в ленте. Наружу уходят снимки: живые указатели после снятия лока
+// читать нельзя.
+
+// normalizeQAPageLimit приводит пагинацию ленты вопросов к контракту P9:
+// page с 1, limit 20 по умолчанию, максимум 100. Используется обеими
+// реализациями стора (in-memory и Postgres) для одинакового поведения.
+func normalizeQAPageLimit(page, limit int) (int, int) {
+	if page < 1 {
+		page = 1
+	}
+	if limit < 1 {
+		limit = 20
+	}
+	if limit > 100 {
+		limit = 100
+	}
+	return page, limit
+}
+
+// lessonInCourseLocked проверяет, что урок принадлежит курсу (через модуль).
+// Вызывающий держит s.mu.
+func (s *Store) lessonInCourseLocked(courseID, lessonID string) (*Lesson, bool) {
+	l, ok := s.lessons[lessonID]
+	if !ok {
+		return nil, false
+	}
+	m, ok := s.modules[l.ModuleID]
+	if !ok || m.CourseID != courseID {
+		return nil, false
+	}
+	return l, true
+}
+
+// lessonAnswerSnapshotLocked собирает ответ с вычисляемыми полями автора.
+// Вызывающий держит s.mu (RLock достаточно).
+func (s *Store) lessonAnswerSnapshotLocked(a *LessonAnswer) *LessonAnswer {
+	cp := *a
+	if u, ok := s.users[a.AuthorID]; ok {
+		cp.AuthorName = u.DisplayName
+		cp.AuthorRole = string(u.Role)
+		cp.IsTeacher = u.Role == RoleAdmin
+	}
+	if q, ok := s.lessonQuestions[a.QuestionID]; ok {
+		if c, ok := s.courses[q.CourseID]; ok && c.TeacherID == a.AuthorID {
+			cp.IsTeacher = true
+		}
+	}
+	return &cp
+}
+
+// lessonQuestionSnapshotLocked собирает вопрос с заголовком урока, именем
+// студента и ответами (старые первыми). Вызывающий держит s.mu (RLock).
+func (s *Store) lessonQuestionSnapshotLocked(q *LessonQuestion) *LessonQuestion {
+	cp := *q
+	cp.Answers = make([]*LessonAnswer, 0, len(s.lessonAnswerIDs[q.ID]))
+	if l, ok := s.lessons[q.LessonID]; ok {
+		cp.LessonTitle = l.Title
+	}
+	if u, ok := s.users[q.StudentID]; ok {
+		cp.StudentName = u.DisplayName
+	}
+	answers := make([]*LessonAnswer, 0, len(s.lessonAnswerIDs[q.ID]))
+	for _, id := range s.lessonAnswerIDs[q.ID] {
+		if a, ok := s.lessonAnswers[id]; ok {
+			answers = append(answers, s.lessonAnswerSnapshotLocked(a))
+		}
+	}
+	sort.Slice(answers, func(i, j int) bool {
+		if answers[i].CreatedAt.Equal(answers[j].CreatedAt) {
+			return answers[i].ID < answers[j].ID
+		}
+		return answers[i].CreatedAt.Before(answers[j].CreatedAt)
+	})
+	cp.Answers = answers
+	return &cp
+}
+
+// CreateLessonQuestion создаёт вопрос к уроку (T71). ErrNotFound — урока нет
+// или он принадлежит другому курсу.
+func (s *Store) CreateLessonQuestion(courseID, lessonID, studentID, body string) (*LessonQuestion, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, ok := s.lessonInCourseLocked(courseID, lessonID); !ok {
+		return nil, ErrNotFound
+	}
+	q := &LessonQuestion{
+		ID:        uuid.NewString(),
+		CourseID:  courseID,
+		LessonID:  lessonID,
+		StudentID: studentID,
+		Body:      body,
+		CreatedAt: time.Now().UTC(),
+		Answers:   []*LessonAnswer{},
+	}
+	s.lessonQuestions[q.ID] = q
+	return s.lessonQuestionSnapshotLocked(q), nil
+}
+
+// ListLessonQuestions возвращает вопросы курса, новые первыми; lessonID "" —
+// все вопросы. Ответы внутри — старые первыми. total считается до пагинации.
+func (s *Store) ListLessonQuestions(courseID, lessonID string, page, limit int) ([]*LessonQuestion, int) {
+	page, limit = normalizeQAPageLimit(page, limit)
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	matched := make([]*LessonQuestion, 0)
+	for _, q := range s.lessonQuestions {
+		if q.CourseID != courseID {
+			continue
+		}
+		if lessonID != "" && q.LessonID != lessonID {
+			continue
+		}
+		matched = append(matched, q)
+	}
+	sort.Slice(matched, func(i, j int) bool {
+		if matched[i].CreatedAt.Equal(matched[j].CreatedAt) {
+			return matched[i].ID > matched[j].ID
+		}
+		return matched[i].CreatedAt.After(matched[j].CreatedAt)
+	})
+	total := len(matched)
+	start := (page - 1) * limit
+	if start > total {
+		start = total
+	}
+	end := start + limit
+	if end > total {
+		end = total
+	}
+	items := make([]*LessonQuestion, 0, end-start)
+	for _, q := range matched[start:end] {
+		items = append(items, s.lessonQuestionSnapshotLocked(q))
+	}
+	return items, total
+}
+
+// GetLessonQuestion возвращает вопрос курса с ответами; false — вопроса нет
+// или он принадлежит другому курсу.
+func (s *Store) GetLessonQuestion(courseID, questionID string) (*LessonQuestion, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	q, ok := s.lessonQuestions[questionID]
+	if !ok || q.CourseID != courseID {
+		return nil, false
+	}
+	return s.lessonQuestionSnapshotLocked(q), true
+}
+
+// CreateLessonAnswer создаёт ответ на вопрос (T71). ErrNotFound — вопроса нет
+// или он принадлежит другому курсу.
+func (s *Store) CreateLessonAnswer(courseID, questionID, authorID, body string) (*LessonAnswer, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	q, ok := s.lessonQuestions[questionID]
+	if !ok || q.CourseID != courseID {
+		return nil, ErrNotFound
+	}
+	a := &LessonAnswer{
+		ID:         uuid.NewString(),
+		QuestionID: questionID,
+		AuthorID:   authorID,
+		Body:       body,
+		CreatedAt:  time.Now().UTC(),
+	}
+	s.lessonAnswers[a.ID] = a
+	s.lessonAnswerIDs[questionID] = append(s.lessonAnswerIDs[questionID], a.ID)
+	return s.lessonAnswerSnapshotLocked(a), nil
+}
+
+// GetLessonAnswer возвращает ответ вопроса курса; false — ответа нет или он
+// относится к другому вопросу/курсу.
+func (s *Store) GetLessonAnswer(courseID, questionID, answerID string) (*LessonAnswer, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	a, ok := s.lessonAnswers[answerID]
+	if !ok || a.QuestionID != questionID {
+		return nil, false
+	}
+	q, ok := s.lessonQuestions[questionID]
+	if !ok || q.CourseID != courseID {
+		return nil, false
+	}
+	return s.lessonAnswerSnapshotLocked(a), true
+}
+
+// DeleteLessonQuestion удаляет вопрос; ответы уходят каскадом.
+// ErrNotFound — вопроса нет в этом курсе.
+func (s *Store) DeleteLessonQuestion(courseID, questionID string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	q, ok := s.lessonQuestions[questionID]
+	if !ok || q.CourseID != courseID {
+		return ErrNotFound
+	}
+	for _, id := range s.lessonAnswerIDs[questionID] {
+		delete(s.lessonAnswers, id)
+	}
+	// Страховка: ответы, созданные в обход индекса, тоже не должны осиротеть.
+	for id, a := range s.lessonAnswers {
+		if a.QuestionID == questionID {
+			delete(s.lessonAnswers, id)
+		}
+	}
+	delete(s.lessonAnswerIDs, questionID)
+	delete(s.lessonQuestions, questionID)
+	return nil
+}
+
+// DeleteLessonAnswer удаляет ответ. ErrNotFound — ответа нет в этом
+// вопросе/курсе.
+func (s *Store) DeleteLessonAnswer(courseID, questionID, answerID string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	a, ok := s.lessonAnswers[answerID]
+	if !ok || a.QuestionID != questionID {
+		return ErrNotFound
+	}
+	q, ok := s.lessonQuestions[questionID]
+	if !ok || q.CourseID != courseID {
+		return ErrNotFound
+	}
+	delete(s.lessonAnswers, answerID)
+	ids := s.lessonAnswerIDs[questionID]
+	for i, id := range ids {
+		if id == answerID {
+			s.lessonAnswerIDs[questionID] = append(ids[:i], ids[i+1:]...)
+			break
+		}
+	}
+	if len(s.lessonAnswerIDs[questionID]) == 0 {
+		delete(s.lessonAnswerIDs, questionID)
+	}
+	return nil
 }

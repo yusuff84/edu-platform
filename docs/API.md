@@ -51,6 +51,7 @@
 | GET | `/api/v1/courses/{slug}` | публичный* | → `200` `{course, modules:[ModuleView]}`; *`draft` виден автору и админу, остальным 404 |
 | GET | `/api/v1/courses/{id}/reviews?rating=1..5` | публичный | `{id}` — UUID или slug; `rating` необязателен и фильтрует `items`/`total` → `200` `{items:[Review],total,avgRating,ratingsCount,breakdown:{"1".."5"}}`; `avgRating`/`ratingsCount`/`breakdown` — по всем отзывам курса; иной `rating` → `400 «Оценка должна быть числом от 1 до 5»` |
 | POST | `/api/v1/courses/{id}/reviews` | студент с активной записью | `{rating:1..5, body}` → `201` `Review` |
+| GET | `/api/v1/courses/{id}/questions?lessonId=&page=&limit=` | публичный* | → `200` `{items:[LessonQuestion],total,page,limit}`; вопросы новые первыми, ответы внутри — старые первыми; *неопубликованный курс виден только владельцу/админу, остальным `404 «Курс не найден»`; `lessonId` не из курса → `404 «Урок не найден в этом курсе»` |
 | GET | `/api/v1/certificates/{number}` | публичный | → `200` `{number,issuedAt,studentName,courseTitle,courseSlug}`; `studentName` — displayName студента (e-mail не отдаётся); `404 «Сертификат не найден»` |
 
 > Волна P8 (T65): `category` — слаг из `programming`, `design`, `data`,
@@ -133,6 +134,30 @@
 > необязательный `promoCode`: `amountCents` — со скидкой, в платеже и журнале
 > админа появляются аддитивные `promoCode` и `discountCents`, `usedCount`
 > увеличивается один раз при успешной оплате.
+
+> Волна P9 (T71): вопросы и ответы по урокам.
+> `GET /api/v1/courses/{id}/questions` — публичная лента курса (`id` — UUID):
+> `{items:[LessonQuestion],total,page,limit}`, `page` по умолчанию 1,
+> `limit` — 20 (максимум 100, нечисловые/вне диапазона — дефолт);
+> `LessonQuestion` = `{id,courseId,lessonId,lessonTitle,studentId,studentName,
+> body,createdAt,answers:[LessonAnswer]}` (вопросы новые первыми, ответы —
+> старые первыми, `answers` всегда массив).
+> `POST /api/v1/courses/{id}/questions` (cookie) `{lessonId, body}` после trim
+> 10..2000 → `201 {"question": LessonQuestion}`; `POST
+> /api/v1/courses/{id}/questions/{questionId}/answers` (cookie) `{body}` после
+> trim 3..2000 → `201 {"answer": LessonAnswer}`. Писать могут записанные на
+> курс, владелец курса и admin; иначе `403 «Задавать вопросы могут только
+> записанные на курс»` / `403 «Отвечать могут только записанные на курс»`.
+> `LessonAnswer` = `{id,questionId,authorId,authorName,authorRole,isTeacher,
+> body,createdAt}`, где `authorRole` — `student|teacher|admin`, `isTeacher` —
+> автор является преподавателем курса или admin.
+> `DELETE …/questions/{questionId}` и `DELETE
+> …/questions/{questionId}/answers/{answerId}` — автор, владелец курса или
+> admin, иначе `403 «Нет прав на удаление»`; успех — `204` (ответы вопроса
+> удаляются каскадом). Ошибки: `404 «Курс не найден»`, `404 «Урок не найден в
+> этом курсе»`, `404 «Вопрос не найден»` (в т.ч. вопрос другого курса),
+> `404 «Ответ не найден»`, `400 «Вопрос: от 10 до 2000 символов»`,
+> `400 «Ответ: от 3 до 2000 символов»`.
 
 > В бэклоге T13: `GET/PATCH/DELETE /teacher/courses[...]`, PATCH модулей/уроков,
 > reorder — в `Task/T13-integration-wiring.md`.

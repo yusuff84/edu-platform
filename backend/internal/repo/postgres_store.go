@@ -1788,3 +1788,293 @@ func (s *PostgresStore) IncrementPromoCodeUsage(id string) bool {
 	}
 	return tag.RowsAffected() > 0
 }
+
+// ---- T71: вопросы и ответы по урокам ----
+//
+// Блок вынесен в конец файла (как T63/T69), чтобы не конфликтовать при
+// слиянии волн. Вычисляемые поля (заголовок урока, имя и роль автора,
+// isTeacher) собираются JOIN-ами при каждом чтении — та же семантика, что
+// у in-memory Store.
+
+// lessonQuestionCols — колонки LessonQuestion в форме контракта T71.
+const lessonQuestionCols = `q.id::text, q.course_id::text, q.lesson_id::text, l.title,
+	q.student_id::text, COALESCE(u.display_name,''), q.body, q.created_at`
+
+// scanLessonQuestion собирает вопрос из строки выборки lessonQuestionCols.
+// Answers инициализируется пустым не-nil срезом.
+func scanLessonQuestion(scan func(dest ...any) error) (*LessonQuestion, error) {
+	q := &LessonQuestion{Answers: []*LessonAnswer{}}
+	if err := scan(&q.ID, &q.CourseID, &q.LessonID, &q.LessonTitle,
+		&q.StudentID, &q.StudentName, &q.Body, &q.CreatedAt); err != nil {
+		return nil, err
+	}
+	return q, nil
+}
+
+// loadLessonAnswers читает ответы для набора вопросов одним запросом (без
+// N+1) и раскладывает их по questionId; внутри — старые первыми.
+func (s *PostgresStore) loadLessonAnswers(ctx context.Context, questionIDs []string) map[string][]*LessonAnswer {
+	out := make(map[string][]*LessonAnswer, len(questionIDs))
+	if len(questionIDs) == 0 {
+		return out
+	}
+	ph := make([]string, 0, len(questionIDs))
+	args := make([]any, 0, len(questionIDs))
+	for i, id := range questionIDs {
+		ph = append(ph, fmt.Sprintf("$%d::uuid", i+1))
+		args = append(args, id)
+	}
+	rows, err := s.pool.Query(ctx,
+		`SELECT a.id::text, a.question_id::text, a.author_id::text,
+		        COALESCE(u.display_name,''), u.role,
+		        (a.author_id = c.teacher_id OR u.role = 'admin') AS is_teacher,
+		        a.body, a.created_at
+		 FROM lesson_answers a
+		 JOIN lesson_questions q ON q.id = a.question_id
+		 JOIN courses c ON c.id = q.course_id
+		 JOIN users u ON u.id = a.author_id
+		 WHERE a.question_id IN (`+strings.Join(ph, ",")+`)
+		 ORDER BY a.created_at ASC, a.id ASC`, args...)
+	if err != nil {
+		log.Printf("postgres loadLessonAnswers: %v", err)
+		return out
+	}
+	defer rows.Close()
+	for rows.Next() {
+		a := &LessonAnswer{}
+		if err := rows.Scan(&a.ID, &a.QuestionID, &a.AuthorID, &a.AuthorName,
+			&a.AuthorRole, &a.IsTeacher, &a.Body, &a.CreatedAt); err != nil {
+			log.Printf("postgres loadLessonAnswers scan: %v", err)
+			continue
+		}
+		out[a.QuestionID] = append(out[a.QuestionID], a)
+	}
+	return out
+}
+
+// CreateLessonQuestion создаёт вопрос к уроку (T71). ErrNotFound — урока нет
+// или он принадлежит другому курсу.
+func (s *PostgresStore) CreateLessonQuestion(courseID, lessonID, studentID, body string) (*LessonQuestion, error) {
+	if !validUUID(courseID) || !validUUID(lessonID) || !validUUID(studentID) {
+		return nil, ErrNotFound
+	}
+	ctx, cancel := s.ctx()
+	defer cancel()
+	row := s.pool.QueryRow(ctx,
+		`WITH ins AS (
+		   INSERT INTO lesson_questions (course_id, lesson_id, student_id, body)
+		   SELECT $1::uuid, l.id, $3::uuid, $4
+		   FROM lessons l
+		   JOIN modules m ON m.id = l.module_id
+		   WHERE l.id=$2::uuid AND m.course_id=$1::uuid
+		   RETURNING id, course_id, lesson_id, student_id, body, created_at
+		 )
+		 SELECT ins.id::text, ins.course_id::text, ins.lesson_id::text, l.title,
+		        ins.student_id::text, COALESCE(u.display_name,''), ins.body, ins.created_at
+		 FROM ins
+		 JOIN lessons l ON l.id = ins.lesson_id
+		 JOIN users u ON u.id = ins.student_id`,
+		courseID, lessonID, studentID, body)
+	q, err := scanLessonQuestion(row.Scan)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("не удалось сохранить вопрос: %w", err)
+	}
+	return q, nil
+}
+
+// ListLessonQuestions — вопросы курса, новые первыми; lessonID "" — все.
+// total считается до пагинации. Никогда не возвращает nil-срез.
+func (s *PostgresStore) ListLessonQuestions(courseID, lessonID string, page, limit int) ([]*LessonQuestion, int) {
+	empty := []*LessonQuestion{}
+	if !validUUID(courseID) {
+		return empty, 0
+	}
+	page, limit = normalizeQAPageLimit(page, limit)
+	ctx, cancel := s.ctx()
+	defer cancel()
+
+	where := "q.course_id=$1::uuid"
+	args := []any{courseID}
+	if lessonID != "" {
+		if !validUUID(lessonID) {
+			return empty, 0
+		}
+		where += " AND q.lesson_id=$2::uuid"
+		args = append(args, lessonID)
+	}
+	var total int
+	if err := s.pool.QueryRow(ctx,
+		`SELECT COUNT(*)::int FROM lesson_questions q WHERE `+where, args...).Scan(&total); err != nil {
+		log.Printf("postgres ListLessonQuestions count: %v", err)
+		return empty, 0
+	}
+	offset := (page - 1) * limit
+	query := fmt.Sprintf(
+		`SELECT %s
+		 FROM lesson_questions q
+		 JOIN lessons l ON l.id = q.lesson_id
+		 JOIN users u ON u.id = q.student_id
+		 WHERE %s
+		 ORDER BY q.created_at DESC, q.id DESC
+		 LIMIT $%d OFFSET $%d`, lessonQuestionCols, where, len(args)+1, len(args)+2)
+	args = append(args, limit, offset)
+	rows, err := s.pool.Query(ctx, query, args...)
+	if err != nil {
+		log.Printf("postgres ListLessonQuestions: %v", err)
+		return empty, 0
+	}
+	defer rows.Close()
+	items := make([]*LessonQuestion, 0, limit)
+	ids := make([]string, 0, limit)
+	for rows.Next() {
+		q, err := scanLessonQuestion(rows.Scan)
+		if err != nil {
+			log.Printf("postgres ListLessonQuestions scan: %v", err)
+			continue
+		}
+		items = append(items, q)
+		ids = append(ids, q.ID)
+	}
+	answers := s.loadLessonAnswers(ctx, ids)
+	for _, q := range items {
+		if list, ok := answers[q.ID]; ok {
+			q.Answers = list
+		}
+	}
+	return items, total
+}
+
+// GetLessonQuestion — вопрос курса с ответами; false — вопроса нет или он
+// принадлежит другому курсу.
+func (s *PostgresStore) GetLessonQuestion(courseID, questionID string) (*LessonQuestion, bool) {
+	if !validUUID(courseID) || !validUUID(questionID) {
+		return nil, false
+	}
+	ctx, cancel := s.ctx()
+	defer cancel()
+	row := s.pool.QueryRow(ctx,
+		`SELECT `+lessonQuestionCols+`
+		 FROM lesson_questions q
+		 JOIN lessons l ON l.id = q.lesson_id
+		 JOIN users u ON u.id = q.student_id
+		 WHERE q.id=$1::uuid AND q.course_id=$2::uuid`, questionID, courseID)
+	q, err := scanLessonQuestion(row.Scan)
+	if err != nil {
+		return nil, false
+	}
+	if list, ok := s.loadLessonAnswers(ctx, []string{q.ID})[q.ID]; ok {
+		q.Answers = list
+	}
+	return q, true
+}
+
+// CreateLessonAnswer создаёт ответ на вопрос (T71). ErrNotFound — вопроса нет
+// или он принадлежит другому курсу.
+func (s *PostgresStore) CreateLessonAnswer(courseID, questionID, authorID, body string) (*LessonAnswer, error) {
+	if !validUUID(courseID) || !validUUID(questionID) || !validUUID(authorID) {
+		return nil, ErrNotFound
+	}
+	ctx, cancel := s.ctx()
+	defer cancel()
+	row := s.pool.QueryRow(ctx,
+		`WITH ins AS (
+		   INSERT INTO lesson_answers (question_id, author_id, body)
+		   SELECT q.id, $3::uuid, $4
+		   FROM lesson_questions q
+		   WHERE q.id=$2::uuid AND q.course_id=$1::uuid
+		   RETURNING id, question_id, author_id, body, created_at
+		 )
+		 SELECT ins.id::text, ins.question_id::text, ins.author_id::text,
+		        COALESCE(u.display_name,''), u.role,
+		        (ins.author_id = c.teacher_id OR u.role = 'admin') AS is_teacher,
+		        ins.body, ins.created_at
+		 FROM ins
+		 JOIN users u ON u.id = ins.author_id
+		 JOIN lesson_questions q ON q.id = ins.question_id
+		 JOIN courses c ON c.id = q.course_id`,
+		courseID, questionID, authorID, body)
+	a := &LessonAnswer{}
+	err := row.Scan(&a.ID, &a.QuestionID, &a.AuthorID, &a.AuthorName,
+		&a.AuthorRole, &a.IsTeacher, &a.Body, &a.CreatedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("не удалось сохранить ответ: %w", err)
+	}
+	return a, nil
+}
+
+// GetLessonAnswer — ответ вопроса курса; false — ответа нет или он относится
+// к другому вопросу/курсу.
+func (s *PostgresStore) GetLessonAnswer(courseID, questionID, answerID string) (*LessonAnswer, bool) {
+	if !validUUID(courseID) || !validUUID(questionID) || !validUUID(answerID) {
+		return nil, false
+	}
+	ctx, cancel := s.ctx()
+	defer cancel()
+	a := &LessonAnswer{}
+	err := s.pool.QueryRow(ctx,
+		`SELECT a.id::text, a.question_id::text, a.author_id::text,
+		        COALESCE(u.display_name,''), u.role,
+		        (a.author_id = c.teacher_id OR u.role = 'admin') AS is_teacher,
+		        a.body, a.created_at
+		 FROM lesson_answers a
+		 JOIN lesson_questions q ON q.id = a.question_id
+		 JOIN courses c ON c.id = q.course_id
+		 JOIN users u ON u.id = a.author_id
+		 WHERE a.id=$1::uuid AND a.question_id=$2::uuid AND q.course_id=$3::uuid`,
+		answerID, questionID, courseID).
+		Scan(&a.ID, &a.QuestionID, &a.AuthorID, &a.AuthorName,
+			&a.AuthorRole, &a.IsTeacher, &a.Body, &a.CreatedAt)
+	if err != nil {
+		return nil, false
+	}
+	return a, true
+}
+
+// DeleteLessonQuestion удаляет вопрос; ответы уходят каскадом (FK 012).
+// ErrNotFound — вопроса нет в этом курсе.
+func (s *PostgresStore) DeleteLessonQuestion(courseID, questionID string) error {
+	if !validUUID(courseID) || !validUUID(questionID) {
+		return ErrNotFound
+	}
+	ctx, cancel := s.ctx()
+	defer cancel()
+	tag, err := s.pool.Exec(ctx,
+		`DELETE FROM lesson_questions WHERE id=$1::uuid AND course_id=$2::uuid`,
+		questionID, courseID)
+	if err != nil {
+		return fmt.Errorf("не удалось удалить вопрос: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+// DeleteLessonAnswer удаляет ответ. ErrNotFound — ответа нет в этом
+// вопросе/курсе.
+func (s *PostgresStore) DeleteLessonAnswer(courseID, questionID, answerID string) error {
+	if !validUUID(courseID) || !validUUID(questionID) || !validUUID(answerID) {
+		return ErrNotFound
+	}
+	ctx, cancel := s.ctx()
+	defer cancel()
+	tag, err := s.pool.Exec(ctx,
+		`DELETE FROM lesson_answers
+		 WHERE id=$1::uuid AND question_id=$2::uuid
+		 AND EXISTS (SELECT 1 FROM lesson_questions q
+		             WHERE q.id = lesson_answers.question_id AND q.course_id=$3::uuid)`,
+		answerID, questionID, courseID)
+	if err != nil {
+		return fmt.Errorf("не удалось удалить ответ: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
