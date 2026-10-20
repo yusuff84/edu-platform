@@ -25,6 +25,7 @@ import type {
   Module,
   Lesson,
   LessonAnswer,
+  LessonPreview,
   LessonQuestion,
   LessonQuestionsPage,
   MyCertificate,
@@ -65,6 +66,7 @@ export type {
   Lesson,
   LessonAnswer,
   LessonKind,
+  LessonPreview,
   LessonQuestion,
   LessonQuestionsPage,
   Module,
@@ -235,6 +237,16 @@ export function getSimilarCourses(
   ).then((res) => res.items);
 }
 
+/**
+ * T76: публичное превью урока (P9/T75). Доступно без записи, если курс
+ * published, а урок помечен isPreview; иначе backend отвечает 404.
+ */
+export function getLessonPreview(slug: string, lessonId: string): Promise<LessonPreview> {
+  return apiFetch<LessonPreview>(
+    `/courses/${encodeURIComponent(slug)}/preview/${encodeURIComponent(lessonId)}`,
+  );
+}
+
 // ---------- Учитель ----------
 
 export function createCourse(input: {
@@ -313,8 +325,27 @@ export function createLesson(
       }
       break;
   }
+  // T76: флаг превью — аддитивное поле контракта T75. Отправляем только если
+  // он явно задан: отсутствие при создании backend трактует как false.
+  if (input.isPreview !== undefined) body.isPreview = input.isPreview;
   return apiFetch<Lesson>(`/teacher/courses/${courseId}/lessons`, {
     method: 'POST',
+    body: JSON.stringify(body),
+  });
+}
+
+/**
+ * T76: PATCH урока (тело собирает страница конструктора строго по kind).
+ * Отдельная функция в клиенте — чтобы контракт обновления (включая isPreview)
+ * проверялся тестами API-клиента, а не только UI.
+ */
+export function updateLesson(
+  courseId: string,
+  lessonId: string,
+  body: Record<string, unknown>,
+): Promise<Lesson> {
+  return apiFetch<Lesson>(`/teacher/courses/${courseId}/lessons/${lessonId}`, {
+    method: 'PATCH',
     body: JSON.stringify(body),
   });
 }
