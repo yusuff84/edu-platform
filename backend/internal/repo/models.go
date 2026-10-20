@@ -273,7 +273,6 @@ type CertificateDetails struct {
 	CourseSlug  string    `json:"courseSlug"`
 }
 
-<<<<<<< HEAD
 // ---- T71: вопросы и ответы по урокам ----
 
 // LessonQuestion — вопрос ученика к уроку (T71). LessonTitle/StudentName —

@@ -320,6 +320,18 @@ type StoreAPI interface {
 	// затем students desc, затем title (без учёта регистра). limit по
 	// умолчанию 50, максимум 200. all=true — все курсы платформы (admin).
 	TeacherCourseStats(teacherID string, all bool, limit int) []*TeacherCourseStat
+
+	// ---- T79: похожие курсы ----
+
+	// ListSimilarCourses — published-курсы той же category, что и courseID,
+	// кроме самого курса (контракт T79). Сортировка: число АКТИВНЫХ записей
+	// по убыванию, затем avgRating по убыванию, затем createdAt по убыванию
+	// (при полном совпадении — id по убыванию, чтобы порядок был
+	// детерминированным и совпадал у in-memory и Postgres).
+	// limit приводится к контракту: <= 0 — 4, больше 12 — 12.
+	// Исходный курс должен существовать и быть published, иначе пустой
+	// результат (хендлер отвечает 404 «Курс не найден»).
+	ListSimilarCourses(courseID string, limit int) []*Course
 }
 
 // PaymentFilter — параметры журнала платежей для админки (US6, T31).

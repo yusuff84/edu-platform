@@ -133,6 +133,9 @@ func NewRouter(app *App) http.Handler {
 		// Статический сегмент /certificates не пересекается с /courses.
 		app.RegisterCertificateRoutes(r)
 		r.Get("/courses/{id}/reviews", app.ListReviews)
+		// T79: публичная подборка похожих курсов той же категории —
+		// GET /courses/{id}/similar?limit=4 (handler/similar_courses.go).
+		r.Get("/courses/{id}/similar", app.ListSimilarCourses)
 		r.With(app.requireAuth).Post("/courses/{id}/reviews", app.CreateReview)
 		// T63: проверка промокода на странице курса — только вошедший.
 		r.With(app.requireAuth).Post("/courses/{id}/promo/validate", app.ValidatePromoCode)

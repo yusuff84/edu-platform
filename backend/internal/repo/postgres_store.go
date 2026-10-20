@@ -1790,7 +1790,6 @@ func (s *PostgresStore) IncrementPromoCodeUsage(id string) bool {
 	return tag.RowsAffected() > 0
 }
 
-<<<<<<< HEAD
 // ---- T71: вопросы и ответы по урокам ----
 //
 // Блок вынесен в конец файла (как T63/T69), чтобы не конфликтовать при
@@ -2276,4 +2275,58 @@ func (s *PostgresStore) TeacherCourseStats(teacherID string, all bool, limit int
 		log.Printf("postgres TeacherCourseStats rows: %v", err)
 	}
 	return items
+}
+
+// ---- T79: похожие курсы ----
+
+// ListSimilarCourses — SQL-реализация T79: ОДИН агрегирующий запрос без N+1.
+//
+// JOIN courses src находит исходный курс и одновременно требует, чтобы он был
+// published; LEFT JOIN агрегирует активные записи по курсам, поэтому число
+// записей считается в том же запросе, а не отдельными обращениями к БД.
+// Категория сравнивается с нормализацией пустой строки в "other" — так же,
+// как in-memory similarCourseCategory (у схемы NOT NULL DEFAULT 'other', но
+// старые/ручные строки не должны ломать parity).
+//
+// Порядок полностью повторяет in-memory: активные записи DESC, avgRating
+// DESC, createdAt DESC, id DESC. limit нормализуется (по умолчанию 4,
+// максимум 12). Нет исходного published-курса — пустой результат.
+func (s *PostgresStore) ListSimilarCourses(courseID string, limit int) []*Course {
+	limit = normalizeSimilarCoursesLimit(limit)
+	if _, err := uuid.Parse(strings.TrimSpace(courseID)); err != nil {
+		return nil
+	}
+	ctx, cancel := s.ctx()
+	defer cancel()
+	rows, err := s.pool.Query(ctx,
+		`SELECT `+courseColsJoined+`
+		 FROM courses c
+		 JOIN courses src ON src.id = $1::uuid AND src.status = 'published'
+		 LEFT JOIN (
+		     SELECT course_id, COUNT(*)::int AS active_count
+		     FROM enrollments
+		     WHERE status = 'active'
+		     GROUP BY course_id
+		 ) e ON e.course_id = c.id
+		 WHERE c.status = 'published'
+		   AND c.id <> src.id
+		   AND COALESCE(NULLIF(TRIM(c.category), ''), 'other')
+		       = COALESCE(NULLIF(TRIM(src.category), ''), 'other')
+		 ORDER BY COALESCE(e.active_count, 0) DESC,
+		          COALESCE(c.avg_rating, 0) DESC,
+		          c.created_at DESC,
+		          c.id DESC
+		 LIMIT $2`, courseID, limit)
+	if err != nil {
+		log.Printf("postgres ListSimilarCourses: %v", err)
+		return nil
+	}
+	defer rows.Close()
+	var out []*Course
+	for rows.Next() {
+		if c, err := scanCourse(rows.Scan); err == nil {
+			out = append(out, c)
+		}
+	}
+	return out
 }

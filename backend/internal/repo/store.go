@@ -1469,7 +1469,6 @@ func (s *Store) IncrementPromoCodeUsage(id string) bool {
 	return true
 }
 
-<<<<<<< HEAD
 // ---- T71: вопросы и ответы по урокам ----
 //
 // Блок вынесен в конец файла, чтобы не конфликтовать при слиянии волн.
@@ -1966,4 +1965,94 @@ func (s *Store) TeacherCourseStats(teacherID string, all bool, limit int) []*Tea
 		items = items[:limit]
 	}
 	return items
+}
+
+// ---- T79: похожие курсы ----
+
+// similarCoursesDefaultLimit и similarCoursesMaxLimit — границы параметра
+// limit эндпоинта GET /courses/{id}/similar (контракт T79): по умолчанию 4,
+// максимум 12. Те же значения дублирует хендлер; store приводит limit ещё
+// раз, чтобы прямой вызов метода не мог выдать неограниченную выборку.
+const (
+	similarCoursesDefaultLimit = 4
+	similarCoursesMaxLimit     = 12
+)
+
+// normalizeSimilarCoursesLimit приводит limit к контракту T79: нечисловой
+// (<= 0 после Atoi) — 4, больше 12 — 12.
+func normalizeSimilarCoursesLimit(limit int) int {
+	if limit <= 0 {
+		return similarCoursesDefaultLimit
+	}
+	if limit > similarCoursesMaxLimit {
+		return similarCoursesMaxLimit
+	}
+	return limit
+}
+
+// similarCourseCategory нормализует категорию так же, как каталог: пустая
+// (у старых объектов in-memory поле могло не заполняться) — "other".
+func similarCourseCategory(c *Course) string {
+	category := strings.TrimSpace(c.Category)
+	if category == "" {
+		return "other"
+	}
+	return category
+}
+
+// ListSimilarCourses возвращает published-курсы той же категории, что и
+// courseID, кроме самого курса (T79). Порядок: число активных записей по
+// убыванию, затем avgRating по убыванию, затем createdAt по убыванию; при
+// полном совпадении ключей — id по убыванию (детерминированный хвост,
+// совпадает с ORDER BY SQL-ветки).
+//
+// limit нормализуется (по умолчанию 4, максимум 12). Если исходного курса
+// нет или он не published — nil: хендлер отдаёт 404 «Курс не найден».
+func (s *Store) ListSimilarCourses(courseID string, limit int) []*Course {
+	limit = normalizeSimilarCoursesLimit(limit)
+
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	src, ok := s.courses[courseID]
+	if !ok || src.Status != CoursePublished {
+		return nil
+	}
+	category := similarCourseCategory(src)
+
+	// Число активных записей — первичный ключ сортировки.
+	active := make(map[string]int)
+	for _, e := range s.enrollments {
+		if e.Status == EnrollmentActive {
+			active[e.CourseID]++
+		}
+	}
+
+	out := make([]*Course, 0, limit)
+	for _, c := range s.courses {
+		if c.ID == courseID || c.Status != CoursePublished {
+			continue
+		}
+		if similarCourseCategory(c) != category {
+			continue
+		}
+		out = append(out, c)
+	}
+	sort.SliceStable(out, func(i, j int) bool {
+		a, b := out[i], out[j]
+		if active[a.ID] != active[b.ID] {
+			return active[a.ID] > active[b.ID]
+		}
+		if a.AvgRating != b.AvgRating {
+			return a.AvgRating > b.AvgRating
+		}
+		if !a.CreatedAt.Equal(b.CreatedAt) {
+			return a.CreatedAt.After(b.CreatedAt)
+		}
+		return a.ID > b.ID
+	})
+	if len(out) > limit {
+		out = out[:limit]
+	}
+	return out
 }
