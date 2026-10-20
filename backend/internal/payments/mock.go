@@ -36,6 +36,11 @@ var mockRegistry = struct {
 	items map[string]*mockPayment
 }{items: make(map[string]*mockPayment)}
 
+// MockPaymentIDPrefix — префикс providerPaymentId, который выдаёт mock.
+// Экспортирован, чтобы handler возврата мог отличить mock-платёж от
+// бесплатного (free-...) и не зависеть от in-memory реестра после рестарта.
+const MockPaymentIDPrefix = "mock_"
+
 // MockProvider — mock-провайдер.
 type MockProvider struct{}
 
@@ -56,7 +61,7 @@ func (m *MockProvider) CreatePayment(_ context.Context, req CreatePaymentRequest
 	if req.AmountCents < 0 {
 		return CreatePaymentResult{}, errors.New("mock: отрицательная сумма платежа")
 	}
-	id := "mock_" + strings.ReplaceAll(uuid.NewString(), "-", "")
+	id := MockPaymentIDPrefix + strings.ReplaceAll(uuid.NewString(), "-", "")
 	mockRegistry.Lock()
 	mockRegistry.items[id] = &mockPayment{
 		Status:      "pending",

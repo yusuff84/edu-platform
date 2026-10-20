@@ -309,6 +309,16 @@ type refundResponse struct {
 	Payment paymentJournalItem `json:"payment"`
 }
 
+// isDurableMockPayment — платёж, созданный MockProvider. Такой платёж
+// возвращается только в Store: реестр mock-провайдера живёт в памяти и после
+// рестарта API пуст. Для бесплатного платежа providerPaymentId имеет префикс
+// free-, поэтому он сюда не попадает и по-прежнему проходит через провайдера
+// (контракт T47: возврат бесплатного платежа → 502).
+func isDurableMockPayment(p *repo.Payment) bool {
+	return p != nil && p.Provider == "mock" &&
+		strings.HasPrefix(strings.TrimSpace(p.ProviderPaymentID), payments.MockPaymentIDPrefix)
+}
+
 // AdminRefundPayment — POST /admin/payments/{id}/refund: возврат средств (T47),
 // только admin. id — внутренний UUID платежа (не providerPaymentId); провайдер
 // берётся из поля provider самого платежа. Возврат возможен только из статуса
@@ -335,14 +345,19 @@ func (a *App) AdminRefundPayment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	prov, err := payments.NewProvider(p.Provider)
-	if err != nil {
-		writeErr(w, http.StatusBadGateway, "Не удалось выполнить возврат у провайдера")
-		return
-	}
-	if err := prov.Refund(r.Context(), p.ProviderPaymentID); err != nil {
-		writeErr(w, http.StatusBadGateway, "Не удалось выполнить возврат у провайдера")
-		return
+	// Настоящий mock-платёж (mock_...) можно вернуть без обращения к реестру
+	// провайдера: денег вне платформы нет, а реестр после рестарта API пуст.
+	// Для free-... и реальных провайдеров вызов остаётся обязательным.
+	if !isDurableMockPayment(p) {
+		prov, err := payments.NewProvider(p.Provider)
+		if err != nil {
+			writeErr(w, http.StatusBadGateway, "Не удалось выполнить возврат у провайдера")
+			return
+		}
+		if err := prov.Refund(r.Context(), p.ProviderPaymentID); err != nil {
+			writeErr(w, http.StatusBadGateway, "Не удалось выполнить возврат у провайдера")
+			return
+		}
 	}
 
 	a.webhookMu.Lock()

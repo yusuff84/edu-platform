@@ -770,6 +770,19 @@ P8 + новые map-поля P9) — разрешены вручную, обе �
   `Store` (`handler/mock_payment.go`), а не из in-memory реестра провайдера:
   после рестарта API с Postgres отображаются сумма, курс и актуальный статус.
   Вебхук и начисление доступа уже работали через Store.
+- **Долговечный возврат mock-платежа.** `POST /admin/payments/{id}/refund`
+  для платежа с `providerPaymentId` вида `mock_...` больше не обращается к
+  in-memory реестру MockProvider: возврат применяется локально по Store и
+  переживает рестарт API. Бесплатный `free-...` и реальные провайдеры
+  по-прежнему требуют успешного `Refund` (иначе `502`). Контрактный тест
+  `TestAdminRefundMockAfterRestart`; контракт T47 обновлён.
+- **Postgres parity новых расширений P9 и T47.** Добавлены env-gated тесты
+  `tests/postgres/p9_extensions_test.go`: правка Q&A (включая чужой курс,
+  мусорный id и каскад удаления), `FavoriteCourseIDs` (черновик, изоляция,
+  пустая не-nil карта) и fallback похожих курсов при пустой/непустой
+  категории. `tests/postgres/t47_admin_parity_test.go` покрывает список/отзыв
+  приглашений, `GetPaymentByID` и `processed_at` у succeeded/refunded. Без
+  `TEST_DATABASE_URL` они SKIP, как остальные PG-тесты.
 - API-контракт и `qa-p9.ps1` дополнены правкой Q&A и проверками `isFavorite`;
   QA-прогон — **93/93 PASS, 0 FAIL** на in-memory API `:8080`, Origin `:3001`.
 - Проверки: `go vet ./...`, `go test -count=1 ./...` — все пакеты ok;

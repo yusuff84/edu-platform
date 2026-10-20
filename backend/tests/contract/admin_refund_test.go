@@ -173,6 +173,47 @@ func TestAdminRefundProviderFailure(t *testing.T) {
 	}
 }
 
+// Возврат mock-платежа после «рестарта»: реестр MockProvider пуст, но платёж
+// с providerPaymentId mock_... лежит в Store в статусе succeeded. Возврат
+// должен пройти локально (денег вне платформы нет), а не падать в 502.
+func TestAdminRefundMockAfterRestart(t *testing.T) {
+	app, router := newTestApp()
+	_, courseID, _ := seedPublishedCourse(t, app, router, 10000)
+	adminCookies := loginUser(t, router, "admin@example.com", "password123")
+	studentCookies, studentID := registerUser(t, router, "refund-restart@example.com", "password123", "")
+	app.Store.EnsureEnrollment(studentID, courseID)
+
+	p, err := app.Store.CreatePayment(&repo.Payment{
+		StudentID:          studentID,
+		CourseID:           courseID,
+		AmountCents:        10000,
+		PlatformFeeCents:   1500,
+		TeacherAmountCents: 8500,
+		Currency:           "RUB",
+		Provider:           "mock",
+		ProviderPaymentID:  "mock_after_restart",
+		Status:             repo.PaymentSucceeded,
+	})
+	if err != nil {
+		t.Fatalf("CreatePayment: %v", err)
+	}
+
+	rec := doRequest(t, router, http.MethodPost, "/api/v1/admin/payments/"+p.ID+"/refund", nil, adminCookies)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("refund после рестарта: status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	updated, ok := app.Store.GetPaymentByID(p.ID)
+	if !ok || updated.Status != repo.PaymentRefunded {
+		t.Fatalf("платёж после возврата: ok=%v got=%+v", ok, updated)
+	}
+	if e, ok := app.Store.GetEnrollment(studentID, courseID); !ok || e.Status != repo.EnrollmentRefunded {
+		t.Fatalf("запись после возврата: ok=%v got=%+v", ok, e)
+	}
+	if total := myCoursesTotal(t, router, studentCookies); total != 0 {
+		t.Fatalf("доступ остался после возврата: total=%d", total)
+	}
+}
+
 // Гонка (для -race): два параллельных возврата одного платежа → ровно один
 // 200 и один 409 (применение сериализуется a.webhookMu — прецедент P5).
 func TestAdminRefundConcurrentRace(t *testing.T) {
