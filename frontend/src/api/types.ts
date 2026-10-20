@@ -189,6 +189,43 @@ export interface CodeTask {
   tests: CodeTest[];
 }
 
+// ---------- P9: вопросы и ответы по урокам ----------
+
+/** Ответ на вопрос урока (P9, контракт T71). */
+export interface LessonAnswer {
+  id: string;
+  questionId: string;
+  authorId: string;
+  authorName: string;
+  /** Роль автора ответа: student | teacher | admin. */
+  authorRole: Role;
+  /** true — автор ответа преподаватель курса или admin. */
+  isTeacher: boolean;
+  body: string;
+  createdAt: string;
+}
+
+/** Вопрос к уроку (P9, контракт T71); answers — старые первыми. */
+export interface LessonQuestion {
+  id: string;
+  courseId: string;
+  lessonId: string;
+  lessonTitle: string;
+  studentId: string;
+  studentName: string;
+  body: string;
+  createdAt: string;
+  answers: LessonAnswer[];
+}
+
+/** Страница вопросов курса/урока: те же поля, что у Paged. */
+export interface LessonQuestionsPage {
+  items: LessonQuestion[];
+  total: number;
+  page: number;
+  limit: number;
+}
+
 // ---------- Отзывы ----------
 
 /** Отзыв (repo.Review). Поля authorEmail backend НЕ отдаёт. */

@@ -23,6 +23,9 @@ import type {
   Invite,
   Module,
   Lesson,
+  LessonAnswer,
+  LessonQuestion,
+  LessonQuestionsPage,
   MyCertificate,
   MyCourse,
   Paged,
@@ -58,7 +61,10 @@ export type {
   EnrollmentResult,
   Invite,
   Lesson,
+  LessonAnswer,
   LessonKind,
+  LessonQuestion,
+  LessonQuestionsPage,
   Module,
   ModerationDecision,
   MyCertificate,
@@ -573,6 +579,79 @@ export function deleteReviewReply(
 ): Promise<void> {
   return apiFetch<void>(
     `/teacher/courses/${encodeURIComponent(courseId)}/reviews/${encodeURIComponent(reviewId)}/reply`,
+    { method: 'DELETE' },
+  );
+}
+
+// ---------- P9: вопросы и ответы по урокам ----------
+
+/**
+ * Вопросы курса или одного урока (T71): конверт с пагинацией возвращается
+ * целиком (items/total/page/limit). `lessonId` пустой — все вопросы курса.
+ * Вопросы приходят новыми первыми, ответы внутри — старыми первыми.
+ */
+export function listLessonQuestions(
+  courseId: string,
+  lessonId?: string,
+  page?: number,
+): Promise<LessonQuestionsPage> {
+  return apiFetch<LessonQuestionsPage>(
+    `/courses/${encodeURIComponent(courseId)}/questions${buildQuery({
+      lessonId,
+      page,
+    })}`,
+  );
+}
+
+/** Задать вопрос к уроку; конверт ответа { question } разворачивается. */
+export function askQuestion(
+  courseId: string,
+  lessonId: string,
+  body: string,
+): Promise<LessonQuestion> {
+  return apiFetch<{ question: LessonQuestion }>(
+    `/courses/${encodeURIComponent(courseId)}/questions`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ lessonId, body }),
+    },
+  ).then((res) => res.question);
+}
+
+/** Ответить на вопрос; конверт ответа { answer } разворачивается. */
+export function answerQuestion(
+  courseId: string,
+  questionId: string,
+  body: string,
+): Promise<LessonAnswer> {
+  return apiFetch<{ answer: LessonAnswer }>(
+    `/courses/${encodeURIComponent(courseId)}/questions/${encodeURIComponent(questionId)}/answers`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ body }),
+    },
+  ).then((res) => res.answer);
+}
+
+/** Удалить вопрос вместе с ответами; успех — 204. */
+export function deleteQuestion(
+  courseId: string,
+  questionId: string,
+): Promise<void> {
+  return apiFetch<void>(
+    `/courses/${encodeURIComponent(courseId)}/questions/${encodeURIComponent(questionId)}`,
+    { method: 'DELETE' },
+  );
+}
+
+/** Удалить ответ на вопрос; успех — 204. */
+export function deleteAnswer(
+  courseId: string,
+  questionId: string,
+  answerId: string,
+): Promise<void> {
+  return apiFetch<void>(
+    `/courses/${encodeURIComponent(courseId)}/questions/${encodeURIComponent(questionId)}/answers/${encodeURIComponent(answerId)}`,
     { method: 'DELETE' },
   );
 }

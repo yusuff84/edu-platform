@@ -1,0 +1,259 @@
+/* T72 — блок «Вопросы и ответы» под уроком.
+   Стили скоупятся классом .qa (компонент Questions.tsx) и используют
+   переменные дизайн-системы из styles.css. Чужие стили не переопределяем. */
+
+.qa {
+  margin-top: 24px;
+}
+
+.qa-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px 16px;
+  margin-bottom: 16px;
+}
+
+.qa-head h2 {
+  margin: 0;
+}
+
+.qa-count {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.qa-notice {
+  margin: 0 0 14px;
+  padding: 10px 14px;
+  border-radius: var(--r-sm);
+  background: var(--ok-bg);
+  color: var(--ok);
+  font-size: 13.5px;
+  font-weight: 700;
+}
+
+/* ---------- Формы вопроса и ответа ---------- */
+
+.qa-ask {
+  margin: 0 0 20px;
+  padding: 16px;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--r-md);
+  background: #faf9f6;
+}
+
+.qa-ask h3 {
+  margin: 0 0 12px;
+  font-size: 15.5px;
+}
+
+.qa-form {
+  display: grid;
+  gap: 10px;
+}
+
+.qa-form-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 16px;
+}
+
+.qa-counter {
+  color: var(--muted);
+  font-size: 12.5px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.qa-counter.over {
+  color: var(--danger);
+  font-weight: 800;
+}
+
+.qa-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* ---------- Список вопросов ---------- */
+
+.qa-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 14px;
+}
+
+.qa-question {
+  min-width: 0;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--surface);
+}
+
+.qa-question-head,
+.qa-answer-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+}
+
+.qa-author {
+  font-size: 14.5px;
+  font-weight: 800;
+  overflow-wrap: anywhere;
+}
+
+.qa-date {
+  font-size: 12.5px;
+}
+
+.qa-body {
+  margin: 8px 0 0;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* «Удалить» — только у своих сообщений; тихая ссылка, а не акцентная кнопка. */
+.qa-delete {
+  margin-left: auto;
+  border-color: transparent;
+  background: transparent;
+  color: var(--danger);
+  font-weight: 700;
+}
+
+.qa-delete:hover {
+  border-color: transparent;
+  background: var(--danger-bg);
+  color: var(--danger);
+  box-shadow: none;
+}
+
+/* ---------- Ответы ---------- */
+
+.qa-answers {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line-soft);
+}
+
+.qa-answers-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 10px;
+  color: var(--muted);
+  font-size: 12.5px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.qa-answers-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  padding: 0 7px;
+  border-radius: 999px;
+  background: var(--line-soft);
+  color: var(--fg);
+  font-size: 11.5px;
+}
+
+.qa-answer-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+}
+
+.qa-answer {
+  min-width: 0;
+  padding: 2px 0 2px 12px;
+  border-left: 3px solid var(--line);
+}
+
+/* Ответ преподавателя/админа — фирменная полоса и едва заметный фон. */
+.qa-answer-teacher {
+  padding-right: 10px;
+  border-left-color: var(--brand);
+  border-radius: 0 var(--r-sm) var(--r-sm) 0;
+  background: #fff8f7;
+}
+
+.qa-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--brand);
+  color: #fff;
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.qa-answer-toggle {
+  margin-top: 12px;
+}
+
+.qa-answer-form {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--line);
+}
+
+/* ---------- Пустое состояние и пагинация ---------- */
+
+.qa-empty {
+  margin-top: 4px;
+  padding: 20px;
+  border: 2px dashed var(--line);
+  border-radius: var(--r-md);
+  background: #faf9f6;
+}
+
+.qa-empty p {
+  margin: 0 0 6px;
+}
+
+.qa-empty p:last-child {
+  margin-bottom: 0;
+}
+
+.qa-pager {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+@media (max-width: 640px) {
+  .qa {
+    padding: 16px;
+  }
+
+  .qa-question {
+    padding: 12px;
+  }
+
+  .qa-form-foot {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
