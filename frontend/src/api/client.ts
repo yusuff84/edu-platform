@@ -212,6 +212,21 @@ export function getCourse(slug: string): Promise<CourseDetail> {
   ).then((res) => ({ ...res.course, modules: res.modules }));
 }
 
+/**
+ * T80: похожие курсы (T79): GET /courses/{id}/similar?limit=N.
+ * id — UUID курса (не slug), поэтому кодируется в пути. Конверт
+ * { items, total } распаковывается в массив CourseItem; пустой список —
+ * пустой массив. limit необязателен (по контракту по умолчанию 4).
+ */
+export function getSimilarCourses(
+  courseId: string,
+  limit?: number,
+): Promise<CourseItem[]> {
+  return apiFetch<{ items: CourseItem[]; total: number }>(
+    `/courses/${encodeURIComponent(courseId)}/similar${buildQuery({ limit })}`,
+  ).then((res) => res.items);
+}
+
 // ---------- Учитель ----------
 
 export function createCourse(input: {
