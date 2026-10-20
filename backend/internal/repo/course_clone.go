@@ -42,7 +42,7 @@ func (s *Store) CloneCourseAs(courseID, teacherID string) (*Course, error) {
 	if !ok {
 		return nil, ErrNotFound
 	}
-	now := time.Now().UTC()
+	now := s.nextCreatedAt()
 	owner := strings.TrimSpace(teacherID)
 	if owner == "" {
 		owner = src.TeacherID

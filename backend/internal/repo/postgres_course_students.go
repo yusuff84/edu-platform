@@ -24,7 +24,7 @@ func (s *PostgresStore) ListEnrollmentsByCourse(courseID string) []*Enrollment {
 	defer cancel()
 	rows, err := s.pool.Query(ctx,
 		`SELECT `+enrollCols+` FROM enrollments
-		 WHERE course_id=$1::uuid ORDER BY created_at DESC`, courseID)
+		 WHERE course_id=$1::uuid ORDER BY created_at DESC, id DESC`, courseID)
 	if err != nil {
 		log.Printf("postgres ListEnrollmentsByCourse: %v", err)
 		return nil
@@ -89,7 +89,7 @@ func (s *PostgresStore) ListPaymentsByCourse(courseID string) []*Payment {
 	defer cancel()
 	rows, err := s.pool.Query(ctx,
 		`SELECT `+paymentCols+` FROM payments
-		 WHERE course_id=$1::uuid ORDER BY created_at DESC`, courseID)
+		 WHERE course_id=$1::uuid ORDER BY created_at DESC, id DESC`, courseID)
 	if err != nil {
 		log.Printf("postgres ListPaymentsByCourse: %v", err)
 		return nil

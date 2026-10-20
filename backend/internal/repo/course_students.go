@@ -18,7 +18,15 @@ func (s *Store) ListEnrollmentsByCourse(courseID string) []*Enrollment {
 			out = append(out, e)
 		}
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i].CreatedAt.After(out[j].CreatedAt) })
+	// created_at может совпасть (грубое системное время, импорт данных):
+	// id DESC делает порядок детерминированным и совпадает с Postgres
+	// (ORDER BY created_at DESC, id DESC).
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].CreatedAt.Equal(out[j].CreatedAt) {
+			return out[i].ID > out[j].ID
+		}
+		return out[i].CreatedAt.After(out[j].CreatedAt)
+	})
 	return out
 }
 
@@ -82,6 +90,11 @@ func (s *Store) ListPaymentsByCourse(courseID string) []*Payment {
 			out = append(out, p)
 		}
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i].CreatedAt.After(out[j].CreatedAt) })
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].CreatedAt.Equal(out[j].CreatedAt) {
+			return out[i].ID > out[j].ID
+		}
+		return out[i].CreatedAt.After(out[j].CreatedAt)
+	})
 	return out
 }

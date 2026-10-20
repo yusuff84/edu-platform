@@ -43,11 +43,29 @@ type Store struct {
 	sessions           map[string]*Session
 	// T67: сертификаты. certIdx — уникальная пара (userID|courseID),
 	// certByNumber — публичный номер.
-	certificates map[string]*Certificate // id -> certificate
-	certIdx      map[string]string       // userID|courseID -> certificate id
-	certByNumber map[string]string       // number -> certificate id
-	commissionPct      int
-	promoBarEnabled    bool
+	certificates    map[string]*Certificate // id -> certificate
+	certIdx         map[string]string       // userID|courseID -> certificate id
+	certByNumber    map[string]string       // number -> certificate id
+	commissionPct   int
+	promoBarEnabled bool
+	// lastCreatedAt — источник монотонного времени создания в in-memory
+	// режиме: см. nextCreatedAt.
+	lastCreatedAt time.Time
+}
+
+// nextCreatedAt — строго возрастающее время создания для in-memory режима.
+// Системные часы Windows тикают раз в ~15 мс: два объекта, созданные подряд
+// (сид, тесты, быстрые клики), получают одинаковый CreatedAt, и сортировка
+// «новые первыми» становится случайной из-за обхода map. Здесь к предыдущему
+// значению добавляется наносекунда — на отображаемые даты это не влияет.
+// Вызывать только под s.mu.Lock().
+func (s *Store) nextCreatedAt() time.Time {
+	now := time.Now().UTC()
+	if !now.After(s.lastCreatedAt) {
+		now = s.lastCreatedAt.Add(time.Nanosecond)
+	}
+	s.lastCreatedAt = now
+	return now
 }
 
 // NewStore создаёт пустое хранилище.
@@ -96,7 +114,7 @@ func (s *Store) CreateUser(email, passwordHash string, role Role) (*User, error)
 		PasswordHash: passwordHash,
 		Role:         role,
 		Status:       UserActive, // T24: явный дефолт (пустая строка = active только у старых объектов)
-		CreatedAt:    time.Now().UTC(),
+		CreatedAt:    s.nextCreatedAt(),
 	}
 	s.users[u.ID] = u
 	s.usersByEmail[email] = u
@@ -205,7 +223,7 @@ func (s *Store) CreateInvite(email, tokenHash, prefix, createdBy string, expires
 		Status:      InviteSent,
 		ExpiresAt:   expiresAt,
 		CreatedBy:   createdBy,
-		CreatedAt:   time.Now().UTC(),
+		CreatedAt:   s.nextCreatedAt(),
 	}
 	s.invites[tokenHash] = inv
 	return inv
@@ -285,9 +303,9 @@ func (s *Store) RevokeInvite(id string) (*TeacherInvite, error) {
 
 // CreateCourse создаёт курс в статусе draft.
 func (s *Store) CreateCourse(c *Course) *Course {
-	now := time.Now().UTC()
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	now := s.nextCreatedAt()
 	c.ID = uuid.NewString()
 	if c.Currency == "" {
 		c.Currency = "RUB"
@@ -707,7 +725,7 @@ func (s *Store) CreateLesson(l *Lesson) *Lesson {
 	}
 	l.ID = uuid.NewString()
 	l.Position = pos
-	l.CreatedAt = time.Now().UTC()
+	l.CreatedAt = s.nextCreatedAt()
 	s.lessons[l.ID] = l
 	return l
 }
@@ -845,12 +863,15 @@ func (s *Store) EnsureEnrollment(studentID, courseID string) (*Enrollment, bool)
 		}
 		return e, false
 	}
+	// CreatedAt строго возрастает (nextCreatedAt): при равном time.Now()
+	// порядок «новые первыми» в ListEnrollmentsByCourse был бы случайным.
+	now := s.nextCreatedAt()
 	e := &Enrollment{
 		ID:        uuid.NewString(),
 		StudentID: studentID,
 		CourseID:  courseID,
 		Status:    EnrollmentActive,
-		CreatedAt: time.Now().UTC(),
+		CreatedAt: now,
 	}
 	s.enrollments[e.ID] = e
 	s.enrollIdx[enrollKey(studentID, courseID)] = e.ID
@@ -956,7 +977,7 @@ func (s *Store) CreatePayment(p *Payment) (*Payment, error) {
 		}
 	}
 	p.ID = uuid.NewString()
-	p.CreatedAt = time.Now().UTC()
+	p.CreatedAt = s.nextCreatedAt()
 	s.payments[p.ID] = p
 	if p.ProviderPaymentID != "" {
 		s.paymentsByProvider[p.ProviderPaymentID] = p
@@ -1133,7 +1154,7 @@ func (s *Store) CreateReview(studentID, courseID string, rating int, body string
 		CourseID:  courseID,
 		Rating:    rating,
 		Body:      body,
-		CreatedAt: time.Now().UTC(),
+		CreatedAt: s.nextCreatedAt(),
 	}
 	s.reviews[r.ID] = r
 	s.reviewIdx[key] = r.ID
@@ -1375,7 +1396,7 @@ func (s *Store) CreatePromoCode(p *PromoCode) (*PromoCode, error) {
 		UsedCount:   0,
 		ExpiresAt:   cloneTimePtr(p.ExpiresAt),
 		Active:      true,
-		CreatedAt:   time.Now().UTC(),
+		CreatedAt:   s.nextCreatedAt(),
 	}
 	s.promoCodes[pc.ID] = pc
 	*p = *pc
