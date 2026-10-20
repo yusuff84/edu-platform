@@ -16,6 +16,7 @@ import { coverFor } from '../components/CourseCard';
 import { t } from '../i18n/t';
 import '../styles/profile.css';
 import '../styles/certificate.css';
+import '../styles/favorites.css';
 
 export default function MyCourses(): JSX.Element {
   const query = useQuery({ queryKey: ['my-courses'], queryFn: myCourses });
@@ -68,7 +69,13 @@ export default function MyCourses(): JSX.Element {
     return (
       <div className="wrap">
         <main className="page">
-          <h1>{t('cabinet.studentTitle')}</h1>
+          <div className="cab-head">
+            <h1>{t('cabinet.studentTitle')}</h1>
+            {/* T74: избранное доступно и при пустом списке курсов. */}
+            <Link className="btn btn-sm" to="/me/favorites">
+              {t('p9.fav.title')}
+            </Link>
+          </div>
           <div className="empty">
             <p>{t('my.empty')}</p>
             <p>
@@ -95,7 +102,12 @@ export default function MyCourses(): JSX.Element {
   return (
     <div className="wrap">
       <main className="page">
-        <h1>{t('cabinet.studentTitle')}</h1>
+        <div className="cab-head">
+          <h1>{t('cabinet.studentTitle')}</h1>
+          <Link className="btn btn-sm" to="/me/favorites">
+            {t('p9.fav.title')}
+          </Link>
+        </div>
         <div className="cab-stats">
           <div>
             <b>{total}</b>
