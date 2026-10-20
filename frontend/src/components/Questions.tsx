@@ -25,6 +25,7 @@ import {
 } from '../api/client';
 import type { LessonQuestion } from '../api/client';
 import { t } from '../i18n/t';
+import { pluralRu } from '../i18n/plural';
 import '../styles/qa.css';
 
 /** Тексты валидации: отдельных ключей словаря нет — литералы по контракту T71. */
@@ -228,7 +229,8 @@ export default function Questions({
         <h2>{t('p9.qa.title')}</h2>
         {data && (
           <span className="qa-count">
-            {total} {t('p9.qa.count')}
+            {total}{' '}
+            {pluralRu(total, t('plural.question.one'), t('plural.question.few'), t('plural.question.many'))}
           </span>
         )}
       </div>

@@ -147,6 +147,12 @@ func TestCertificateIssuedAfterLastLesson(t *testing.T) {
 		t.Fatalf("в публичном ответе утёк e-mail: %s", rec.Body.String())
 	}
 
+	// Номер можно набрать строчными: проверка регистронезависима.
+	rec = doRequest(t, router, http.MethodGet, "/api/v1/certificates/"+strings.ToLower(number), nil, nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("публичный сертификат строчными: status=%d body=%s", rec.Code, rec.Body.String())
+	}
+
 	// Неизвестный номер — 404 и контрактный текст.
 	rec = doRequest(t, router, http.MethodGet, "/api/v1/certificates/EDU-2026-00000000", nil, nil)
 	if rec.Code != http.StatusNotFound {

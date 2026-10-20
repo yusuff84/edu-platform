@@ -13,6 +13,7 @@ import { coverUrl } from '../api/teacherCover';
 import { meQueryOptions } from './RouteGuards';
 import { t } from '../i18n/t';
 import type { RuKey } from '../i18n/t';
+import { pluralRu } from '../i18n/plural';
 import '../styles/catalog.css';
 import '../styles/favorites.css';
 
@@ -187,7 +188,13 @@ export default function CourseCard({ course }: { course: CourseItem }): JSX.Elem
         <Stars value={course.avgRating ?? 0} />
         {course.ratingsCount > 0 && (
           <span className="muted">
-            {course.ratingsCount} {t('reviews.title').toLowerCase()}
+            {course.ratingsCount}{' '}
+            {pluralRu(
+              course.ratingsCount,
+              t('plural.review.one'),
+              t('plural.review.few'),
+              t('plural.review.many'),
+            )}
           </span>
         )}
       </div>

@@ -15,6 +15,7 @@ import {
   replyToReview,
 } from '../api/client';
 import { t } from '../i18n/t';
+import { pluralRu } from '../i18n/plural';
 import '../styles/catalog.css';
 import '../styles/reviews-extra.css';
 
@@ -221,7 +222,13 @@ export default function Reviews({
               {'☆'.repeat(Math.max(0, 5 - Math.round(stats.avgRating)))}
             </div>
             <div className="reviews-total">
-              {ratingsCount} {t('course.reviewsCount')}
+              {ratingsCount}{' '}
+              {pluralRu(
+                ratingsCount,
+                t('plural.review.one'),
+                t('plural.review.few'),
+                t('plural.review.many'),
+              )}
             </div>
           </div>
           <div className="reviews-hist">

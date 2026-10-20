@@ -20,6 +20,7 @@ import { Markdown } from '../components/LessonView';
 import Reviews from '../components/Reviews';
 import SimilarCourses from '../components/SimilarCourses';
 import { t } from '../i18n/t';
+import { pluralRu } from '../i18n/plural';
 import '../styles/catalog.css';
 import '../styles/preview.css';
 import '../styles/promo.css';
@@ -318,10 +319,22 @@ export default function Course(): JSX.Element {
                 <span className="rating">★ {(course.avgRating ?? 0).toFixed(1)}</span>
                 <span>({course.ratingsCount ?? 0})</span>
                 <span>
-                  {lessonsCount} {t('course.lessonsCount')}
+                  {lessonsCount}{' '}
+                  {pluralRu(
+                    lessonsCount,
+                    t('plural.lesson.one'),
+                    t('plural.lesson.few'),
+                    t('plural.lesson.many'),
+                  )}
                 </span>
                 <span>
-                  {modulesCount} {t('course.modulesCount')}
+                  {modulesCount}{' '}
+                  {pluralRu(
+                    modulesCount,
+                    t('plural.module.one'),
+                    t('plural.module.few'),
+                    t('plural.module.many'),
+                  )}
                 </span>
               </div>
             </section>

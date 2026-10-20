@@ -65,7 +65,9 @@ func (a *App) MyCertificates(w http.ResponseWriter, r *http.Request) {
 // GetPublicCertificate — GET /certificates/{number}: публичная карточка
 // сертификата по номеру. 404 — сертификата нет.
 func (a *App) GetPublicCertificate(w http.ResponseWriter, r *http.Request) {
-	number := strings.TrimSpace(chi.URLParam(r, "number"))
+	// Номер сертификата печатается в верхнем регистре, но в адресной строке
+	// его могут набрать строчными — проверка от регистра не зависит.
+	number := strings.ToUpper(strings.TrimSpace(chi.URLParam(r, "number")))
 	c, ok := a.Store.GetCertificateByNumber(number)
 	if !ok {
 		writeErr(w, http.StatusNotFound, "Сертификат не найден")
