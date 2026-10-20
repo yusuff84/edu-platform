@@ -41,6 +41,7 @@ import type {
   Review,
   TeacherCourseStatsPage,
   TeacherOverview,
+  TeacherProfile,
   User,
 } from './types';
 
@@ -94,6 +95,8 @@ export type {
   TeacherCourseStat,
   TeacherCourseStatsPage,
   TeacherOverview,
+  TeacherProfile,
+  TeacherPublic,
   User,
 } from './types';
 
@@ -250,6 +253,14 @@ export function getLessonPreview(slug: string, lessonId: string): Promise<Lesson
   return apiFetch<LessonPreview>(
     `/courses/${encodeURIComponent(slug)}/preview/${encodeURIComponent(lessonId)}`,
   );
+}
+
+/**
+ * T82: публичный профиль преподавателя (GET /teachers/{id}).
+ * Конверт { teacher, courses } возвращается как есть; 404 — профиля нет.
+ */
+export function getTeacherProfile(id: string): Promise<TeacherProfile> {
+  return apiFetch<TeacherProfile>(`/teachers/${encodeURIComponent(id)}`);
 }
 
 // ---------- Учитель ----------
@@ -666,7 +677,6 @@ export function deleteReviewReply(
   );
 }
 
-<<<<<<< HEAD
 // ---------- P9: вопросы и ответы по урокам ----------
 
 /**

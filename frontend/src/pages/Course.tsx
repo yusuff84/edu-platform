@@ -310,6 +310,10 @@ export default function Course(): JSX.Element {
               )}
               <h1 style={{ marginTop: 12 }}>{course.title}</h1>
               <p className="muted">{course.description}</p>
+              {/* T82: публичный профиль автора курса (teacherId есть в Course). */}
+              <p className="meta">
+                <Link to={`/teachers/${course.teacherId}`}>{t('p9.teacher.openProfile')}</Link>
+              </p>
               <div className="meta">
                 <span className="rating">★ {(course.avgRating ?? 0).toFixed(1)}</span>
                 <span>({course.ratingsCount ?? 0})</span>
