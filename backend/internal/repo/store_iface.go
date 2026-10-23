@@ -185,6 +185,9 @@ type StoreAPI interface {
 	// DeleteReview удаляет отзыв и пересчитывает рейтинг курса (T25).
 	// ErrNotFound — отзыва нет.
 	DeleteReview(id string) error
+	// ListAdminReviews — глобальный список отзывов с фильтрами/поиском,
+	// сортировкой и пагинацией (T83); total — до пагинации, items — не nil.
+	ListAdminReviews(f AdminReviewFilter) (items []*AdminReviewRow, total int)
 	// ListEnrollmentRows — все записи на курсы с данными ученика и курса (T25),
 	// новые первыми; total — до пагинации. T48: поиск по ученику (Q) и статус
 	// записи (Status) — в EnrollmentFilter.

@@ -220,6 +220,9 @@ func NewRouter(app *App) http.Handler {
 			// (handler/admin_questions.go). Групповые requireAuth/
 			// requireRole(admin) уже навешены выше.
 			app.RegisterAdminQuestionsRoutes(r)
+			// T83: глобальный список отзывов GET /admin/reviews (удаление —
+			// существующий DELETE /admin/reviews/{id} из admin_console.go).
+			app.RegisterAdminReviewsRoutes(r)
 			// T55: детали курса GET /admin/courses/{id} — программа, статистика
 			// и карточка «одним экраном» (handler/admin_course_detail.go).
 			// Регистрируется после очереди модерации: статический сегмент
