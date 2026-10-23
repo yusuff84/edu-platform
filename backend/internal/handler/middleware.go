@@ -210,6 +210,9 @@ func NewRouter(app *App) http.Handler {
 			r.Post("/courses/{id}/moderate", app.AdminModerateCourse)
 			app.RegisterAdminUsersRoutes(r) // T24: /admin/users — управление пользователями
 			app.RegisterAdminConsoleRoutes(r)
+			// T89: глобальный журнал промокодов — GET /promo-codes,
+			// PATCH /promo-codes/{id} (handler/admin_promos.go).
+			app.RegisterAdminPromosRoutes(r)
 			// T55: детали курса GET /admin/courses/{id} — программа, статистика
 			// и карточка «одним экраном» (handler/admin_course_detail.go).
 			// Регистрируется после очереди модерации: статический сегмент
