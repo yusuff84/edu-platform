@@ -208,6 +208,9 @@ func NewRouter(app *App) http.Handler {
 			r.Post("/invites/{id}/revoke", app.AdminRevokeInvite)
 			r.Get("/courses/review", app.AdminReviewQueue)
 			r.Post("/courses/{id}/moderate", app.AdminModerateCourse)
+			// T87: принудительная публикация курса супер-админом
+			// (draft|review → published, published идемпотентно).
+			r.Post("/courses/{id}/publish", app.AdminPublishCourse)
 			app.RegisterAdminUsersRoutes(r) // T24: /admin/users — управление пользователями
 			app.RegisterAdminConsoleRoutes(r)
 			// T89: глобальный журнал промокодов — GET /promo-codes,

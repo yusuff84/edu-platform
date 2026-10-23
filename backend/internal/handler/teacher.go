@@ -136,9 +136,15 @@ type createModuleRequest struct {
 }
 
 // TeacherCreateModule — POST /teacher/courses/{id}/modules.
+// T87: у teacher здесь исторически нет draft-guard (контрактные тесты
+// добавляют уроки в published-курс) — правило не меняется. Для admin
+// архивный курс закрыт: 409 до unarchive.
 func (a *App) TeacherCreateModule(w http.ResponseWriter, r *http.Request) {
-	_, c, ok := a.ownCourse(w, r)
+	u, c, ok := a.ownCourse(w, r)
 	if !ok {
+		return
+	}
+	if u != nil && u.Role == repo.RoleAdmin && !requireEditable(w, u, c) {
 		return
 	}
 	var req createModuleRequest
@@ -286,9 +292,14 @@ func parseLessonStartsAt(raw string) (time.Time, error) {
 }
 
 // TeacherCreateLesson — POST /teacher/courses/{id}/lessons с валидацией по kind.
+// T87: у teacher draft-guard на создание не было и нет (поведение не меняем);
+// admin не может добавлять уроки в архивный курс — 409 до unarchive.
 func (a *App) TeacherCreateLesson(w http.ResponseWriter, r *http.Request) {
-	_, c, ok := a.ownCourse(w, r)
+	u, c, ok := a.ownCourse(w, r)
 	if !ok {
+		return
+	}
+	if u != nil && u.Role == repo.RoleAdmin && !requireEditable(w, u, c) {
 		return
 	}
 	var req createLessonRequest
