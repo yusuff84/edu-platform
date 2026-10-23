@@ -8,7 +8,7 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "test:build": "vite build --ssr src/api/client.ts --outDir .tmp-api-test --emptyOutDir --mode test",
-    "test": "npm run test:build && node --test tests/api-contract/"
+    "test": "npm run test:build && node --test \"tests/api-contract/*.test.mjs\""
   },
   "dependencies": {
     "@hookform/resolvers": "^3.6.0",
