@@ -1190,6 +1190,197 @@ admin — все курсы платформы.
 
 ---
 
+## Волна P10 (T83-T94) — супер-админ: модерация и управление
+
+Все маршруты ниже требуют `requireAuth` + `requireRole(admin)` и дополнительно
+проверяют `adminOnly` в обработчике. Ошибки авторизации: `401` — нет сессии,
+`403` — не admin. Денежные суммы — в копейках; даты — RFC3339 UTC, если не
+сказано иное. `items` — всегда массив, не `null`.
+
+### T83 — `GET /admin/reviews` — глобальная модерация отзывов
+
+Query:
+
+| Параметр | Правило |
+|---|---|
+| `courseId` | UUID курса, иначе `400` |
+| `rating` | целое 1..5, иначе `400` |
+| `q` | поиск без учёта регистра по названию курса, email/имени ученика и тексту отзыва |
+| `from`, `to` | даты `ГГГГ-ММ-ДД` по `createdAt`, включительно; неверный формат — `400`, `from > to` — `400` |
+| `sort` | `createdAt` (по умолчанию) или `rating` |
+| `dir` | `asc` или `desc` (по умолчанию `desc`) |
+| `page`, `limit` | как в журнале платежей: `page` 1-based, `limit` 20 по умолчанию, максимум 100 |
+
+Ответ `200`:
+
+```json
+{
+  "items": [{
+    "id": "uuid",
+    "courseId": "uuid",
+    "courseTitle": "Название",
+    "courseSlug": "slug",
+    "studentId": "uuid",
+    "studentEmail": "student@example.test",
+    "studentName": "Имя",
+    "rating": 5,
+    "body": "Текст отзыва",
+    "createdAt": "2026-10-24T10:00:00Z",
+    "teacherReply": "",
+    "teacherReplyAt": null
+  }],
+  "total": 1,
+  "page": 1,
+  "limit": 20
+}
+```
+
+Удаление — существующий `DELETE /admin/reviews/{id}` (`204`, `404`). После
+удаления рейтинг курса пересчитывается. Отзывы без текста отдаются с `body: ""`.
+
+### T85 — `GET /admin/questions` — глобальная модерация Q&A
+
+Query: `courseId` (UUID), `lessonId` (UUID урока), `q` (поиск без учёта регистра
+по вопросам, ответам, email/именам авторов, названиям курса и урока), `page`,
+`limit` (20..100). Неверные UUID/пагинация — `400`.
+
+Ответ `200`:
+
+```json
+{
+  "items": [{
+    "id": "uuid",
+    "courseId": "uuid",
+    "courseTitle": "Название",
+    "courseSlug": "slug",
+    "lessonId": "uuid",
+    "lessonTitle": "Урок",
+    "studentId": "uuid",
+    "studentEmail": "student@example.test",
+    "studentName": "Имя",
+    "body": "Текст вопроса",
+    "createdAt": "2026-10-24T10:00:00Z",
+    "answers": [{
+      "id": "uuid",
+      "authorId": "uuid",
+      "authorEmail": "author@example.test",
+      "authorName": "Автор",
+      "authorRole": "teacher",
+      "body": "Текст ответа",
+      "createdAt": "2026-10-24T10:05:00Z"
+    }]
+  }],
+  "total": 1,
+  "page": 1,
+  "limit": 20
+}
+```
+
+Сортировка: новые вопросы первыми (`createdAt desc, id desc`), ответы внутри —
+старые первыми. Для удаления UI использует существующие
+`DELETE /courses/{courseId}/questions/{questionId}` и
+`DELETE /courses/{courseId}/questions/{questionId}/answers/{answerId}`:
+ответы удаляются каскадом вместе с вопросом, `admin` имеет право удалять чужие
+вопросы/ответы.
+
+### T87 — редактирование курса супер-админом
+
+Администратор может читать и изменять содержимое **любого неархивного** курса
+через существующие `/teacher/courses/{id}` и вложенные CRUD-маршруты: карточка,
+модули, уроки, квизы, codeTask, порядок, перенос урока. Для `teacher` правила
+`draft`-guard не меняются; для `admin` проверка статуса `draft` заменяется на
+`status != archived`. Архивный курс — `409` до `unarchive`.
+
+Новый маршрут:
+
+`POST /admin/courses/{id}/publish` → `200 {"course": {...}}`.
+Публикует курс из `draft` или `review` без очереди модерации; `published` —
+идемпотентный `200`; `archived` — `409`; нет курса — `404`. Комментарий
+модерации очищается. Ответ — та же форма курса, что у `moderate`.
+
+`GET /admin/courses/{id}` дополняется аддитивным полем
+`course.moderationComment: string` (пустая строка, если комментария нет).
+
+### T89 — глобальное управление промокодами
+
+`GET /admin/promo-codes?courseId=&q=&active=&page=&limit=`.
+`courseId` — UUID; `q` — код или название курса без учёта регистра; `active` —
+`true|false`; пагинация 20..100. Ответ `200`:
+
+```json
+{
+  "items": [{
+    "id": "uuid",
+    "courseId": "uuid",
+    "courseTitle": "Название",
+    "courseSlug": "slug",
+    "code": "SALE20",
+    "discountPct": 20,
+    "maxUses": 100,
+    "usedCount": 3,
+    "expiresAt": null,
+    "active": true,
+    "createdAt": "2026-10-24T10:00:00Z"
+  }],
+  "total": 1,
+  "page": 1,
+  "limit": 20
+}
+```
+
+`PATCH /admin/promo-codes/{id}` — частичное обновление; тело содержит хотя бы
+одно поле:
+
+```json
+{"discountPct": 25, "maxUses": 200, "expiresAt": "2026-12-31T20:59:59Z", "active": false}
+```
+
+Правила: `discountPct` 1..90; `maxUses >= 0` и `>= usedCount`; `expiresAt` —
+RFC3339 в будущем или `null` (без срока); `active` — bool. Неизвестное поле —
+`400`; нет промокода — `404`; успех — `200 {"promoCode": <элемент списка>}`.
+Изменение `active=false` не удаляет код; `active=true` реактивирует, если срок
+не истёк. Архивный курс менять нельзя — `409`.
+
+### T93 — принудительный выход пользователя
+
+`GET /admin/users/{id}/sessions` → `200`:
+
+```json
+{"items": [{"id": "session-id", "createdAt": "...", "expiresAt": "..."}]}
+```
+
+Сессии сортируются новыми первыми; истёкшие не возвращаются. Нет пользователя —
+`404`.
+
+`DELETE /admin/users/{id}/sessions` → `204` без тела: удаляет все сессии
+пользователя (включая текущую, если админ завершает свои сессии). Нет
+пользователя — `404`. После удаления старые cookie перестают проходить
+`requireAuth`.
+
+### Новые ключи i18n (ru.json) — заморожены для P10
+
+- `p10.reviews.*`: title, subtitle, search, filterCourse, filterRating,
+  allRatings, course, student, body, delete, confirmDelete, deleted, empty,
+  openCourse, periodFrom, periodTo, reset;
+- `p10.qa.*`: title, subtitle, search, filterCourse, filterLesson, allCourses,
+  allLessons, lesson, question, answers, deleteQuestion, deleteAnswer,
+  confirmQuestion, confirmAnswer, deleted, empty, openCourse, author, student,
+  created, expand, collapse;
+- `p10.promo.*`: title, subtitle, search, filterCourse, filterStatus, all,
+  active, inactive, colCode, colCourse, colDiscount, colUses, colExpires,
+  colStatus, colActions, edit, save, cancel, deactivate, activate,
+  confirmDeactivate, confirmActivate, updated, empty, never, usedOf, editTitle,
+  openCourse;
+- `p10.courseAdmin.*`: edit, editHint, adminMode, adminModeHint, actions,
+  moderate, approve, reject, rejectComment, forcePublish, forcePublishConfirm,
+  forcePublishDone, openPublic, students, backToAdmin, contentEditable,
+  contentLockedArchived;
+- `p10.sessions.*`: title, hint, empty, createdAt, expiresAt, revokeAll,
+  confirmRevokeAll, revoked, count, forceLogout;
+- `p10.nav.*`: reviews, qa, promos, aria, backToAdmin.
+
+---
+
 ## Отступления (осознанные и разрешённые)
 
 | Отступление | Кто | Почему |
