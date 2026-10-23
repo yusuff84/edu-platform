@@ -183,10 +183,11 @@ type moveLessonRequest struct {
 // TeacherMoveLesson — POST /courses/{id}/lessons/{lessonId}/move: переносит
 // урок в конец другого модуля того же курса, 200 {"lesson":{...}}.
 // 400 — пустой moduleId («Не указан модуль») или модуль не из этого курса;
-// 404 — урока нет в этом курсе; 409 — курс не черновик; повторный перенос
-// в тот же модуль — идемпотентный 200 без изменений.
+// 404 — урока нет в этом курсе; 409 — teacher: курс не черновик, admin:
+// курс в архиве (T87); повторный перенос в тот же модуль — идемпотентный
+// 200 без изменений.
 func (a *App) TeacherMoveLesson(w http.ResponseWriter, r *http.Request) {
-	_, c, ok := a.ownCourse(w, r)
+	u, c, ok := a.ownCourse(w, r)
 	if !ok {
 		return
 	}
@@ -209,8 +210,14 @@ func (a *App) TeacherMoveLesson(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusNotFound, "Урок не найден")
 		return
 	}
-	if c.Status != repo.CourseDraft {
-		writeErr(w, http.StatusConflict, "Менять структуру можно только в черновике")
+	if !canEditContent(u, c) {
+		if u != nil && u.Role == repo.RoleAdmin {
+			writeErr(w, http.StatusConflict,
+				"Архивный курс нельзя редактировать: сначала верните его из архива")
+		} else {
+			// Текст teacher сохранён с T21 (закреплён контрактным тестом).
+			writeErr(w, http.StatusConflict, "Менять структуру можно только в черновике")
+		}
 		return
 	}
 	if l.ModuleID != mod.ID {

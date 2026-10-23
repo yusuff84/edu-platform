@@ -113,14 +113,14 @@ func TestAdminCourseDetailHappyPath(t *testing.T) {
 
 	body := adminCourseDetail(t, router, adminCookies, courseID)
 
-	// --- course: ровно 15 полей = 13 элемента списка T25 + coverPath + category (T65) ---
+	// --- course: ровно 16 полей = 13 элемента списка T25 + coverPath + category (T65) + moderationComment (T87) ---
 	course, ok := body["course"].(map[string]any)
 	if !ok {
 		t.Fatalf("ответ без course: %v", body)
 	}
 	wantKeys(t, course, "id", "slug", "title", "category", "teacherId", "teacherEmail", "status",
 		"priceCents", "createdAt", "updatedAt", "modulesCount", "lessonsCount",
-		"studentsCount", "coverPath")
+		"studentsCount", "coverPath", "moderationComment")
 	if course["id"] != courseID {
 		t.Fatalf("course.id=%v, ждали %s", course["id"], courseID)
 	}
@@ -136,6 +136,10 @@ func TestAdminCourseDetailHappyPath(t *testing.T) {
 	}
 	if course["coverPath"] != nil {
 		t.Fatalf("без T54 coverPath должен быть null: %v", course["coverPath"])
+	}
+	// T87: аддитивное поле всегда строка; у курса без замечаний — пустая.
+	if course["moderationComment"] != "" {
+		t.Fatalf("moderationComment без замечаний должен быть пустым: %v", course["moderationComment"])
 	}
 
 	// --- modules: 2 модуля по position, порядок стабильный ---

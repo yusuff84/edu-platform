@@ -196,6 +196,20 @@
 > limit только укорачивает `items`).
 > Ученику оба эндпоинта — `403` (группа `/teacher` — только teacher/admin).
 
+> Волна P10 (T87): супер-админ может читать и менять содержимое **любого
+> неархивного** курса через существующие `/api/v1/teacher/courses/{id}` и
+> вложенные CRUD-маршруты: создание/правка/удаление модулей и уроков,
+> reorder модулей/уроков, перенос урока. Для `teacher` правила не изменились:
+> правка/удаление урока или модуля, reorder и перенос — только в `draft`,
+> иначе `409` «Контент курса можно редактировать только в режиме черновика»
+> (перенос урока — `409 «Менять структуру можно только в черновике»);
+> создание модуля/урока, как и раньше (T19), отдельного draft-guard не имеет.
+> Для `admin` проверка `draft` заменена на `status != archived`: архивный
+> курс — `409` до `unarchive`, включая создание модулей/уроков. Удаление
+> всего курса осталось `draft`-only для всех — это каскадная потеря истории.
+> `submit` не менялся. Принудительная публикация —
+> `POST /api/v1/admin/courses/{id}/publish`.
+
 > В бэклоге T13: `GET/PATCH/DELETE /teacher/courses[...]`, PATCH модулей/уроков,
 > reorder — в `Task/T13-integration-wiring.md`.
 
@@ -206,7 +220,8 @@
 | POST | `/api/v1/admin/invites` | `{email}` → `201 {id,email,token,tokenPrefix,expiresAt}`; **токен показывается один раз** |
 | GET | `/api/v1/admin/courses/review` | → `200` `{items:[Course],total}` |
 | POST | `/api/v1/admin/courses/{id}/moderate` | `{decision:"approve\|reject", comment?}` → `200` Course; `comment` обязателен при `reject` |
-| GET | `/api/v1/admin/courses/{id}` | → `200` `{course:<элемент GET /admin/courses + coverPath>, modules:[{id,title,position,lessons:[{id,title,kind,position}]}], stats:{studentsCount,activeCount,reviewsCount,avgRating,paymentsCount,paidTotalCents}}` (T55; `404` «Курс не найден») |
+| POST | `/api/v1/admin/courses/{id}/publish` | → `200` `{course}`; `draft\|review → published` без модерации, `published` — идемпотентный `200`, `archived` — `409`, нет курса — `404`; `moderationComment` очищается (T87) |
+| GET | `/api/v1/admin/courses/{id}` | → `200` `{course:<элемент GET /admin/courses + coverPath + moderationComment>, modules:[{id,title,position,lessons:[{id,title,kind,position}]}], stats:{studentsCount,activeCount,reviewsCount,avgRating,paymentsCount,paidTotalCents}}` (T55/T87; `moderationComment` — всегда строка, пустая если замечаний нет; `404` «Курс не найден») |
 | GET | `/api/v1/admin/payments?page=&limit=&status=&courseId=` | → `200` `{items:[PaymentJournalItem],total,page,limit,totals}` (US6, T07) |
 | GET | `/api/v1/admin/settings` | → `200 {commissionPct,promoBarEnabled}` (US6, T07; промо — пост-P7) |
 | PUT | `/api/v1/admin/settings` | `{commissionPct?0..90, promoBarEnabled?}` — хотя бы одно поле → `200 {commissionPct,promoBarEnabled}` (US6, T07; частичное обновление — пост-P7) |
