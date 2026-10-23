@@ -357,6 +357,17 @@ type StoreAPI interface {
 	// teacher/admin (handler отвечает 404). Агрегаты считаются без N+1:
 	// in-memory — одним проходом по картам, Postgres — агрегирующими SQL.
 	GetTeacherProfile(teacherID string) (*TeacherProfileData, bool)
+
+	// ---- T85: глобальная модерация Q&A ----
+
+	// ListAdminQuestions — вопросы/ответы всей платформы для админки (T85).
+	// Фильтры CourseID/LessonID — точные ("" — любой), Q — подстрока без
+	// учёта регистра по вопросам, ответам, email/именам авторов, названиям
+	// курса и урока. Новые вопросы первыми (createdAt desc, id desc), ответы
+	// внутри — старые первыми (createdAt asc, id asc). Пагинация 1-based:
+	// Limit по умолчанию 20, максимум 100; total — до пагинации. Никогда не
+	// возвращает nil-срез; у каждой строки Answers — не-nil срез.
+	ListAdminQuestions(f AdminQuestionFilter) (items []*AdminQuestionRow, total int)
 }
 
 // PaymentFilter — параметры журнала платежей для админки (US6, T31).

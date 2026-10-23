@@ -207,6 +207,7 @@
 | GET | `/api/v1/admin/courses/review` | → `200` `{items:[Course],total}` |
 | POST | `/api/v1/admin/courses/{id}/moderate` | `{decision:"approve\|reject", comment?}` → `200` Course; `comment` обязателен при `reject` |
 | GET | `/api/v1/admin/courses/{id}` | → `200` `{course:<элемент GET /admin/courses + coverPath>, modules:[{id,title,position,lessons:[{id,title,kind,position}]}], stats:{studentsCount,activeCount,reviewsCount,avgRating,paymentsCount,paidTotalCents}}` (T55; `404` «Курс не найден») |
+| GET | `/api/v1/admin/questions?courseId=&lessonId=&q=&page=&limit=` | → `200` `{items:[{id,courseId,courseTitle,courseSlug,lessonId,lessonTitle,studentId,studentEmail,studentName,body,createdAt,answers:[{id,authorId,authorEmail,authorName,authorRole,body,createdAt}]}],total,page,limit}` (T85; только admin). `q` — поиск без учёта регистра по вопросу, ответам, email/именам авторов, названиям курса и урока; новые вопросы первыми, ответы старыми первыми; `total` — до пагинации; неверные UUID/пагинация — `400`. Удаление — существующими `DELETE /courses/{courseId}/questions/{questionId}` и `.../answers/{answerId}` (admin удаляет чужие) |
 | GET | `/api/v1/admin/payments?page=&limit=&status=&courseId=` | → `200` `{items:[PaymentJournalItem],total,page,limit,totals}` (US6, T07) |
 | GET | `/api/v1/admin/settings` | → `200 {commissionPct,promoBarEnabled}` (US6, T07; промо — пост-P7) |
 | PUT | `/api/v1/admin/settings` | `{commissionPct?0..90, promoBarEnabled?}` — хотя бы одно поле → `200 {commissionPct,promoBarEnabled}` (US6, T07; частичное обновление — пост-P7) |

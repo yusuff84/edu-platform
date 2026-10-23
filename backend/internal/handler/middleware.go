@@ -210,6 +210,10 @@ func NewRouter(app *App) http.Handler {
 			r.Post("/courses/{id}/moderate", app.AdminModerateCourse)
 			app.RegisterAdminUsersRoutes(r) // T24: /admin/users — управление пользователями
 			app.RegisterAdminConsoleRoutes(r)
+			// T85: глобальная модерация Q&A — GET /admin/questions
+			// (handler/admin_questions.go). Групповые requireAuth/
+			// requireRole(admin) уже навешены выше.
+			app.RegisterAdminQuestionsRoutes(r)
 			// T55: детали курса GET /admin/courses/{id} — программа, статистика
 			// и карточка «одним экраном» (handler/admin_course_detail.go).
 			// Регистрируется после очереди модерации: статический сегмент
