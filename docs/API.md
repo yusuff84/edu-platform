@@ -210,6 +210,8 @@
 | GET | `/api/v1/admin/payments?page=&limit=&status=&courseId=` | → `200` `{items:[PaymentJournalItem],total,page,limit,totals}` (US6, T07) |
 | GET | `/api/v1/admin/settings` | → `200 {commissionPct,promoBarEnabled}` (US6, T07; промо — пост-P7) |
 | PUT | `/api/v1/admin/settings` | `{commissionPct?0..90, promoBarEnabled?}` — хотя бы одно поле → `200 {commissionPct,promoBarEnabled}` (US6, T07; частичное обновление — пост-P7) |
+| GET | `/api/v1/admin/promo-codes?courseId=&q=&active=&page=&limit=` | → `200 {items:[AdminPromo],total,page,limit}` — глобальный журнал промокодов (T89); `courseId` — UUID, `q` — подстрока без учёта регистра по коду или названию курса, `active` — `true\|false`; `AdminPromo` = поля `PromoCode` + `courseTitle`/`courseSlug`; неверные фильтры/`page`/`limit` — `400` |
+| PATCH | `/api/v1/admin/promo-codes/{id}` | `{discountPct?,maxUses?,expiresAt?,active?}` — хотя бы одно поле → `200 {"promoCode": AdminPromo}` (T89); `discountPct` 1..90, `maxUses >= usedCount`, `expiresAt` — RFC3339 в будущем или `null` (очистка срока), `active` — bool; неизвестное поле/неверные значения — `400`, нет кода — `404`, курс в архиве — `409` |
 
 ### Оплата
 

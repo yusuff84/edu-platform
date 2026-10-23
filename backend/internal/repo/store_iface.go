@@ -357,6 +357,21 @@ type StoreAPI interface {
 	// teacher/admin (handler отвечает 404). Агрегаты считаются без N+1:
 	// in-memory — одним проходом по картам, Postgres — агрегирующими SQL.
 	GetTeacherProfile(teacherID string) (*TeacherProfileData, bool)
+
+	// ---- T89: глобальный журнал промокодов ----
+
+	// ListAdminPromoCodes — все коды платформы для админ-журнала: фильтры
+	// CourseID/Q/Active комбинируются через AND, Q — подстрока без учёта
+	// регистра по коду ИЛИ названию курса. Сортировка createdAt DESC, при
+	// равенстве id ASC; total — до пагинации. Строки содержат данные курса
+	// (courseTitle/courseSlug); пустой результат — не nil.
+	ListAdminPromoCodes(f AdminPromoFilter) ([]*AdminPromoRow, int)
+	// UpdateAdminPromoCode — частичное обновление скидки/лимита/срока/
+	// активности; меняются только переданные поля. ExpiresAt различает
+	// «не менять» и «очистить» (см. AdminPromoPatch). Возвращает снимок
+	// строки журнала с данными курса. ErrNotFound — кода нет. Валидацию
+	// значений и запрет архивного курса выполняет handler.
+	UpdateAdminPromoCode(id string, p AdminPromoPatch) (*AdminPromoRow, error)
 }
 
 // PaymentFilter — параметры журнала платежей для админки (US6, T31).
