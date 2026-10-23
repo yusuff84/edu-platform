@@ -372,6 +372,17 @@ type StoreAPI interface {
 	// строки журнала с данными курса. ErrNotFound — кода нет. Валидацию
 	// значений и запрет архивного курса выполняет handler.
 	UpdateAdminPromoCode(id string, p AdminPromoPatch) (*AdminPromoRow, error)
+
+	// ---- T85: глобальная модерация Q&A ----
+
+	// ListAdminQuestions — вопросы/ответы всей платформы для админки (T85).
+	// Фильтры CourseID/LessonID — точные ("" — любой), Q — подстрока без
+	// учёта регистра по вопросам, ответам, email/именам авторов, названиям
+	// курса и урока. Новые вопросы первыми (createdAt desc, id desc), ответы
+	// внутри — старые первыми (createdAt asc, id asc). Пагинация 1-based:
+	// Limit по умолчанию 20, максимум 100; total — до пагинации. Никогда не
+	// возвращает nil-срез; у каждой строки Answers — не-nil срез.
+	ListAdminQuestions(f AdminQuestionFilter) (items []*AdminQuestionRow, total int)
 }
 
 // PaymentFilter — параметры журнала платежей для админки (US6, T31).

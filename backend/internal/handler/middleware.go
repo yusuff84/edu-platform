@@ -216,6 +216,10 @@ func NewRouter(app *App) http.Handler {
 			// T89: глобальный журнал промокодов — GET /promo-codes,
 			// PATCH /promo-codes/{id} (handler/admin_promos.go).
 			app.RegisterAdminPromosRoutes(r)
+			// T85: глобальная модерация Q&A — GET /admin/questions
+			// (handler/admin_questions.go). Групповые requireAuth/
+			// requireRole(admin) уже навешены выше.
+			app.RegisterAdminQuestionsRoutes(r)
 			// T55: детали курса GET /admin/courses/{id} — программа, статистика
 			// и карточка «одним экраном» (handler/admin_course_detail.go).
 			// Регистрируется после очереди модерации: статический сегмент
