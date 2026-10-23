@@ -210,6 +210,7 @@
 | GET | `/api/v1/admin/payments?page=&limit=&status=&courseId=` | → `200` `{items:[PaymentJournalItem],total,page,limit,totals}` (US6, T07) |
 | GET | `/api/v1/admin/settings` | → `200 {commissionPct,promoBarEnabled}` (US6, T07; промо — пост-P7) |
 | PUT | `/api/v1/admin/settings` | `{commissionPct?0..90, promoBarEnabled?}` — хотя бы одно поле → `200 {commissionPct,promoBarEnabled}` (US6, T07; частичное обновление — пост-P7) |
+| GET | `/api/v1/admin/reviews?courseId=&rating=&q=&from=&to=&sort=&dir=&page=&limit=` | → `200 {items:[{id,courseId,courseTitle,courseSlug,studentId,studentEmail,studentName,rating,body,createdAt,teacherReply,teacherReplyAt}],total,page,limit}` (T83). `rating` — 1..5; `q` — поиск без учёта регистра по названию курса, email/имени ученика и тексту отзыва; `from`/`to` — даты ГГГГ-ММ-ДД по `createdAt` включительно; `sort` — `createdAt` (по умолчанию) или `rating`, `dir` — `asc`/`desc` (по умолчанию `desc`); `page` 1-based, `limit` 20 по умолчанию, максимум 100. Неверные параметры — `400`. Удаление — существующий `DELETE /api/v1/admin/reviews/{id}` (`204`/`404`), рейтинг курса пересчитывается |
 
 ### Оплата
 
