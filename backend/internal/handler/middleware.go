@@ -211,7 +211,8 @@ func NewRouter(app *App) http.Handler {
 			// T87: принудительная публикация курса супер-админом
 			// (draft|review → published, published идемпотентно).
 			r.Post("/courses/{id}/publish", app.AdminPublishCourse)
-			app.RegisterAdminUsersRoutes(r) // T24: /admin/users — управление пользователями
+			app.RegisterAdminUsersRoutes(r)    // T24: /admin/users — управление пользователями
+			app.RegisterAdminSessionsRoutes(r) // T93: /admin/users/{id}/sessions — сессии и выход
 			app.RegisterAdminConsoleRoutes(r)
 			// T89: глобальный журнал промокодов — GET /promo-codes,
 			// PATCH /promo-codes/{id} (handler/admin_promos.go).

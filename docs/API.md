@@ -230,6 +230,16 @@
 | GET | `/api/v1/admin/promo-codes?courseId=&q=&active=&page=&limit=` | → `200 {items:[AdminPromo],total,page,limit}` — глобальный журнал промокодов (T89); `courseId` — UUID, `q` — подстрока без учёта регистра по коду или названию курса, `active` — `true\|false`; `AdminPromo` = поля `PromoCode` + `courseTitle`/`courseSlug`; неверные фильтры/`page`/`limit` — `400` |
 | PATCH | `/api/v1/admin/promo-codes/{id}` | `{discountPct?,maxUses?,expiresAt?,active?}` — хотя бы одно поле → `200 {"promoCode": AdminPromo}` (T89); `discountPct` 1..90, `maxUses >= usedCount`, `expiresAt` — RFC3339 в будущем или `null` (очистка срока), `active` — bool; неизвестное поле/неверные значения — `400`, нет кода — `404`, курс в архиве — `409` |
 
+> Волна P10 (T93): сессии пользователя и принудительный выход.
+> `GET /api/v1/admin/users/{id}/sessions` (только admin) → `200
+> {"items":[{"id":"…","createdAt":"RFC3339","expiresAt":"RFC3339"}]}` —
+> только не истёкшие сессии, новые первыми, `items` всегда массив (пустой —
+> `[]`). `DELETE /api/v1/admin/users/{id}/sessions` → `204` без тела:
+> удаляет все cookie-сессии пользователя, включая текущую, если
+> администратор завершает свои; после удаления старые cookie перестают
+> проходить `requireAuth` (`401`). Нет пользователя — `404` в обоих методах;
+> без входа — `401`, не-admin — `403`.
+
 ### Оплата
 
 | Метод | Путь | Доступ | Тело / ответ |
