@@ -69,9 +69,12 @@
   font-size: 13px;
   font-weight: 700;
   cursor: pointer;
+  text-decoration: none;
+  text-underline-offset: 3px;
 }
 
-.reviews-reset:hover:not(:disabled) {
+.reviews-reset:hover:not(:disabled),
+.reviews-reset:focus-visible:not(:disabled) {
   color: var(--brand-dark);
   text-decoration: underline;
 }
