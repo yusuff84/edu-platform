@@ -26,6 +26,7 @@ import type {
 import type { PaymentStatus, Role } from '../api/types';
 import { t } from '../i18n/t';
 import type { RuKey } from '../i18n/t';
+import { useSeo } from '../app/useSeo';
 import CsvExportButton, { csvDateStamp, exportTruncated } from '../components/CsvExportButton';
 import '../styles/adminUsers.css';
 
@@ -281,6 +282,7 @@ function UserDetails({ user, onClose }: { user: AdminUserRow; onClose: () => voi
 // ---------- Страница ----------
 
 export default function AdminUsers(): JSX.Element {
+  useSeo(`${t('adminUsers.title')} — ${t('cabinet.adminTitle')} — Edu Platform`);
   const qc = useQueryClient();
 
   // ---- Состояние фильтров и пагинации (локальное, без URL-параметров) ----

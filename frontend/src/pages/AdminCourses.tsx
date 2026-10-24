@@ -32,6 +32,7 @@ import type {
 } from '../api/adminConsole';
 import { t } from '../i18n/t';
 import type { RuKey } from '../i18n/t';
+import { useSeo } from '../app/useSeo';
 import CsvExportButton, { csvDateStamp, exportTruncated } from '../components/CsvExportButton';
 import '../styles/adminConsole.css';
 
@@ -335,6 +336,7 @@ function RejectDialog({
 }
 
 export default function AdminCourses(): JSX.Element {
+  useSeo(`${t('adminCourses.title')} — ${t('cabinet.adminTitle')} — Edu Platform`);
   const qc = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
 
@@ -577,6 +579,9 @@ export default function AdminCourses(): JSX.Element {
     <div className="wrap">
       <div className="page">
         <main className="ac-page">
+          <p className="muted">
+            <Link to="/admin">{t('p10.nav.backToAdmin')}</Link>
+          </p>
           <div className="ac-head">
             <h1>{t('adminCourses.title')}</h1>
             <span className="muted">

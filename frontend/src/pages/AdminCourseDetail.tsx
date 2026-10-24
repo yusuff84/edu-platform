@@ -8,8 +8,21 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useParams } from 'react-router-dom';
-import { ApiError, formatDate, formatMoney, formatPrice } from '../api/client';
-import { deleteReview, listCourseReviews } from '../api/adminConsole';
+import {
+  ApiError,
+  formatDate,
+  formatMoney,
+  formatPrice,
+  moderateCourse,
+} from '../api/client';
+import {
+  archiveAdminCourse,
+  deleteReview,
+  listCourseReviews,
+  publishAdminCourse,
+  unarchiveAdminCourse,
+  unpublishAdminCourse,
+} from '../api/adminConsole';
 import type { AdminReviewRow } from '../api/adminConsole';
 import { listAdminCourseDetail } from '../api/adminCourseDetail';
 import { listAdminEnrollments } from '../api/adminEnrollments';
@@ -19,6 +32,7 @@ import type {
 } from '../api/adminEnrollments';
 import { t } from '../i18n/t';
 import type { RuKey } from '../i18n/t';
+import { useSeo } from '../app/useSeo';
 import '../styles/adminCourseDetail.css';
 
 /** Размер страницы списка записей (потолок контрактного limit — 100). */
@@ -37,6 +51,25 @@ const ENROLLMENT_STATUS_LABEL: Record<AdminEnrollmentStatus, RuKey> = {
   active: 'adminEnrollments.statusActive',
   refunded: 'adminEnrollments.statusRefunded',
   revoked: 'adminEnrollments.statusRevoked',
+};
+
+/** Действие супер-админа над курсом (T88). */
+type CourseAction =
+  | 'approve'
+  | 'reject'
+  | 'forcePublish'
+  | 'unpublish'
+  | 'archive'
+  | 'unarchive';
+
+/** Тост после успешного действия — только существующие ключи словаря. */
+const ACTION_DONE: Record<CourseAction, RuKey> = {
+  approve: 'adminCourses.approvedDone',
+  reject: 'adminCourses.rejectedDone',
+  forcePublish: 'p10.courseAdmin.forcePublishDone',
+  unpublish: 'adminCourses.unpublished',
+  archive: 'adminCourses.archived',
+  unarchive: 'adminCourses.unarchivedDone',
 };
 
 /** Текст ошибки без краха страницы: 403/401/400/сеть/прочее (как в AdminCourses). */
@@ -89,10 +122,12 @@ export default function AdminCourseDetail(): JSX.Element {
   const id = params.id ?? '';
   const ready = id !== '';
 
-  // ---- Уведомления об операциях (удаление отзыва) ----
+  // ---- Уведомления об операциях (действия над курсом и удаление отзыва) ----
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   // Отзыв, у которого открыто inline-подтверждение удаления (НЕ window.confirm).
   const [confirmId, setConfirmId] = useState<string | null>(null);
+  // T88: причина отклонения при модерации прямо со страницы курса.
+  const [moderationText, setModerationText] = useState('');
 
   // ---- Детали курса (T55) ----
   const detail = useQuery({
@@ -102,6 +137,13 @@ export default function AdminCourseDetail(): JSX.Element {
     // 403/404 — не временный сбой: ретраим только сетевые ошибки.
     retry: (failureCount, error) => !(error instanceof ApiError) && failureCount < 2,
   });
+
+  // T88: заголовок вкладки — название курса, пока он загружается/не найден.
+  useSeo(
+    detail.data
+      ? `${detail.data.course.title} — ${t('adminCourses.title')} — Edu Platform`
+      : `${t('p7.adminCourse.info')} — Edu Platform`,
+  );
 
   // ---- Записи на этот курс (T49 API, компактная таблица) ----
   const enrollments = useQuery({
@@ -148,6 +190,75 @@ export default function AdminCourseDetail(): JSX.Element {
     remove.mutate(reviewId);
   }
 
+  // ---- T88: действия супер-админа над курсом ----
+  const courseAction = useMutation({
+    // Формы ответов у действий разные (Course и {course}); результат не нужен —
+    // важны завершение запроса, обновление detail и текст ошибки.
+    mutationFn: (args: { action: CourseAction; comment?: string }): Promise<unknown> => {
+      switch (args.action) {
+        case 'approve':
+          return moderateCourse(id, { decision: 'approve' });
+        case 'reject':
+          return moderateCourse(id, {
+            decision: 'reject',
+            comment: args.comment ?? '',
+          });
+        case 'forcePublish':
+          return publishAdminCourse(id);
+        case 'unpublish':
+          return unpublishAdminCourse(id);
+        case 'archive':
+          return archiveAdminCourse(id);
+        case 'unarchive':
+          return unarchiveAdminCourse(id);
+      }
+    },
+    onSuccess: (_res, args) => {
+      if (args.action === 'approve' || args.action === 'reject') {
+        setModerationText('');
+      }
+      setMsg({ ok: true, text: t(ACTION_DONE[args.action]) });
+      // Статус и комментарий модерации видны в деталях, списке, сводке и
+      // конструкторе (админский режим) — обновляем все связанные кэши.
+      void qc.invalidateQueries({ queryKey: ['admin-course', id] });
+      void qc.invalidateQueries({ queryKey: ['admin-courses'] });
+      void qc.invalidateQueries({ queryKey: ['admin-stats'] });
+      void qc.invalidateQueries({ queryKey: ['review-queue'] });
+      void qc.invalidateQueries({ queryKey: ['teach-course', id] });
+      void qc.invalidateQueries({ queryKey: ['teaching'] });
+    },
+    // 409 (курс не в том статусе) и 404 приходят текстом ApiError.message.
+    onError: (e: unknown) => setMsg({ ok: false, text: errorText(e) }),
+  });
+
+  /** Подтверждение действия: нативный confirm — как в списке курсов T50. */
+  function confirmAction(action: CourseAction, title: string): boolean {
+    if (action === 'approve') return window.confirm(t('adminCourses.confirmApprove'));
+    if (action === 'forcePublish') {
+      return window.confirm(t('p10.courseAdmin.forcePublishConfirm'));
+    }
+    if (action === 'unarchive') return window.confirm(t('teach.confirmUnarchive'));
+    if (action === 'archive') {
+      return window.confirm(`${t('adminCourses.confirmArchive')}? «${title}»`);
+    }
+    if (action === 'unpublish') {
+      return window.confirm(`${t('adminCourses.confirmUnpublish')}? «${title}»`);
+    }
+    // reject не подтверждаем: причина уже введена в поле рядом.
+    return true;
+  }
+
+  function onCourseAction(action: CourseAction, title: string): void {
+    const comment = moderationText.trim();
+    // Без причины backend ответит 400 — ловим на клиенте, кнопка тоже disabled.
+    if (action === 'reject' && !comment) return;
+    if (!confirmAction(action, title)) return;
+    setMsg(null);
+    courseAction.mutate(
+      action === 'reject' ? { action, comment } : { action },
+    );
+  }
+
   // 404 — фактическое отсутствие курса: отдельный экран (p7.adminCourse.notFound).
   const notFound = detail.isError && detail.error instanceof ApiError && detail.error.status === 404;
 
@@ -164,6 +275,8 @@ export default function AdminCourseDetail(): JSX.Element {
         <main className="acd-page">
           <p className="acd-back">
             <Link to="/admin/courses">{t('p7.adminCourse.back')}</Link>
+            {' · '}
+            <Link to="/admin">{t('p10.courseAdmin.backToAdmin')}</Link>
           </p>
           <h1 className="sr-only">{t('p7.adminCourse.info')}</h1>
 
@@ -225,23 +338,161 @@ export default function AdminCourseDetail(): JSX.Element {
                     </div>
                   </div>
                 </div>
-                <div className="acd-head__actions">
+              </header>
+
+              {msg && (
+                <p
+                  role={msg.ok ? 'status' : 'alert'}
+                  className={msg.ok ? 'acd-msg acd-msg--ok' : 'acd-msg acd-msg--error'}
+                >
+                  {msg.text}
+                </p>
+              )}
+
+              {/* T87: комментарий модерации из GET /admin/courses/{id}. */}
+              {data.course.moderationComment && (
+                <p className="acd-moderation-comment" role="note">
+                  <strong>{t('teach.moderationComment')}:</strong>{' '}
+                  {data.course.moderationComment}
+                </p>
+              )}
+
+              {/* ---------- T88: действия супер-админа ---------- */}
+              <section className="acd-block acd-actions" aria-labelledby="acd-actions-title">
+                <h3 id="acd-actions-title" className="acd-block__title">
+                  {t('p10.courseAdmin.actions')}
+                </h3>
+
+                <div className="acd-actions__links">
+                  {data.course.status === 'archived' ? (
+                    // Архивный курс нельзя редактировать даже админу (T87):
+                    // ссылка неактивна, причина — в подсказке ниже.
+                    <span
+                      className="btn btn-sm acd-btn--disabled"
+                      aria-disabled="true"
+                      title={t('p10.courseAdmin.contentLockedArchived')}
+                    >
+                      {t('p10.courseAdmin.edit')}
+                    </span>
+                  ) : (
+                    <Link
+                      className="btn btn-sm btn-primary"
+                      to={`/teach/${encodeURIComponent(data.course.id)}`}
+                      title={t('p10.courseAdmin.editHint')}
+                    >
+                      {t('p10.courseAdmin.edit')}
+                    </Link>
+                  )}
                   <Link
                     className="btn btn-sm"
                     to={`/courses/${encodeURIComponent(data.course.slug)}`}
                     target="_blank"
                     rel="noreferrer"
                   >
-                    {t('p7.adminCourse.openPublic')}
+                    {t('p10.courseAdmin.openPublic')}
                   </Link>
                   <Link
                     className="btn btn-sm"
-                    to={`/teach/${encodeURIComponent(data.course.id)}/students`}
+                    to={`/admin/enrollments?courseId=${encodeURIComponent(data.course.id)}`}
                   >
-                    {t('p7.adminCourse.openStudents')}
+                    {t('p10.courseAdmin.students')}
                   </Link>
                 </div>
-              </header>
+
+                {data.course.status === 'archived' && (
+                  <p className="muted acd-actions__hint">
+                    {t('p10.courseAdmin.contentLockedArchived')}
+                  </p>
+                )}
+
+                {data.course.status === 'review' && (
+                  <div className="acd-actions__group">
+                    <h4>{t('p10.courseAdmin.moderate')}</h4>
+                    <label className="acd-actions__comment" htmlFor="acd-moderation-comment">
+                      <span>{t('p10.courseAdmin.rejectComment')}</span>
+                      <textarea
+                        id="acd-moderation-comment"
+                        className="input"
+                        rows={3}
+                        value={moderationText}
+                        aria-describedby="acd-moderation-comment-hint"
+                        onChange={(e) => setModerationText(e.target.value)}
+                      />
+                    </label>
+                    <p id="acd-moderation-comment-hint" className="muted acd-actions__hint">
+                      {t('admin.rejectCommentRequired')}
+                    </p>
+                    <div className="acd-actions__row">
+                      <button
+                        type="button"
+                        className="btn btn-sm btn-primary"
+                        disabled={courseAction.isPending}
+                        onClick={() => onCourseAction('approve', data.course.title)}
+                      >
+                        {t('p10.courseAdmin.approve')}
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn-sm acd-btn--danger"
+                        disabled={courseAction.isPending || moderationText.trim() === ''}
+                        title={
+                          moderationText.trim() === ''
+                            ? t('admin.rejectCommentRequired')
+                            : undefined
+                        }
+                        onClick={() => onCourseAction('reject', data.course.title)}
+                      >
+                        {t('p10.courseAdmin.reject')}
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                <div className="acd-actions__group">
+                  <div className="acd-actions__row">
+                    {(data.course.status === 'draft' || data.course.status === 'review') && (
+                      <button
+                        type="button"
+                        className="btn btn-sm"
+                        disabled={courseAction.isPending}
+                        onClick={() => onCourseAction('forcePublish', data.course.title)}
+                      >
+                        {t('p10.courseAdmin.forcePublish')}
+                      </button>
+                    )}
+                    {data.course.status === 'published' && (
+                      <button
+                        type="button"
+                        className="btn btn-sm"
+                        disabled={courseAction.isPending}
+                        onClick={() => onCourseAction('unpublish', data.course.title)}
+                      >
+                        {t('adminCourses.unpublish')}
+                      </button>
+                    )}
+                    {data.course.status !== 'archived' && (
+                      <button
+                        type="button"
+                        className="btn btn-sm acd-btn--danger"
+                        disabled={courseAction.isPending}
+                        onClick={() => onCourseAction('archive', data.course.title)}
+                      >
+                        {t('adminCourses.archive')}
+                      </button>
+                    )}
+                    {data.course.status === 'archived' && (
+                      <button
+                        type="button"
+                        className="btn btn-sm"
+                        disabled={courseAction.isPending}
+                        onClick={() => onCourseAction('unarchive', data.course.title)}
+                      >
+                        {t('adminCourses.unarchive')}
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </section>
 
               {/* ---------- Показатели ---------- */}
               <section className="acd-block" aria-labelledby="acd-stats-title">
@@ -391,15 +642,6 @@ export default function AdminCourseDetail(): JSX.Element {
                 <h3 id="acd-reviews-title" className="acd-block__title">
                   {t('p7.adminCourse.reviews')}
                 </h3>
-
-                {msg && (
-                  <p
-                    role={msg.ok ? 'status' : 'alert'}
-                    className={msg.ok ? 'acd-msg acd-msg--ok' : 'acd-msg acd-msg--error'}
-                  >
-                    {msg.text}
-                  </p>
-                )}
 
                 {reviews.isLoading && (
                   <p className="muted" role="status">

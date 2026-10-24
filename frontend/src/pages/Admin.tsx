@@ -616,12 +616,16 @@ export default function Admin(): JSX.Element {
       </nav>
 
       {/* Подразделы супер-админки вынесены на отдельные страницы: у каждой свой
-          файл-владелец, поэтому они разрабатываются независимо друг от друга. */}
-      <nav className="admin-nav admin-nav--pages" aria-label={t('cabinet.adminTitle')}>
-        <Link to="/admin/stats">{t('adminStats.title')}</Link>
+          файл-владелец, поэтому они разрабатываются независимо друг от друга.
+          T88: отзывы/Q&A/промокоды появятся в T84/T86/T90 — ссылки уже здесь. */}
+      <nav className="admin-nav admin-nav--pages" aria-label={t('p10.nav.aria')}>
         <Link to="/admin/users">{t('adminUsers.title')}</Link>
         <Link to="/admin/courses">{t('adminCourses.title')}</Link>
         <Link to="/admin/enrollments">{t('adminEnrollments.title')}</Link>
+        <Link to="/admin/stats">{t('adminStats.title')}</Link>
+        <Link to="/admin/reviews">{t('p10.nav.reviews')}</Link>
+        <Link to="/admin/qa">{t('p10.nav.qa')}</Link>
+        <Link to="/admin/promo-codes">{t('p10.nav.promos')}</Link>
       </nav>
 
       {/* ---------- 1. Очередь модерации ---------- */}
