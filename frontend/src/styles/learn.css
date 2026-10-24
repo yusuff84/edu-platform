@@ -144,6 +144,131 @@
   white-space: pre;
 }
 
+/* Блок кода с подсветкой: одинаковые переносы, отступы и прокрутка
+   в markdown, шаблоне задачи и предпросмотре. Длинная строка не растягивает
+   страницу — горизонтальный скролл остаётся внутри <pre>. */
+.code-block {
+  max-width: 100%;
+  box-sizing: border-box;
+  background: #f4f4f5;
+  border: 1px solid #e5e5e5;
+  border-radius: 8px;
+  padding: 0.75rem;
+  overflow-x: auto;
+}
+
+.code-block:focus-visible {
+  outline: 2px solid #2e7d32;
+  outline-offset: 2px;
+}
+
+.code-block code {
+  display: block;
+  min-width: max-content;
+  font-family: ui-monospace, 'Cascadia Code', Consolas, monospace;
+  font-size: 0.9em;
+  line-height: 1.5;
+  tab-size: 4;
+  white-space: pre;
+}
+
+/* Светлая палитра токенов Prism: различимые цвета с контрастом на #f4f4f5.
+   Классы .token.* ставит prism-react-renderer, своих regex-хайлайтеров нет. */
+.code-highlight .token.comment,
+.code-highlight .token.prolog,
+.code-highlight .token.doctype,
+.code-highlight .token.cdata {
+  color: #6a737d;
+  font-style: italic;
+}
+
+/* Тег — раньше attr-name/attr-value/punctuation: у Prism составные классы
+   вида «token tag attr-name», и цвет конкретного атрибута должен побеждать. */
+.code-highlight .token.tag,
+.code-highlight .token.inserted {
+  color: #116329;
+}
+
+.code-highlight .token.keyword,
+.code-highlight .token.atrule {
+  color: #cf222e;
+}
+
+.code-highlight .token.number,
+.code-highlight .token.boolean,
+.code-highlight .token.constant,
+.code-highlight .token.symbol,
+.code-highlight .token.property,
+.code-highlight .token.attr-name,
+.code-highlight .token.key {
+  color: #0550ae;
+}
+
+.code-highlight .token.string,
+.code-highlight .token.char,
+.code-highlight .token.attr-value,
+.code-highlight .token.color {
+  color: #0a7d33;
+}
+
+/* Пунктуация — после attr-value: кавычки и «=» внутри HTML-тега остаются
+   серыми, а не зелёными, как значение атрибута. */
+.code-highlight .token.punctuation,
+.code-highlight .token.namespace {
+  color: #57606a;
+}
+
+.code-highlight .token.function,
+.code-highlight .token.function-variable,
+.code-highlight .token.class-name,
+.code-highlight .token.decorator,
+.code-highlight .token.annotation {
+  color: #8250df;
+}
+
+.code-highlight .token.selector,
+.code-highlight .token.title {
+  color: #6639ba;
+}
+
+.code-highlight .token.builtin,
+.code-highlight .token.variable,
+.code-highlight .token.entity {
+  color: #953800;
+}
+
+.code-highlight .token.operator,
+.code-highlight .token.url,
+.code-highlight .token.literal-property {
+  color: #0550ae;
+}
+
+.code-highlight .token.regex {
+  color: #0a3069;
+}
+
+.code-highlight .token.deleted {
+  color: #82071e;
+}
+
+.code-highlight .token.important {
+  color: #cf222e;
+  font-weight: 700;
+}
+
+.code-highlight .token.bold {
+  font-weight: 700;
+}
+
+.code-highlight .token.italic {
+  font-style: italic;
+}
+
+.code-highlight .token.code,
+.code-highlight .token.blockquote {
+  color: #6a737d;
+}
+
 .md-quote {
   border-left: 3px solid #e5e5e5;
   margin: 0.5rem 0;
@@ -190,6 +315,27 @@
   font-size: 0.9em;
   line-height: 1.4;
   tab-size: 4;
+}
+
+/* Редактор кода (react-simple-code-editor): контейнер в духе прежнего
+   .code-input — светлый фон, рамка и скругление. Внутренние textarea/pre
+   наследуют моноширинный шрифт; длинные строки переносятся внутри поля,
+   поэтому страница не получает горизонтальный скролл. */
+.code-editor-input {
+  color: #1f2328;
+  background: #f4f4f5;
+  border: 1px solid #e5e5e5;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.code-editor-input textarea {
+  outline: none;
+}
+
+.code-editor-input textarea:focus-visible {
+  outline: 2px solid #2e7d32;
+  outline-offset: -2px;
 }
 
 .code-toolbar {

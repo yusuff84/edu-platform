@@ -9,9 +9,11 @@
 
 import { useId, useState } from 'react';
 import type { ReactNode } from 'react';
+import Editor from 'react-simple-code-editor';
 import type { CompleteLessonInput, Lesson } from '../api/client';
 import { formatDate } from '../api/client';
 import { t } from '../i18n/t';
+import CodeBlock, { highlightCode } from './CodeBlock';
 import '../styles/learn.css';
 
 interface Props {
@@ -28,7 +30,7 @@ type MdBlock =
   | { type: 'p'; lines: string[] }
   | { type: 'ul'; items: string[] }
   | { type: 'ol'; items: string[] }
-  | { type: 'code'; text: string }
+  | { type: 'code'; text: string; language?: string }
   | { type: 'quote'; lines: string[] }
   | { type: 'h'; level: number; text: string };
 
@@ -53,6 +55,9 @@ function parseBlocks(src: string): MdBlock[] {
     }
     if (RE_FENCE.test(line)) {
       // Ограждённый блок кода: собираем до закрывающих «```» (или до конца).
+      // Язык берём из info-string после ```: ```python, ```js и т.п.
+      const info = line.trim().slice(3).trim();
+      const language = info ? info.split(/\s+/)[0] : undefined;
       const text: string[] = [];
       i++;
       while (i < lines.length && !RE_FENCE.test(lines[i])) {
@@ -60,7 +65,7 @@ function parseBlocks(src: string): MdBlock[] {
         i++;
       }
       i++; // пропускаем закрывающую «```»
-      blocks.push({ type: 'code', text: text.join('\n') });
+      blocks.push({ type: 'code', text: text.join('\n'), language });
       continue;
     }
     const heading = RE_HEADING.exec(line);
@@ -148,11 +153,7 @@ export function Markdown({ source }: { source: string }): JSX.Element {
             return <h6 key={key}>{inline}</h6>;
           }
           case 'code':
-            return (
-              <pre key={key} className="md-pre">
-                <code>{b.text}</code>
-              </pre>
-            );
+            return <CodeBlock key={key} code={b.text} language={b.language} className="md-pre" />;
           case 'quote':
             return (
               <blockquote key={key} className="md-quote">
@@ -285,15 +286,21 @@ export function CodeEditor({
       <label className="sr-only" htmlFor={inputId}>
         {t('lesson.code')}
       </label>
-      <textarea
-        id={inputId}
+      {/* Редактор с подсветкой: controlled value, табы и отступы, без innerHTML. */}
+      <Editor
         value={code}
-        onChange={(e) => setCode(e.target.value)}
-        placeholder={t('lesson.codePlaceholder')}
-        rows={12}
-        spellCheck={false}
+        onValueChange={setCode}
+        highlight={(value) => highlightCode(value, language)}
+        padding={12}
+        tabSize={4}
+        insertSpaces
+        textareaId={inputId}
         disabled={disabled}
-        className="code-input"
+        placeholder={t('lesson.codePlaceholder')}
+        className="code-input code-editor-input code-highlight"
+        textareaClassName="code-editor-textarea"
+        preClassName="code-editor-pre"
+        style={{ minHeight: '16rem' }}
       />
       <div className="code-toolbar">
         <button
@@ -394,9 +401,7 @@ export default function LessonView({ lesson, onComplete, completing }: Props): J
         {lesson.codeTask?.template && (
           <div className="code-template">
             <h4>{t('lesson.codeTemplate')}</h4>
-            <pre>
-              <code>{lesson.codeTask.template}</code>
-            </pre>
+            <CodeBlock code={lesson.codeTask.template} language={lesson.codeTask.language} />
           </div>
         )}
         <CodeEditor
