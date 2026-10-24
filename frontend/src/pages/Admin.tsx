@@ -622,6 +622,7 @@ export default function Admin(): JSX.Element {
         <Link to="/admin/users">{t('adminUsers.title')}</Link>
         <Link to="/admin/courses">{t('adminCourses.title')}</Link>
         <Link to="/admin/enrollments">{t('adminEnrollments.title')}</Link>
+        <Link to="/admin/promo-codes">{t('p10.nav.promos')}</Link>
       </nav>
 
       {/* ---------- 1. Очередь модерации ---------- */}
