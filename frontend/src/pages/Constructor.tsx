@@ -49,6 +49,7 @@ import {
   formatDate,
   formatPrice,
   listPromoCodes,
+  me,
   myTeaching,
   submitCourse,
   updateLesson,
@@ -722,9 +723,16 @@ export default function Constructor(): JSX.Element {
     retry: false,
   });
 
+  // T88: режим супер-админа. Для teacher всё остаётся как было (editable —
+  // только черновик); admin правит содержимое любого курса, кроме архива.
+  const meQuery = useQuery({ queryKey: ['me'], queryFn: me, retry: false });
+  const isAdmin = meQuery.data?.role === 'admin';
+
   const course = detailQuery.data?.course;
   const modules = detailQuery.data?.modules ?? [];
-  const editable = course?.status === 'draft';
+  const editable = course
+    ? course.status === 'draft' || (isAdmin && course.status !== 'archived')
+    : false;
   // T36: в архиве карточка заморожена — PATCH отвечает 409 (контракт T33),
   // поэтому форму правки заранее не показываем, а выводим подсказку.
   const cardFrozen = course?.status === 'archived';
@@ -1641,6 +1649,21 @@ export default function Constructor(): JSX.Element {
                 {t('teach.status')}: {STATUS_LABELS[course.status]} · {formatPrice(course.priceCents)}
               </p>
 
+              {/* T88: спокойный баннер режима супер-админа. Учитель его не видит,
+                  бизнес-логика teacher не меняется. В архиве доступ к правкам
+                  закрыт и для админа (T87) — показываем причину. */}
+              {isAdmin && (
+                <section className="teach-banner" role="note">
+                  <h2>{t('p10.courseAdmin.adminMode')}</h2>
+                  <p>{t('p10.courseAdmin.adminModeHint')}</p>
+                  <p className="teach-note">
+                    {course.status === 'archived'
+                      ? t('p10.courseAdmin.contentLockedArchived')
+                      : t('p10.courseAdmin.contentEditable')}
+                  </p>
+                </section>
+              )}
+
               {/* T28: сводка структуры — по уже загруженному CourseDetail. */}
               <p className="ce-structure">
                 <strong>{t('teach.structure')}:</strong> {t('course.modulesCount')}:{' '}
@@ -2094,8 +2117,10 @@ export default function Constructor(): JSX.Element {
               )}
 
               {/* Отправка на модерацию — только для черновика. Рядом — чеклист
-                  готовности (T56): пока не закрыты все пункты, кнопка выключена. */}
-              {editable ? (
+                  готовности (T56): пока не закрыты все пункты, кнопка выключена.
+                  T88: admin правит содержимое review/published, но отправка на
+                  модерацию остаётся действием черновика (teacher не затронут). */}
+              {course.status === 'draft' ? (
                 <div className="teach-section panel">
                   <div className="ce-checklist">
                     <p className="ce-checklist-title">
@@ -2134,9 +2159,9 @@ export default function Constructor(): JSX.Element {
                   </div>
                   <p className="teach-note">{t('teach.confirmSubmit')}</p>
                 </div>
-              ) : (
+              ) : !editable ? (
                 <p className="teach-note">{MSG_CONTENT_LOCKED}</p>
-              )}
+              ) : null}
 
               {/* Создание модулей и уроков — только в черновике. */}
               {editable && (
@@ -2321,13 +2346,13 @@ export default function Constructor(): JSX.Element {
                       )}
 
                       {lesson.kind === 'quiz' && (
-                        <div id="lesson-quiz" className="teach-focusable" tabIndex={-1}>
+                        <div id="lesson-quiz" className="teach-focusable ce-quiz" tabIndex={-1}>
                           <p className="teach-counter">Вопросов: {lesson.questions.length}</p>
                           {lessonErrors['lesson-quiz'] && (
                             <p className="error">{lessonErrors['lesson-quiz']}</p>
                           )}
                           {lesson.questions.map((q, qi) => (
-                            <div key={qi} className="teach-q-box">
+                            <div key={qi} className="teach-q-box ce-q-box">
                               <div className="ce-q-head">
                                 <label htmlFor={`q-${qi}-text`}>
                                   {t('teach.questionText')} {qi + 1}
@@ -2336,6 +2361,7 @@ export default function Constructor(): JSX.Element {
                                 <span className="ce-reorder">
                                   <button
                                     type="button"
+                                    className="ce-btn-sm"
                                     onClick={() => moveQuestion(qi, -1)}
                                     disabled={qi === 0}
                                   >
@@ -2343,6 +2369,7 @@ export default function Constructor(): JSX.Element {
                                   </button>
                                   <button
                                     type="button"
+                                    className="ce-btn-sm"
                                     onClick={() => moveQuestion(qi, 1)}
                                     disabled={qi === lesson.questions.length - 1}
                                   >
@@ -2352,6 +2379,7 @@ export default function Constructor(): JSX.Element {
                               </div>
                               <input
                                 id={`q-${qi}-text`}
+                                className="input"
                                 value={q.text}
                                 onChange={(e) => updateQuestion(qi, { text: e.target.value })}
                               />
@@ -2381,31 +2409,44 @@ export default function Constructor(): JSX.Element {
                                     </label>
                                     <input
                                       id={`q-${qi}-opt-${oi}`}
+                                      className="input"
                                       value={opt}
                                       onChange={(e) => setOption(qi, oi, e.target.value)}
                                     />
                                     {/* T28: перестановка вариантов с пересчётом
                                         индекса correct — ключ следует за вариантом. */}
-                                    <button
-                                      type="button"
-                                      onClick={() => moveOption(qi, oi, -1)}
-                                      disabled={oi === 0}
-                                    >
-                                      {t('teach.moveUp')}
-                                    </button>
-                                    <button
-                                      type="button"
-                                      onClick={() => moveOption(qi, oi, 1)}
-                                      disabled={oi === q.options.length - 1}
-                                    >
-                                      {t('teach.moveDown')}
-                                    </button>
-                                    <button type="button" onClick={() => removeOption(qi, oi)}>
-                                      {t('common.delete')}
-                                    </button>
+                                    <span className="ce-option-actions">
+                                      <button
+                                        type="button"
+                                        className="ce-btn-sm"
+                                        onClick={() => moveOption(qi, oi, -1)}
+                                        disabled={oi === 0}
+                                      >
+                                        {t('teach.moveUp')}
+                                      </button>
+                                      <button
+                                        type="button"
+                                        className="ce-btn-sm"
+                                        onClick={() => moveOption(qi, oi, 1)}
+                                        disabled={oi === q.options.length - 1}
+                                      >
+                                        {t('teach.moveDown')}
+                                      </button>
+                                      <button
+                                        type="button"
+                                        className="ce-btn-sm ce-btn-danger"
+                                        onClick={() => removeOption(qi, oi)}
+                                      >
+                                        {t('common.delete')}
+                                      </button>
+                                    </span>
                                   </div>
                                 ))}
-                                <button type="button" onClick={() => addOption(qi)}>
+                                <button
+                                  type="button"
+                                  className="ce-add"
+                                  onClick={() => addOption(qi)}
+                                >
                                   {t('teach.addOption')}
                                 </button>
                                 {lessonErrors[`q-${qi}-options`] && (
@@ -2416,27 +2457,33 @@ export default function Constructor(): JSX.Element {
                               <label htmlFor={`q-${qi}-explanation`}>{t('lesson.explanation')}</label>
                               <textarea
                                 id={`q-${qi}-explanation`}
+                                className="input"
                                 rows={2}
                                 value={q.explanation}
                                 onChange={(e) => updateQuestion(qi, { explanation: e.target.value })}
                               />
 
-                              <button type="button" onClick={() => removeQuestion(qi)}>
+                              <button
+                                type="button"
+                                className="ce-btn-sm ce-btn-danger ce-q-remove"
+                                onClick={() => removeQuestion(qi)}
+                              >
                                 {t('teach.deleteQuestion')}
                               </button>
                             </div>
                           ))}
-                          <button type="button" onClick={addQuestion}>
+                          <button type="button" className="ce-add" onClick={addQuestion}>
                             {t('teach.addQuestion')}
                           </button>
                         </div>
                       )}
 
                       {lesson.kind === 'code' && (
-                        <div>
+                        <div className="ce-code">
                           <label htmlFor="lesson-language">{t('lesson.codeLanguage')}</label>
                           <select
                             id="lesson-language"
+                            className="select"
                             value={lesson.language}
                             onChange={(e) => setLessonField('language', e.target.value as Language)}
                           >
@@ -2450,19 +2497,55 @@ export default function Constructor(): JSX.Element {
                           <label htmlFor="lesson-template">{t('lesson.codeTemplate')}</label>
                           <textarea
                             id="lesson-template"
+                            className="input"
                             rows={4}
                             value={lesson.template}
                             onChange={(e) => setLessonField('template', e.target.value)}
                           />
 
-                          {/* T62: класс для типографики заголовка «Тесты» (ce-tests-box). */}
+                          {/* T62: класс для типографики заголовка «Тесты» (ce-tests-box).
+                              T91: карточка теста — заголовок и компактный ряд действий. */}
                           <div id="code-tests" className="teach-focusable ce-tests-box" tabIndex={-1}>
                             <h3>Тесты</h3>
                             {lesson.tests.map((x, ti) => (
-                              <div key={ti} className="teach-test-box">
+                              <div key={ti} className="teach-test-box ce-test-box">
+                                <div className="ce-test-head">
+                                  <span className="ce-test-title">Тест {ti + 1}</span>
+                                  <span className="ce-reorder ce-test-actions">
+                                    {/* T28: порядок тестов = порядок проверки; ссылок
+                                        на индексы в codeTask нет — обмен безопасен. */}
+                                    <button
+                                      type="button"
+                                      className="ce-btn-sm"
+                                      onClick={() => moveTest(ti, -1)}
+                                      disabled={ti === 0}
+                                    >
+                                      {t('teach.moveUp')}
+                                    </button>
+                                    <button
+                                      type="button"
+                                      className="ce-btn-sm"
+                                      onClick={() => moveTest(ti, 1)}
+                                      disabled={ti === lesson.tests.length - 1}
+                                    >
+                                      {t('teach.moveDown')}
+                                    </button>
+                                    {lesson.tests.length > 1 && (
+                                      <button
+                                        type="button"
+                                        className="ce-btn-sm ce-btn-danger"
+                                        onClick={() => removeTest(ti)}
+                                      >
+                                        {t('common.delete')}
+                                      </button>
+                                    )}
+                                  </span>
+                                </div>
+
                                 <label htmlFor={`test-${ti}-name`}>{t('teach.testName')}</label>
                                 <input
                                   id={`test-${ti}-name`}
+                                  className="input"
                                   value={x.name}
                                   onChange={(e) => updateTest(ti, { name: e.target.value })}
                                 />
@@ -2473,6 +2556,7 @@ export default function Constructor(): JSX.Element {
                                 <label htmlFor={`test-${ti}-input`}>{t('teach.testInput')}</label>
                                 <input
                                   id={`test-${ti}-input`}
+                                  className="input"
                                   value={x.input}
                                   onChange={(e) => updateTest(ti, { input: e.target.value })}
                                 />
@@ -2482,6 +2566,7 @@ export default function Constructor(): JSX.Element {
                                 </label>
                                 <input
                                   id={`test-${ti}-expected`}
+                                  className="input"
                                   value={x.expected}
                                   onChange={(e) => updateTest(ti, { expected: e.target.value })}
                                 />
@@ -2497,36 +2582,12 @@ export default function Constructor(): JSX.Element {
                                   />
                                   {t('teach.testHidden')}
                                 </label>
-
-                                <span className="ce-reorder">
-                                  {/* T28: порядок тестов = порядок проверки; ссылок
-                                      на индексы в codeTask нет — обмен безопасен. */}
-                                  <button
-                                    type="button"
-                                    onClick={() => moveTest(ti, -1)}
-                                    disabled={ti === 0}
-                                  >
-                                    {t('teach.moveUp')}
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => moveTest(ti, 1)}
-                                    disabled={ti === lesson.tests.length - 1}
-                                  >
-                                    {t('teach.moveDown')}
-                                  </button>
-                                  {lesson.tests.length > 1 && (
-                                    <button type="button" onClick={() => removeTest(ti)}>
-                                      {t('common.delete')}
-                                    </button>
-                                  )}
-                                </span>
                               </div>
                             ))}
                             {lessonErrors['code-tests'] && (
                               <p className="error">{lessonErrors['code-tests']}</p>
                             )}
-                            <button type="button" onClick={addTest}>
+                            <button type="button" className="ce-add" onClick={addTest}>
                               Добавить тест
                             </button>
                           </div>

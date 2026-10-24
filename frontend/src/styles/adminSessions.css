@@ -1,0 +1,113 @@
+/* T94: активные сессии в карточке пользователя (/admin/users).
+   Импортируется из pages/AdminUsers.tsx после adminUsers.css; общие классы
+   .au-details-section, .au-details-list, .au-details-item-*, .btn и
+   .au-btn--danger берутся оттуда. Здесь — только раскладка секции и
+   адаптивность, без правок styles.css и admin.css. */
+
+.au-sessions {
+  padding-top: 0.85rem;
+  border-top: 1px solid #eee;
+}
+
+/* Секция получает фокус из действия «Принудительный выход» в строке. */
+.au-sessions:focus {
+  outline: none;
+}
+
+.au-sessions-hint {
+  margin: 0 0 0.5rem;
+  font-size: 0.85rem;
+}
+
+.au-sessions-updating {
+  margin: 0 0 0.35rem;
+  font-size: 0.85rem;
+}
+
+.au-sessions-count {
+  margin: 0 0 0.4rem;
+  font-size: 0.85rem;
+}
+
+.au-sessions-list {
+  margin-bottom: 0.5rem;
+}
+
+.au-sessions-list li {
+  align-items: flex-start;
+}
+
+/* ID сессии — моноширинный и на всю ширину строки: длинный идентификатор
+   переносится, а даты остаются читаемыми отдельными «чипами». */
+.au-sessions-id {
+  flex-basis: 100%;
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 0.8rem;
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+
+.au-sessions-list .au-details-item-meta {
+  margin-left: 0;
+  padding: 0.05rem 0.45rem;
+  border-radius: 999px;
+  background: #f4f6f8;
+  font-size: 0.8rem;
+  white-space: normal;
+}
+
+.au-sessions-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.6rem;
+}
+
+.au-sessions-actions .btn {
+  margin-top: 0;
+}
+
+.au-sessions-actions .au-confirm {
+  flex: 1 1 14rem;
+  max-width: none;
+}
+
+.au-sessions-error {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0.4rem 0 0;
+}
+
+.au-sessions-error p {
+  margin: 0;
+}
+
+.au-sessions-error .btn {
+  margin-top: 0;
+}
+
+.au-sessions-notice {
+  margin: 0.5rem 0 0;
+}
+
+@media (max-width: 720px) {
+  .au-sessions-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .au-sessions-actions .btn {
+    width: 100%;
+  }
+
+  .au-sessions-actions .au-confirm {
+    flex-basis: auto;
+  }
+
+  .au-sessions-list .au-details-item-meta {
+    margin-left: 0;
+  }
+}

@@ -22,6 +22,7 @@ import type {
 import { listAdminCourses } from '../api/adminConsole';
 import { t } from '../i18n/t';
 import type { RuKey } from '../i18n/t';
+import { useSeo } from '../app/useSeo';
 // T59: общий компонент выгрузки CSV (T40) — используется как есть,
 // по текущему props API (filename/headers/loadRows), без правок компонента.
 import CsvExportButton, { csvDateStamp, exportTruncated } from '../components/CsvExportButton';
@@ -120,6 +121,7 @@ function patchCachedStatus(
 // ---------- Страница ----------
 
 export default function AdminEnrollments(): JSX.Element {
+  useSeo(`${t('adminEnrollments.title')} — ${t('cabinet.adminTitle')} — Edu Platform`);
   const qc = useQueryClient();
 
   // ---- Состояние фильтров и пагинации (локальное, без URL-параметров) ----

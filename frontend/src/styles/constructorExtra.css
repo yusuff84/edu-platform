@@ -152,7 +152,9 @@
 
 /* ---------- Предпросмотр: квиз ---------- */
 
-.ce-quiz {
+/* T91: превью-классы .ce-quiz* скоупятся панелью предпросмотра: в форме
+   редактора .ce-quiz — маркер блока вопроса, у него своя сетка полей. */
+.ce-preview-pane .ce-quiz {
   list-style: none;
   padding: 0;
   margin: 0.5rem 0 0;
@@ -160,19 +162,19 @@
   gap: 0.75rem;
 }
 
-.ce-quiz-item {
+.ce-preview-pane .ce-quiz-item {
   border: 1px solid #e5e5e5;
   border-radius: 6px;
   padding: 0.5rem 0.65rem;
   background: #fff;
 }
 
-.ce-quiz-text {
+.ce-preview-pane .ce-quiz-text {
   margin: 0 0 0.35rem;
   font-weight: 600;
 }
 
-.ce-quiz-options {
+.ce-preview-pane .ce-quiz-options {
   list-style: none;
   padding: 0;
   margin: 0;
@@ -180,7 +182,7 @@
   gap: 0.2rem;
 }
 
-.ce-quiz-option {
+.ce-preview-pane .ce-quiz-option {
   display: flex;
   align-items: baseline;
   gap: 0.4rem;
@@ -189,16 +191,16 @@
 }
 
 /* Правильный вариант: подсветка + бейдж «Верный ответ». */
-.ce-quiz-option-correct {
+.ce-preview-pane .ce-quiz-option-correct {
   background: #e3f4e4;
   border: 1px solid #b8dfba;
 }
 
-.ce-quiz-radio {
+.ce-preview-pane .ce-quiz-radio {
   font-size: 0.8rem;
 }
 
-.ce-quiz-option-text {
+.ce-preview-pane .ce-quiz-option-text {
   flex: 1 1 auto;
 }
 
@@ -223,7 +225,7 @@
   white-space: nowrap;
 }
 
-.ce-quiz-explanation {
+.ce-preview-pane .ce-quiz-explanation {
   margin: 0.35rem 0 0;
   font-size: 0.875rem;
   color: #555;
@@ -295,25 +297,62 @@
 .ce-reorder {
   display: inline-flex;
   align-items: center;
-  gap: 0.3rem;
+  gap: 6px;
+  flex: 0 0 auto;
   flex-wrap: wrap;
 }
 
-/* Кнопки перестановки в строке варианта ответа: при нехватке ширины переносим. */
-.ce-option-row {
-  flex-wrap: wrap;
+/* T91: компактный ряд действий справа от поля варианта (до этого кнопки
+   были прямыми grid-элементами и распирали строку). */
+.ce-option-actions {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  flex-wrap: nowrap;
+  justify-self: end;
 }
 
+/* T91: шапка вопроса — подпись слева, компактные «выше/ниже» справа. */
 .ce-q-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 0.5rem;
+  gap: 8px;
   flex-wrap: wrap;
+  margin: 0 0 8px;
+  padding: 0 0 8px;
+  border-bottom: 1px solid var(--line-soft);
 }
 
 .ce-q-head label {
   margin: 0;
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+/* T91: карточка теста — заголовок «Тест N» и компактные действия. */
+.ce-test-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 0 0 8px;
+  padding: 0 0 8px;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.ce-test-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.ce-test-actions {
+  margin-left: auto;
 }
 
 /* ---------- Перенос урока в другой модуль ---------- */

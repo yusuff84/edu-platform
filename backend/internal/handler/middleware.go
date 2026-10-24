@@ -208,8 +208,22 @@ func NewRouter(app *App) http.Handler {
 			r.Post("/invites/{id}/revoke", app.AdminRevokeInvite)
 			r.Get("/courses/review", app.AdminReviewQueue)
 			r.Post("/courses/{id}/moderate", app.AdminModerateCourse)
-			app.RegisterAdminUsersRoutes(r) // T24: /admin/users — управление пользователями
+			// T87: принудительная публикация курса супер-админом
+			// (draft|review → published, published идемпотентно).
+			r.Post("/courses/{id}/publish", app.AdminPublishCourse)
+			app.RegisterAdminUsersRoutes(r)    // T24: /admin/users — управление пользователями
+			app.RegisterAdminSessionsRoutes(r) // T93: /admin/users/{id}/sessions — сессии и выход
 			app.RegisterAdminConsoleRoutes(r)
+			// T89: глобальный журнал промокодов — GET /promo-codes,
+			// PATCH /promo-codes/{id} (handler/admin_promos.go).
+			app.RegisterAdminPromosRoutes(r)
+			// T85: глобальная модерация Q&A — GET /admin/questions
+			// (handler/admin_questions.go). Групповые requireAuth/
+			// requireRole(admin) уже навешены выше.
+			app.RegisterAdminQuestionsRoutes(r)
+			// T83: глобальный список отзывов GET /admin/reviews (удаление —
+			// существующий DELETE /admin/reviews/{id} из admin_console.go).
+			app.RegisterAdminReviewsRoutes(r)
 			// T55: детали курса GET /admin/courses/{id} — программа, статистика
 			// и карточка «одним экраном» (handler/admin_course_detail.go).
 			// Регистрируется после очереди модерации: статический сегмент

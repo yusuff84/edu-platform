@@ -4,7 +4,8 @@ package handler
 //
 // Ответ строго по замороженному разделу T55 контракта (Task/00-api-contract.md):
 //   course  — форма элемента GET /admin/courses (T25, adminCourseItem из
-//             admin_console.go) плюс coverPath (T54; null, если обложки нет);
+//             admin_console.go) плюс coverPath (T54; null, если обложки нет)
+//             и аддитивное moderationComment (T87; пустая строка, если нет);
 //   modules — программа курса: модули по position, уроки внутри каждого
 //             модуля по position; урок — ТОЛЬКО метаданные id/title/kind/position:
 //             тел уроков (bodyMd, quiz, codeTask) в ответе нет;
@@ -34,6 +35,10 @@ import (
 type adminCourseDetailCourse struct {
 	adminCourseItem
 	CoverPath *string `json:"coverPath"`
+	// ModerationComment — аддитивное поле T87: всегда строка, пустая если
+	// комментария нет (в отличие от repo.Course с omitempty, фронту нужен
+	// стабильный ключ).
+	ModerationComment string `json:"moderationComment"`
 }
 
 // adminCourseDetailLesson — урок программы: только метаданные (T55);
@@ -101,7 +106,8 @@ func (a *App) AdminCourseDetail(w http.ResponseWriter, r *http.Request) {
 			LessonsCount: d.Counts.Lessons,
 			StudentsCount: d.Counts.Students, // активные записи — как в списке T25
 		},
-		CoverPath: d.Course.CoverPath,
+		CoverPath:         d.Course.CoverPath,
+		ModerationComment: d.Course.ModerationComment,
 	}
 
 	// Программа: модули уже отсортированы по position хранилищем; слайсы —

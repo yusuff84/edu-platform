@@ -1,0 +1,373 @@
+/* Стили раздела «Отзывы» супер-админки (T84).
+   Импортируются только из pages/AdminReviews.tsx; общий styles.css и
+   admin.css не изменяются — здесь только селекторы с префиксом .ar-.
+   Базовые классы (.panel, .muted, .error, .btn, .btn-sm, .input, .sr-only)
+   — из styles.css. Вёрстка таблицы повторяет вылеченные таблицы
+   пользователей/записей (T52/T62), включая карточный режим на узком экране. */
+
+main.ar-admin {
+  max-width: 1200px;
+}
+
+.ar-back {
+  margin: 0 0 0.25rem;
+  font-size: 0.9rem;
+}
+
+.ar-subtitle {
+  margin: 0 0 1rem;
+}
+
+/* ---------- Фильтры ---------- */
+
+.ar-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.ar-field {
+  display: grid;
+  gap: 0.25rem;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.ar-field > span,
+.ar-field > legend {
+  padding: 0;
+}
+
+.ar-field--search {
+  flex: 1 1 16rem;
+}
+
+.ar-field .input {
+  margin-top: 0;
+}
+
+.ar-select {
+  min-width: 9rem;
+  max-width: 16rem;
+}
+
+.ar-select--rating {
+  min-width: 7rem;
+}
+
+.ar-date {
+  min-width: 9.5rem;
+}
+
+/* Поле и направление сортировки стоят в одной группе. */
+.ar-field--sort {
+  min-width: 0;
+}
+
+.ar-sort-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.ar-filter-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.ar-filters .btn,
+.ar-filter-actions .btn {
+  margin-top: 0;
+}
+
+/* ---------- Итог и уведомления ---------- */
+
+.ar-total {
+  margin: 0 0 0.5rem;
+}
+
+.ar-notice {
+  margin: 0 0 0.75rem;
+  padding: 0.4rem 0.75rem;
+  background: #e3f5e6;
+  color: #1e7d32;
+  border-radius: 8px;
+  font-weight: 600;
+}
+
+.ar-error {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+  margin: 0.5rem 0;
+}
+
+.ar-error p {
+  margin: 0;
+}
+
+.ar-error button {
+  margin-top: 0;
+}
+
+.ar-action-error {
+  margin: 0 0 0.75rem;
+}
+
+/* ---------- Таблица ---------- */
+
+.ar-table-wrap {
+  overflow-x: auto;
+  border: 1px solid #e5e5e5;
+  border-radius: 8px;
+  -webkit-overflow-scrolling: touch;
+}
+
+.ar-table {
+  width: 100%;
+  border-collapse: collapse;
+  /* Минимум, при котором таблица ещё читается целиком; на узком экране
+     ниже 760px строки превращаются в карточки. */
+  min-width: 960px;
+}
+
+.ar-table th,
+.ar-table td {
+  padding: 0.5rem 0.6rem;
+  border-bottom: 1px solid #eee;
+  text-align: left;
+  white-space: nowrap;
+  font-size: 0.9rem;
+  vertical-align: top;
+}
+
+.ar-table th {
+  background: #f8f9fa;
+  color: #444;
+}
+
+.ar-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.ar-table tbody tr:hover {
+  background: #fafbfc;
+}
+
+/* Строка в процессе удаления — приглушена, кнопка disabled. */
+.ar-table tbody tr.ar-row--busy {
+  opacity: 0.65;
+}
+
+/* ---------- Ячейки таблицы ---------- */
+
+/* Курс: длинное название переносится, а не растягивает таблицу. */
+.ar-td-course {
+  white-space: normal;
+  min-width: 11rem;
+  max-width: 17rem;
+  overflow-wrap: anywhere;
+}
+
+.ar-td-course a {
+  font-weight: 600;
+}
+
+/* Ученик: имя + email — каждая в одну строку с многоточием (T62). */
+.ar-td-student {
+  white-space: normal;
+  min-width: 11rem;
+  max-width: 15rem;
+}
+
+.ar-student {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0.1rem;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.ar-student__name {
+  display: block;
+  min-width: 0;
+  max-width: 14rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ar-student__email {
+  display: block;
+  min-width: 0;
+  max-width: 14rem;
+  color: #666;
+  font-size: 0.85rem;
+  font-weight: 400;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Оценка: звёзды + числом (число — для быстрого чтения). */
+.ar-rating {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.35rem;
+  white-space: nowrap;
+}
+
+.ar-stars {
+  color: #d68b00;
+  font-size: 0.95rem;
+  letter-spacing: 0.05em;
+}
+
+.ar-rating-num {
+  color: #666;
+  font-size: 0.85rem;
+}
+
+/* Текст отзыва: до 4 строк с многоточием, полный текст — в title. */
+.ar-td-body {
+  white-space: normal;
+  min-width: 16rem;
+  max-width: 30rem;
+  overflow-wrap: anywhere;
+}
+
+.ar-td-body > span {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+  line-clamp: 4;
+  overflow: hidden;
+}
+
+/* Действия: компактная колонка, кнопка целиком. */
+.ar-td-actions {
+  white-space: normal;
+  min-width: 10rem;
+}
+
+.ar-td-actions .btn {
+  margin-top: 0;
+}
+
+.ar-btn--danger {
+  background: #b00020;
+  border: 1px solid #b00020;
+  color: #fff;
+}
+
+.ar-btn--danger:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+/* ---------- Пагинация ---------- */
+
+.ar-pager {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+
+.ar-pager button {
+  margin-top: 0;
+}
+
+.ar-pager button:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+/* ---------- Узкий экран: строки таблицы превращаются в карточки ---------- */
+
+@media (max-width: 760px) {
+  .ar-table {
+    min-width: 0;
+  }
+
+  .ar-table thead {
+    display: none;
+  }
+
+  .ar-table,
+  .ar-table tbody,
+  .ar-table tr,
+  .ar-table td {
+    display: block;
+    width: 100%;
+  }
+
+  .ar-table tr {
+    padding: 0.35rem 0;
+    border-bottom: 6px solid #f7f7f8;
+  }
+
+  .ar-table tr:last-child {
+    border-bottom: none;
+  }
+
+  .ar-table td {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 0.75rem;
+    white-space: normal;
+    border-bottom: none;
+    padding: 0.3rem 0.6rem;
+  }
+
+  .ar-table td::before {
+    content: attr(data-label);
+    flex: 0 0 auto;
+    font-weight: 600;
+    color: #666;
+  }
+
+  .ar-td-course,
+  .ar-td-student,
+  .ar-td-body,
+  .ar-td-actions {
+    min-width: 0;
+    max-width: none;
+  }
+
+  .ar-td-course a,
+  .ar-td-body > span {
+    text-align: right;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+
+  .ar-td-body > span {
+    display: block;
+    overflow: visible;
+  }
+
+  .ar-student {
+    justify-items: end;
+    text-align: right;
+  }
+
+  .ar-student__name,
+  .ar-student__email {
+    max-width: none;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+    overflow: visible;
+  }
+}

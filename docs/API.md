@@ -196,6 +196,20 @@
 > limit только укорачивает `items`).
 > Ученику оба эндпоинта — `403` (группа `/teacher` — только teacher/admin).
 
+> Волна P10 (T87): супер-админ может читать и менять содержимое **любого
+> неархивного** курса через существующие `/api/v1/teacher/courses/{id}` и
+> вложенные CRUD-маршруты: создание/правка/удаление модулей и уроков,
+> reorder модулей/уроков, перенос урока. Для `teacher` правила не изменились:
+> правка/удаление урока или модуля, reorder и перенос — только в `draft`,
+> иначе `409` «Контент курса можно редактировать только в режиме черновика»
+> (перенос урока — `409 «Менять структуру можно только в черновике»);
+> создание модуля/урока, как и раньше (T19), отдельного draft-guard не имеет.
+> Для `admin` проверка `draft` заменена на `status != archived`: архивный
+> курс — `409` до `unarchive`, включая создание модулей/уроков. Удаление
+> всего курса осталось `draft`-only для всех — это каскадная потеря истории.
+> `submit` не менялся. Принудительная публикация —
+> `POST /api/v1/admin/courses/{id}/publish`.
+
 > В бэклоге T13: `GET/PATCH/DELETE /teacher/courses[...]`, PATCH модулей/уроков,
 > reorder — в `Task/T13-integration-wiring.md`.
 
@@ -206,10 +220,25 @@
 | POST | `/api/v1/admin/invites` | `{email}` → `201 {id,email,token,tokenPrefix,expiresAt}`; **токен показывается один раз** |
 | GET | `/api/v1/admin/courses/review` | → `200` `{items:[Course],total}` |
 | POST | `/api/v1/admin/courses/{id}/moderate` | `{decision:"approve\|reject", comment?}` → `200` Course; `comment` обязателен при `reject` |
-| GET | `/api/v1/admin/courses/{id}` | → `200` `{course:<элемент GET /admin/courses + coverPath>, modules:[{id,title,position,lessons:[{id,title,kind,position}]}], stats:{studentsCount,activeCount,reviewsCount,avgRating,paymentsCount,paidTotalCents}}` (T55; `404` «Курс не найден») |
+| POST | `/api/v1/admin/courses/{id}/publish` | → `200` `{course}`; `draft\|review → published` без модерации, `published` — идемпотентный `200`, `archived` — `409`, нет курса — `404`; `moderationComment` очищается (T87) |
+| GET | `/api/v1/admin/courses/{id}` | → `200` `{course:<элемент GET /admin/courses + coverPath + moderationComment>, modules:[{id,title,position,lessons:[{id,title,kind,position}]}], stats:{studentsCount,activeCount,reviewsCount,avgRating,paymentsCount,paidTotalCents}}` (T55/T87; `moderationComment` — всегда строка, пустая если замечаний нет; `404` «Курс не найден») |
+| GET | `/api/v1/admin/questions?courseId=&lessonId=&q=&page=&limit=` | → `200` `{items:[{id,courseId,courseTitle,courseSlug,lessonId,lessonTitle,studentId,studentEmail,studentName,body,createdAt,answers:[{id,authorId,authorEmail,authorName,authorRole,body,createdAt}]}],total,page,limit}` (T85; только admin). `q` — поиск без учёта регистра по вопросу, ответам, email/именам авторов, названиям курса и урока; новые вопросы первыми, ответы старыми первыми; `total` — до пагинации; неверные UUID/пагинация — `400`. Удаление — существующими `DELETE /courses/{courseId}/questions/{questionId}` и `.../answers/{answerId}` (admin удаляет чужие) |
 | GET | `/api/v1/admin/payments?page=&limit=&status=&courseId=` | → `200` `{items:[PaymentJournalItem],total,page,limit,totals}` (US6, T07) |
 | GET | `/api/v1/admin/settings` | → `200 {commissionPct,promoBarEnabled}` (US6, T07; промо — пост-P7) |
 | PUT | `/api/v1/admin/settings` | `{commissionPct?0..90, promoBarEnabled?}` — хотя бы одно поле → `200 {commissionPct,promoBarEnabled}` (US6, T07; частичное обновление — пост-P7) |
+| GET | `/api/v1/admin/reviews?courseId=&rating=&q=&from=&to=&sort=&dir=&page=&limit=` | → `200 {items:[{id,courseId,courseTitle,courseSlug,studentId,studentEmail,studentName,rating,body,createdAt,teacherReply,teacherReplyAt}],total,page,limit}` (T83). `rating` — 1..5; `q` — поиск без учёта регистра по названию курса, email/имени ученика и тексту отзыва; `from`/`to` — даты ГГГГ-ММ-ДД по `createdAt` включительно; `sort` — `createdAt` (по умолчанию) или `rating`, `dir` — `asc`/`desc` (по умолчанию `desc`); `page` 1-based, `limit` 20 по умолчанию, максимум 100. Неверные параметры — `400`. Удаление — существующий `DELETE /api/v1/admin/reviews/{id}` (`204`/`404`), рейтинг курса пересчитывается |
+| GET | `/api/v1/admin/promo-codes?courseId=&q=&active=&page=&limit=` | → `200 {items:[AdminPromo],total,page,limit}` — глобальный журнал промокодов (T89); `courseId` — UUID, `q` — подстрока без учёта регистра по коду или названию курса, `active` — `true\|false`; `AdminPromo` = поля `PromoCode` + `courseTitle`/`courseSlug`; неверные фильтры/`page`/`limit` — `400` |
+| PATCH | `/api/v1/admin/promo-codes/{id}` | `{discountPct?,maxUses?,expiresAt?,active?}` — хотя бы одно поле → `200 {"promoCode": AdminPromo}` (T89); `discountPct` 1..90, `maxUses >= usedCount`, `expiresAt` — RFC3339 в будущем или `null` (очистка срока), `active` — bool; неизвестное поле/неверные значения — `400`, нет кода — `404`, курс в архиве — `409` |
+
+> Волна P10 (T93): сессии пользователя и принудительный выход.
+> `GET /api/v1/admin/users/{id}/sessions` (только admin) → `200
+> {"items":[{"id":"…","createdAt":"RFC3339","expiresAt":"RFC3339"}]}` —
+> только не истёкшие сессии, новые первыми, `items` всегда массив (пустой —
+> `[]`). `DELETE /api/v1/admin/users/{id}/sessions` → `204` без тела:
+> удаляет все cookie-сессии пользователя, включая текущую, если
+> администратор завершает свои; после удаления старые cookie перестают
+> проходить `requireAuth` (`401`). Нет пользователя — `404` в обоих методах;
+> без входа — `401`, не-admin — `403`.
 
 ### Оплата
 

@@ -20,15 +20,19 @@
   padding: 0;
 }
 
-/* Ссылка «консультант» в блоке дипломов остаётся в цвете блока: появление
-   общего обёрточного селектора `.page p a` (styles.css) красит её в синий —
-   возвращаем задуманный вид (hover по-прежнему фирменный красный). */
+/* T92: ссылка «консультант» в блоке дипломов остаётся в цвете текста блока
+   и без постоянного подчёркивания; hover/focus-visible — фирменный красный
+   с underline (как общее правило .diploma p a в styles.css). */
 .catalog-page .diploma p a {
   color: inherit;
+  text-decoration: none;
+  text-underline-offset: 3px;
 }
 
-.catalog-page .diploma p a:hover {
+.catalog-page .diploma p a:hover,
+.catalog-page .diploma p a:focus-visible {
   color: var(--brand);
+  text-decoration: underline;
 }
 
 /* ---------- Каталог: скелетоны загрузки ---------- */

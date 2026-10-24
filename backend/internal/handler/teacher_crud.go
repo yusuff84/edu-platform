@@ -14,10 +14,13 @@ package handler
 // N+1 запросов.
 //
 // Права: только владелец курса или админ (ownCourse).
-// Статус: контент (уроки, порядок, удаление) — только draft (409 иначе);
-// правка карточки и переименование модуля работают в любом статусе — это
-// закреплено контрактными тестами teacher_test.go:TestTeacherEditEndpoints
-// (PATCH опубликованного курса и модуля → 200).
+// Статус: контент (уроки, порядок, удаление модуля/урока) для teacher —
+// только draft (409 иначе); T87 разрешил админу контентные операции в любом
+// неархивном курсе (архив — 409). Правка карточки и переименование модуля
+// работают в любом статусе — это закреплено контрактными тестами
+// teacher_test.go:TestTeacherEditEndpoints (PATCH опубликованного курса и
+// модуля → 200). Удаление всего курса осталось draft-only и для админа:
+// это не «содержимое», а каскадная потеря истории.
 
 import (
 	"errors"
@@ -43,8 +46,37 @@ func (a *App) RegisterTeacherCRUDRoutes(r chi.Router) {
 	r.Delete("/courses/{id}", a.TeacherDeleteCourse)
 }
 
+// canEditContent — может ли пользователь менять содержимое курса (T87).
+// Для админа правило мягче: он правит любой неархивный курс (карточку,
+// модули, уроки, порядок, перенос). Для teacher всё по-прежнему: только draft.
+func canEditContent(u *repo.User, c *repo.Course) bool {
+	if u != nil && u.Role == repo.RoleAdmin {
+		return c.Status != repo.CourseArchived
+	}
+	return c.Status == repo.CourseDraft
+}
+
+// requireEditable — единый guard контентных операций (T87): пишет 409 и
+// возвращает false, если пользователь не может править содержимое курса.
+// Тексты для teacher сохранены с T19; для админа отдельный текст про архив.
+func requireEditable(w http.ResponseWriter, u *repo.User, c *repo.Course) bool {
+	if canEditContent(u, c) {
+		return true
+	}
+	if u != nil && u.Role == repo.RoleAdmin {
+		writeErr(w, http.StatusConflict,
+			"Архивный курс нельзя редактировать: сначала верните его из архива")
+		return false
+	}
+	writeErr(w, http.StatusConflict,
+		"Контент курса можно редактировать только в режиме черновика")
+	return false
+}
+
 // requireDraft — контент курса правится только в черновике (T19, правило 2):
 // после отправки на модерацию и после публикации программа заморожена.
+// T87 оставил это правило для удаления курса: admin-bypass распространяется
+// на содержимое (уроки/модули/порядок), но не на каскадное удаление курса.
 // Пишет 409 и возвращает false, если курс уже не draft.
 func requireDraft(w http.ResponseWriter, c *repo.Course) bool {
 	if c.Status != repo.CourseDraft {
@@ -124,9 +156,10 @@ func onlyPreviewPatch(req *updateLessonRequest) bool {
 // перезаписывают содержимое урока, непереданные остаются; валидация — по kind
 // (validateLessonContent, та же валидация, что в TeacherCreateLesson).
 // 200; 400 (пустой title, неверный startsAt, контент не прошёл валидацию по
-// kind); 404 (урок не из этого курса); 409 (курс не draft).
+// kind); 404 (урок не из этого курса); 409 (teacher — курс не draft, admin —
+// курс в архиве).
 func (a *App) TeacherUpdateLesson(w http.ResponseWriter, r *http.Request) {
-	_, c, ok := a.ownCourse(w, r)
+	u, c, ok := a.ownCourse(w, r)
 	if !ok {
 		return
 	}
@@ -136,9 +169,12 @@ func (a *App) TeacherUpdateLesson(w http.ResponseWriter, r *http.Request) {
 	}
 	// T75: включить/снять превью можно и у опубликованного курса — иначе
 	// преподавателю пришлось бы снимать курс с публикации. Любые другие поля
-	// по-прежнему редактируются только в черновике.
-	if !onlyPreviewPatch(&req) && !requireDraft(w, c) {
-		return
+	// по-прежнему редактируются только в черновике (T87: админ — в любом
+	// неархивном курсе; архив закрыт и для него).
+	if !onlyPreviewPatch(&req) || (u != nil && u.Role == repo.RoleAdmin) {
+		if !requireEditable(w, u, c) {
+			return
+		}
 	}
 	cur, found := a.Store.GetLesson(chi.URLParam(r, "lessonID"))
 	if !found || !a.lessonInCourse(cur, c.ID) {
@@ -276,14 +312,14 @@ func validateLessonContent(l *repo.Lesson) string {
 
 // TeacherDeleteModule — DELETE .../modules/{moduleID}: 204. 409 — в модуле
 // остались уроки (сначала удалите их); 404 — модуль не из этого курса;
-// 409 — курс не draft. Каскад в БД удалил бы уроки молча, поэтому
-// непустоту проверяем до удаления.
+// 409 — teacher: курс не draft, admin: курс в архиве. Каскад в БД удалил бы
+// уроки молча, поэтому непустоту проверяем до удаления.
 func (a *App) TeacherDeleteModule(w http.ResponseWriter, r *http.Request) {
-	_, c, ok := a.ownCourse(w, r)
+	u, c, ok := a.ownCourse(w, r)
 	if !ok {
 		return
 	}
-	if !requireDraft(w, c) {
+	if !requireEditable(w, u, c) {
 		return
 	}
 	mod, found := a.Store.GetModule(chi.URLParam(r, "moduleID"))
@@ -308,13 +344,14 @@ func (a *App) TeacherDeleteModule(w http.ResponseWriter, r *http.Request) {
 }
 
 // TeacherDeleteLesson — DELETE .../lessons/{lessonID}: 204. Прогресс студентов
-// по уроку удаляется каскадом. 404 — урок не из этого курса; 409 — не draft.
+// по уроку удаляется каскадом. 404 — урок не из этого курса; 409 — teacher:
+// не draft, admin: архив.
 func (a *App) TeacherDeleteLesson(w http.ResponseWriter, r *http.Request) {
-	_, c, ok := a.ownCourse(w, r)
+	u, c, ok := a.ownCourse(w, r)
 	if !ok {
 		return
 	}
-	if !requireDraft(w, c) {
+	if !requireEditable(w, u, c) {
 		return
 	}
 	l, found := a.Store.GetLesson(chi.URLParam(r, "lessonID"))
@@ -374,13 +411,14 @@ type reorderRequest struct {
 // TeacherReorderModules — POST .../modules/reorder: 204. Принимает полный
 // список модулей курса с позициями 1..N и применяет его одной транзакцией.
 // 400 — пустой/неполный список, позиция вне диапазона, дубликат позиции или
-// id; 404 — модуль не из этого курса; 409 — курс не draft.
+// id; 404 — модуль не из этого курса; 409 — teacher: курс не draft, admin:
+// архив.
 func (a *App) TeacherReorderModules(w http.ResponseWriter, r *http.Request) {
-	_, c, ok := a.ownCourse(w, r)
+	u, c, ok := a.ownCourse(w, r)
 	if !ok {
 		return
 	}
-	if !requireDraft(w, c) {
+	if !requireEditable(w, u, c) {
 		return
 	}
 	var req reorderRequest
@@ -441,13 +479,13 @@ func (a *App) TeacherReorderModules(w http.ResponseWriter, r *http.Request) {
 // (схема БД: UNIQUE (module_id, position)). Смена модуля урока при этом не
 // происходит — меняется только порядок внутри модуля.
 // 400 — пустой/неполный список, позиция вне диапазона модуля, дубликат;
-// 404 — урок не из этого курса; 409 — курс не draft.
+// 404 — урок не из этого курса; 409 — teacher: курс не draft, admin: архив.
 func (a *App) TeacherReorderLessons(w http.ResponseWriter, r *http.Request) {
-	_, c, ok := a.ownCourse(w, r)
+	u, c, ok := a.ownCourse(w, r)
 	if !ok {
 		return
 	}
-	if !requireDraft(w, c) {
+	if !requireEditable(w, u, c) {
 		return
 	}
 	var req reorderRequest
