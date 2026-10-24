@@ -98,6 +98,21 @@ export type AdminReviewRow = {
   createdAt: string;
 };
 
+/**
+ * Активная сессия пользователя (T93).
+ * GET /admin/users/{id}/sessions отдаёт только неистёкшие сессии, новые первыми.
+ */
+export type AdminSession = {
+  id: string;
+  createdAt: string;
+  expiresAt: string;
+};
+
+/** Ответ списка сессий: items всегда массив (может быть пустым). */
+export type AdminSessionsResponse = {
+  items: AdminSession[];
+};
+
 /** GET /admin/stats — все агрегаты сводки одним запросом. */
 export function getAdminStats(): Promise<AdminStats> {
   return apiFetch<AdminStats>('/admin/stats');
@@ -163,6 +178,23 @@ export function listCourseReviews(courseId: string): Promise<{ items: AdminRevie
 /** DELETE /admin/reviews/{id} — 204 без тела; 404, если отзыва нет. */
 export function deleteReview(id: string): Promise<void> {
   return apiFetch<void>(`/admin/reviews/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+  });
+}
+
+/** GET /admin/users/{id}/sessions — 200 {items}; 404, если пользователя нет. */
+export function listAdminUserSessions(userId: string): Promise<AdminSessionsResponse> {
+  return apiFetch<AdminSessionsResponse>(
+    `/admin/users/${encodeURIComponent(userId)}/sessions`,
+  );
+}
+
+/**
+ * DELETE /admin/users/{id}/sessions — 204 без тела: завершает все сессии
+ * пользователя, включая текущую сессию админа; 404, если пользователя нет.
+ */
+export function revokeAdminUserSessions(userId: string): Promise<void> {
+  return apiFetch<void>(`/admin/users/${encodeURIComponent(userId)}/sessions`, {
     method: 'DELETE',
   });
 }
