@@ -208,7 +208,8 @@ func NewRouter(app *App) http.Handler {
 			r.Post("/invites/{id}/revoke", app.AdminRevokeInvite)
 			r.Get("/courses/review", app.AdminReviewQueue)
 			r.Post("/courses/{id}/moderate", app.AdminModerateCourse)
-			app.RegisterAdminUsersRoutes(r) // T24: /admin/users — управление пользователями
+			app.RegisterAdminUsersRoutes(r)    // T24: /admin/users — управление пользователями
+			app.RegisterAdminSessionsRoutes(r) // T93: /admin/users/{id}/sessions — сессии и выход
 			app.RegisterAdminConsoleRoutes(r)
 			// T55: детали курса GET /admin/courses/{id} — программа, статистика
 			// и карточка «одним экраном» (handler/admin_course_detail.go).

@@ -211,6 +211,16 @@
 | GET | `/api/v1/admin/settings` | → `200 {commissionPct,promoBarEnabled}` (US6, T07; промо — пост-P7) |
 | PUT | `/api/v1/admin/settings` | `{commissionPct?0..90, promoBarEnabled?}` — хотя бы одно поле → `200 {commissionPct,promoBarEnabled}` (US6, T07; частичное обновление — пост-P7) |
 
+> Волна P10 (T93): сессии пользователя и принудительный выход.
+> `GET /api/v1/admin/users/{id}/sessions` (только admin) → `200
+> {"items":[{"id":"…","createdAt":"RFC3339","expiresAt":"RFC3339"}]}` —
+> только не истёкшие сессии, новые первыми, `items` всегда массив (пустой —
+> `[]`). `DELETE /api/v1/admin/users/{id}/sessions` → `204` без тела:
+> удаляет все cookie-сессии пользователя, включая текущую, если
+> администратор завершает свои; после удаления старые cookie перестают
+> проходить `requireAuth` (`401`). Нет пользователя — `404` в обоих методах;
+> без входа — `401`, не-admin — `403`.
+
 ### Оплата
 
 | Метод | Путь | Доступ | Тело / ответ |

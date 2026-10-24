@@ -43,6 +43,14 @@ type StoreAPI interface {
 	CreateSession(userID string, ttl time.Duration) *Session
 	GetSession(id string) (*Session, bool)
 	DeleteSession(id string)
+	// ListSessionsByUser — активные (не истёкшие) сессии пользователя для
+	// админки (T93), новые первыми. Никогда не nil (пустой слайс — сессий
+	// нет). Токены/подписи cookie в Session не хранятся.
+	ListSessionsByUser(userID string) []*Session
+	// DeleteSessionsByUser удаляет ВСЕ сессии пользователя (включая уже
+	// истёкшие) и возвращает их количество — для логов и тестов (T93).
+	// Ноль — не ошибка: у пользователя просто нет сессий.
+	DeleteSessionsByUser(userID string) int
 	// Invites
 	CreateInvite(email, tokenHash, prefix, createdBy string, expiresAt time.Time) *TeacherInvite
 	GetInviteByTokenHash(hash string) (*TeacherInvite, bool)
