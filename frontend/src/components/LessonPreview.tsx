@@ -10,6 +10,7 @@
 // они не показываются.
 
 import { Markdown } from './LessonView';
+import CodeBlock from './CodeBlock';
 import { formatDate } from '../api/client';
 import type { LessonKind } from '../api/client';
 import { t } from '../i18n/t';
@@ -131,9 +132,7 @@ function CodePreview({
       {task.template && task.template.trim() && (
         <div className="ce-template">
           <h4>{t('lesson.codeTemplate')}</h4>
-          <pre>
-            <code>{task.template}</code>
-          </pre>
+          <CodeBlock code={task.template} language={task.language} />
         </div>
       )}
       {tests.length > 0 && (
