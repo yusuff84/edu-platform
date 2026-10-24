@@ -312,3 +312,90 @@ export function revokeAdminUserSessions(userId: string): Promise<void> {
     method: 'DELETE',
   });
 }
+
+// ---------- T90: глобальный журнал промокодов (контракт T89) ----------
+
+/** Строка глобального журнала промокодов (GET /admin/promo-codes). */
+export type AdminPromoCode = {
+  id: string;
+  courseId: string;
+  courseTitle: string;
+  courseSlug: string;
+  code: string;
+  discountPct: number;
+  maxUses: number;
+  usedCount: number;
+  /** RFC3339 или null — код без срока действия. */
+  expiresAt: string | null;
+  active: boolean;
+  createdAt: string;
+};
+
+/** Страница журнала промокодов: total — до пагинации. */
+export type AdminPromoCodesResponse = {
+  items: AdminPromoCode[];
+  total: number;
+  page: number;
+  limit: number;
+};
+
+/** Параметры GET /admin/promo-codes (все необязательны). */
+export type AdminPromoCodesQuery = {
+  /** UUID курса; пустая строка не отправляется. */
+  courseId?: string;
+  /** Код или название курса без учёта регистра. */
+  q?: string;
+  /** true — только активные, false — только неактивные. */
+  active?: boolean;
+  page?: number;
+  limit?: number;
+};
+
+/** Тело PATCH /admin/promo-codes/{id}: хотя бы одно поле. */
+export type AdminPromoCodePatch = {
+  discountPct?: number;
+  maxUses?: number;
+  /** RFC3339 в будущем или null — снять срок. */
+  expiresAt?: string | null;
+  active?: boolean;
+};
+
+/**
+ * GET /admin/promo-codes — все промокоды платформы.
+ * active=false передаётся явно (buildQuery пропускает только пустые
+ * значения, поэтому boolean приводим к строке сами).
+ */
+export function listAdminPromoCodes(
+  query: AdminPromoCodesQuery = {},
+): Promise<AdminPromoCodesResponse> {
+  return apiFetch<AdminPromoCodesResponse>(
+    `/admin/promo-codes${buildQuery({
+      courseId: query.courseId,
+      q: query.q,
+      active: query.active === undefined ? undefined : String(query.active),
+      page: query.page,
+      limit: query.limit,
+    })}`,
+  );
+}
+
+/**
+ * PATCH /admin/promo-codes/{id} — частичное обновление.
+ * Тело собирается только из переданных полей: expiresAt=null отправляется
+ * явно (снять срок), а не выбрасывается, в отличие от создания кода (T63).
+ * Ответ — конверт {promoCode}; возвращаем саму запись.
+ */
+export function updateAdminPromoCode(
+  id: string,
+  patch: AdminPromoCodePatch,
+): Promise<AdminPromoCode> {
+  const body: AdminPromoCodePatch = {};
+  if (patch.discountPct !== undefined) body.discountPct = patch.discountPct;
+  if (patch.maxUses !== undefined) body.maxUses = patch.maxUses;
+  if (patch.expiresAt !== undefined) body.expiresAt = patch.expiresAt;
+  if (patch.active !== undefined) body.active = patch.active;
+  return apiFetch<{ promoCode: AdminPromoCode }>(
+    `/admin/promo-codes/${encodeURIComponent(id)}`,
+    { method: 'PATCH', body: JSON.stringify(body) },
+  ).then((res) => res.promoCode);
+}

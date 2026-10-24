@@ -1,0 +1,420 @@
+/* Стили глобального журнала промокодов супер-админки (T90).
+   Импортируются только из pages/AdminPromoCodes.tsx; общий styles.css,
+   admin.css и adminConsole.css не изменяются — здесь только селекторы
+   с префиксом .ap-. Базовые классы (.panel, .muted, .error, .btn, .input,
+   .sr-only) — из styles.css. */
+
+main.ap-admin {
+  max-width: 1200px;
+}
+
+.ap-back {
+  margin: 0 0 0.25rem;
+  font-size: 0.9rem;
+}
+
+.ap-subtitle {
+  margin: 0 0 0.75rem;
+}
+
+/* ---------- Фильтры ---------- */
+
+.ap-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.ap-field {
+  display: grid;
+  gap: 0.25rem;
+  margin: 0;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.ap-field--search {
+  flex: 1 1 16rem;
+}
+
+.ap-field .input {
+  margin-top: 0;
+}
+
+.ap-select {
+  min-width: 11rem;
+  max-width: 20rem;
+}
+
+.ap-reset {
+  margin-top: 0;
+}
+
+/* ---------- Итог и уведомления ---------- */
+
+.ap-total {
+  margin: 0 0 0.5rem;
+}
+
+.ap-fetching {
+  font-weight: 400;
+}
+
+.ap-notice {
+  margin: 0 0 0.75rem;
+  padding: 0.4rem 0.75rem;
+  background: #e3f5e6;
+  color: #1e7d32;
+  border-radius: 8px;
+  font-weight: 600;
+}
+
+.ap-error {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+  margin: 0.5rem 0;
+}
+
+.ap-error p {
+  margin: 0;
+}
+
+.ap-error button {
+  margin-top: 0;
+}
+
+.ap-empty {
+  margin: 0.75rem 0;
+}
+
+/* ---------- Скелетон загрузки ---------- */
+
+.ap-skeleton {
+  display: grid;
+  gap: 0.5rem;
+  padding: 0.5rem 0;
+}
+
+.ap-skeleton-line {
+  display: block;
+  height: 1.75rem;
+  border-radius: 6px;
+  background: linear-gradient(90deg, #f1f3f5, #e9ecef, #f1f3f5);
+}
+
+/* ---------- Таблица ---------- */
+
+.ap-table-wrap {
+  overflow-x: auto;
+  border: 1px solid #e5e5e5;
+  border-radius: 8px;
+  -webkit-overflow-scrolling: touch;
+}
+
+.ap-table {
+  width: 100%;
+  border-collapse: collapse;
+  /* Узкий экран — горизонтальная прокрутка (см. media-блок ниже). */
+  min-width: 900px;
+}
+
+.ap-table th,
+.ap-table td {
+  padding: 0.5rem 0.6rem;
+  border-bottom: 1px solid #eee;
+  text-align: left;
+  white-space: nowrap;
+  font-size: 0.9rem;
+  vertical-align: top;
+}
+
+.ap-table th {
+  background: #f8f9fa;
+  color: #444;
+}
+
+.ap-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.ap-table tbody tr:hover {
+  background: #fafbfc;
+}
+
+/* ---------- Ячейки таблицы ---------- */
+
+.ap-code {
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.ap-course-link {
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.ap-expires {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.ap-badge {
+  display: inline-block;
+  padding: 0.1rem 0.5rem;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.ap-badge--active {
+  background: #e3f5e6;
+  color: #1e7d32;
+}
+
+.ap-badge--inactive {
+  background: #fde2e2;
+  color: #b00020;
+}
+
+.ap-badge--expired {
+  background: #fff3cd;
+  color: #8a6d00;
+}
+
+/* Действия: компактная колонка, кнопки — столбиком, ничего не обрезается. */
+.ap-table .ap-col-actions {
+  width: 1%;
+  max-width: 170px;
+  white-space: normal;
+}
+
+.ap-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.4rem;
+}
+
+.ap-actions .btn {
+  margin-top: 0;
+  padding-left: 0.65rem;
+  padding-right: 0.65rem;
+}
+
+.ap-btn--danger {
+  background: #b00020;
+  border: 1px solid #b00020;
+  color: #fff;
+}
+
+.ap-btn--danger:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.ap-row-error {
+  margin: 0.35rem 0 0;
+  white-space: normal;
+  font-size: 0.85rem;
+}
+
+/* ---------- Инлайн-редактор ---------- */
+
+.ap-edit-row {
+  background: #f8f9fb;
+}
+
+.ap-edit-row:hover {
+  background: #f8f9fb;
+}
+
+.ap-edit-cell {
+  padding: 0.75rem 0.9rem 1rem;
+  border-bottom: 1px solid #e5e5e5;
+  white-space: normal;
+}
+
+.ap-edit-form {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.ap-edit-title {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.ap-edit-fields {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 0.75rem 1rem;
+}
+
+.ap-edit-field {
+  display: grid;
+  gap: 0.25rem;
+  margin: 0;
+  min-width: 11rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.ap-edit-field .input {
+  margin-top: 0;
+}
+
+.ap-edit-hint {
+  font-size: 0.8rem;
+  font-weight: 400;
+}
+
+.ap-edit-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-top: 1.4rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.ap-edit-error {
+  margin: 0;
+}
+
+.ap-edit-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.ap-edit-actions .btn {
+  margin-top: 0;
+}
+
+/* ---------- Пагинация ---------- */
+
+.ap-pager {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+
+.ap-pager button {
+  margin-top: 0;
+}
+
+.ap-pager button:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+/* ---------- Узкий экран: строки таблицы превращаются в карточки ---------- */
+
+@media (max-width: 820px) {
+  .ap-table {
+    min-width: 0;
+  }
+
+  .ap-table thead {
+    display: none;
+  }
+
+  .ap-table,
+  .ap-table tbody,
+  .ap-table tr,
+  .ap-table td {
+    display: block;
+    width: 100%;
+  }
+
+  .ap-table tr {
+    padding: 0.35rem 0;
+    border-bottom: 6px solid #f7f7f8;
+  }
+
+  .ap-table tr:last-child {
+    border-bottom: none;
+  }
+
+  .ap-table td {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 0.75rem;
+    white-space: normal;
+    border-bottom: none;
+    padding: 0.3rem 0.6rem;
+  }
+
+  .ap-table td::before {
+    content: attr(data-label);
+    flex: 0 0 auto;
+    font-weight: 600;
+    color: #666;
+  }
+
+  .ap-table .ap-col-actions {
+    width: auto;
+    max-width: none;
+  }
+
+  .ap-actions {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: flex-end;
+  }
+
+  /* Редактор занимает всю карточку: подписи полей уже есть у самих input. */
+  .ap-table .ap-edit-cell {
+    display: block;
+    padding: 0.75rem 0.6rem 1rem;
+  }
+
+  .ap-table .ap-edit-cell::before {
+    content: none;
+  }
+
+  .ap-edit-fields {
+    flex-direction: column;
+  }
+
+  .ap-edit-field {
+    width: 100%;
+  }
+
+  .ap-edit-check {
+    margin-top: 0;
+  }
+}
+
+@media (max-width: 560px) {
+  .ap-filters {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .ap-field--search {
+    flex-basis: auto;
+  }
+
+  .ap-select {
+    max-width: none;
+  }
+
+  .ap-pager {
+    justify-content: center;
+  }
+}
