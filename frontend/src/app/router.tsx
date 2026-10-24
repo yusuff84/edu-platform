@@ -30,6 +30,8 @@ const AdminStats = lazy(() => import('../pages/AdminStats'));
 const AdminCourseDetail = lazy(() => import('../pages/AdminCourseDetail'));
 // T49: экран «Записи на курсы» — отдельная страница подраздела.
 const AdminEnrollments = lazy(() => import('../pages/AdminEnrollments'));
+// T84: глобальная модерация отзывов — отдельный чанк админки.
+const AdminReviews = lazy(() => import('../pages/AdminReviews'));
 const CourseStudents = lazy(() => import('../pages/CourseStudents'));
 // T78: аналитика преподавателя — отдельный чанк подраздела кабинета.
 const TeacherStats = lazy(() => import('../pages/TeacherStats'));
@@ -269,6 +271,8 @@ export const router = createBrowserRouter([
       { path: '/admin/courses/:id', element: <RequireRole roles={['admin']}><AdminCourseDetail /></RequireRole> },
       { path: '/admin/stats', element: <RequireRole roles={['admin']}><AdminStats /></RequireRole> },
       { path: '/admin/enrollments', element: <RequireRole roles={['admin']}><AdminEnrollments /></RequireRole> },
+      // T84: модерация отзывов всех курсов — только admin.
+      { path: '/admin/reviews', element: <RequireRole roles={['admin']}><AdminReviews /></RequireRole> },
       // Ученики конкретного курса — автору курса и админу.
       { path: '/teach/:id/students', element: <RequireRole roles={['teacher', 'admin']}><CourseStudents /></RequireRole> },
       // Личный кабинет ученика: профиль и история платежей.
