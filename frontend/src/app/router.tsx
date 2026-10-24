@@ -26,6 +26,8 @@ const Admin = lazy(() => import('../pages/Admin'));
 const AdminUsers = lazy(() => import('../pages/AdminUsers'));
 const AdminCourses = lazy(() => import('../pages/AdminCourses'));
 const AdminStats = lazy(() => import('../pages/AdminStats'));
+// T86: глобальная модерация Q&A — отдельный чанк подраздела «Вопросы и ответы».
+const AdminQa = lazy(() => import('../pages/AdminQa'));
 // T58: страница «Детали курса» — отдельный чанк подраздела «Курсы».
 const AdminCourseDetail = lazy(() => import('../pages/AdminCourseDetail'));
 // T49: экран «Записи на курсы» — отдельная страница подраздела.
@@ -273,6 +275,8 @@ export const router = createBrowserRouter([
       { path: '/admin/enrollments', element: <RequireRole roles={['admin']}><AdminEnrollments /></RequireRole> },
       // T84: модерация отзывов всех курсов — только admin.
       { path: '/admin/reviews', element: <RequireRole roles={['admin']}><AdminReviews /></RequireRole> },
+      // T86: глобальная модерация вопросов и ответов по всем курсам.
+      { path: '/admin/qa', element: <RequireRole roles={['admin']}><AdminQa /></RequireRole> },
       // Ученики конкретного курса — автору курса и админу.
       { path: '/teach/:id/students', element: <RequireRole roles={['teacher', 'admin']}><CourseStudents /></RequireRole> },
       // Личный кабинет ученика: профиль и история платежей.

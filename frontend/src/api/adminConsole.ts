@@ -3,8 +3,13 @@
 // бэкенд T25 пишется параллельно). Транспорт — общий apiFetch/buildQuery из
 // client.ts: он экспортирован специально для модулей-компаньонов волны P3,
 // дублировать fetch и обработку envelope {"error"} здесь нельзя.
-import { apiFetch, buildQuery } from './client';
-import type { CourseStatus } from './client';
+import {
+  apiFetch,
+  buildQuery,
+  deleteAnswer as deleteAnswerApi,
+  deleteQuestion as deleteQuestionApi,
+} from './client';
+import type { CourseStatus, Role } from './client';
 
 /** Агрегаты сводки (GET /admin/stats). Денежные суммы — в копейках. */
 export type AdminStats = {
@@ -185,4 +190,93 @@ export function deleteReview(id: string): Promise<void> {
   return apiFetch<void>(`/admin/reviews/${encodeURIComponent(id)}`, {
     method: 'DELETE',
   });
+}
+
+// ---------- P10 / T85: глобальная модерация Q&A ----------
+
+/**
+ * Ответ под вопросом в админском списке (GET /admin/questions).
+ * Поле в поле по контракту T85; `authorRole` — та же роль, что в P9 Q&A.
+ */
+export type AdminAnswer = {
+  id: string;
+  authorId: string;
+  authorEmail: string;
+  authorName: string;
+  authorRole: Role;
+  body: string;
+  createdAt: string;
+};
+
+/** Вопрос в админском списке: курс/урок, автор и все ответы ветки. */
+export type AdminQuestion = {
+  id: string;
+  courseId: string;
+  courseTitle: string;
+  courseSlug: string;
+  lessonId: string;
+  lessonTitle: string;
+  studentId: string;
+  studentEmail: string;
+  studentName: string;
+  body: string;
+  createdAt: string;
+  /** Ответы приходят старыми первыми; каскадное удаление — вместе с вопросом. */
+  answers: AdminAnswer[];
+};
+
+/** Страница глобального списка вопросов (конверт пагинации). */
+export type AdminQuestionsResponse = {
+  items: AdminQuestion[];
+  total: number;
+  page: number;
+  limit: number;
+};
+
+/** Фильтры GET /admin/questions; пустые значения buildQuery не отправляет. */
+export type AdminQuestionsQuery = {
+  courseId?: string;
+  lessonId?: string;
+  q?: string;
+  page?: number;
+  limit?: number;
+};
+
+/**
+ * GET /admin/questions — все вопросы платформы (новые первыми), с фильтрами
+ * courseId/lessonId/q и пагинацией. Неверные UUID/пагинация — 400.
+ */
+export function listAdminQuestions(
+  query: AdminQuestionsQuery = {},
+): Promise<AdminQuestionsResponse> {
+  return apiFetch<AdminQuestionsResponse>(
+    `/admin/questions${buildQuery({
+      courseId: query.courseId,
+      lessonId: query.lessonId,
+      q: query.q,
+      page: query.page,
+      limit: query.limit,
+    })}`,
+  );
+}
+
+/**
+ * DELETE /courses/{courseId}/questions/{questionId} — 204, ответы удаляются
+ * каскадом. Тонкая обёртка над существующим клиентом P9: путь и кодирование
+ * id не дублируем. Admin может удалять чужие вопросы (контракт T85).
+ */
+export function deleteAdminQuestion(courseId: string, questionId: string): Promise<void> {
+  return deleteQuestionApi(courseId, questionId);
+}
+
+/**
+ * DELETE /courses/{courseId}/questions/{questionId}/answers/{answerId} — 204.
+ * Тонкая обёртка над существующим клиентом P9 (см. deleteAdminQuestion).
+ */
+export function deleteAdminAnswer(
+  courseId: string,
+  questionId: string,
+  answerId: string,
+): Promise<void> {
+  return deleteAnswerApi(courseId, questionId, answerId);
 }
