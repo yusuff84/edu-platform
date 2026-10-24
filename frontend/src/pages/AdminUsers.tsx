@@ -3,8 +3,10 @@
 // смены роли / блокировки / удаления. Контракт backend — T24.
 // T52: карточка «Профиль пользователя» (детали, записи, платежи) и
 // инлайн-подтверждения смены роли / блокировки; правки вёрстки таблицы.
-// Стили изолированы в styles/adminUsers.css; styles.css и admin.css не изменяются.
-import { useEffect, useState } from 'react';
+// T94: активные сессии пользователя и принудительный выход.
+// Стили изолированы в styles/adminUsers.css и styles/adminSessions.css;
+// styles.css и admin.css не изменяются.
+import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { QueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
@@ -23,12 +25,18 @@ import type {
   EnrollmentStatus,
   UserStatus,
 } from '../api/adminUsers';
+import {
+  listAdminUserSessions,
+  revokeAdminUserSessions,
+} from '../api/adminConsole';
+import type { AdminSessionsResponse } from '../api/adminConsole';
 import type { PaymentStatus, Role } from '../api/types';
 import { t } from '../i18n/t';
 import type { RuKey } from '../i18n/t';
 import { useSeo } from '../app/useSeo';
 import CsvExportButton, { csvDateStamp, exportTruncated } from '../components/CsvExportButton';
 import '../styles/adminUsers.css';
+import '../styles/adminSessions.css';
 
 // ---------- Константы ----------
 
@@ -119,6 +127,17 @@ function errorText(error: unknown): string {
   return t('common.error');
 }
 
+/**
+ * Текст ошибки секции сессий (T94). 404 — пользователя уже нет; 401/403
+ * обрабатываются общим errorText (как и остальные запросы карточки).
+ */
+function sessionsErrorText(error: unknown): string {
+  if (error instanceof ApiError && error.status === 404) {
+    return error.message || t('error.notFound');
+  }
+  return errorText(error);
+}
+
 /** Точечно обновить строку пользователя во всех кэшированных страницах списка. */
 function patchCachedUser(qc: QueryClient, id: string, patch: Partial<AdminUserRow>): void {
   qc.setQueriesData<AdminUserPage>({ queryKey: LIST_KEY }, (prev) => {
@@ -144,11 +163,23 @@ function removeCachedUser(qc: QueryClient, id: string): void {
 
 /**
  * Модальное окно с деталями пользователя: карточка, записи на курсы
- * (GET /admin/enrollments?studentId=…&limit=10) и последние платежи
- * (GET /admin/payments?q=<email>&limit=10). Монтируется только при открытии —
+ * (GET /admin/enrollments?studentId=…&limit=10), последние платежи
+ * (GET /admin/payments?q=<email>&limit=10) и активные сессии
+ * (GET /admin/users/{id}/sessions, T94). Монтируется только при открытии —
  * запросы уходят по факту показа. Закрытие: Esc, кнопка «Закрыть», клик по фону.
  */
-function UserDetails({ user, onClose }: { user: AdminUserRow; onClose: () => void }): JSX.Element {
+function UserDetails({
+  user,
+  onClose,
+  focusSessions = false,
+}: {
+  user: AdminUserRow;
+  onClose: () => void;
+  focusSessions?: boolean;
+}): JSX.Element {
+  const qc = useQueryClient();
+  const sessionsSectionRef = useRef<HTMLElement | null>(null);
+
   // Esc закрывает окно, пока оно смонтировано.
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent): void {
@@ -157,6 +188,16 @@ function UserDetails({ user, onClose }: { user: AdminUserRow; onClose: () => voi
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [onClose]);
+
+  // T94: действие «Принудительный выход» в строке открывает карточку сразу
+  // на секции сессий, не заставляя прокручивать профиль вручную.
+  useEffect(() => {
+    if (!focusSessions) return;
+    const node = sessionsSectionRef.current;
+    if (!node) return;
+    node.scrollIntoView({ block: 'start' });
+    node.focus({ preventScroll: true });
+  }, [focusSessions]);
 
   const enrollments = useQuery({
     queryKey: ['admin-user-enrollments', user.id],
@@ -170,8 +211,35 @@ function UserDetails({ user, onClose }: { user: AdminUserRow; onClose: () => voi
     retry: (failureCount, error) => !(error instanceof ApiError) && failureCount < 2,
   });
 
+  const sessions = useQuery({
+    queryKey: ['admin-user-sessions', user.id],
+    queryFn: () => listAdminUserSessions(user.id),
+    retry: (failureCount, error) => !(error instanceof ApiError) && failureCount < 2,
+  });
+
+  // T94: подтверждение отзыва всех сессий и сообщение об успехе — локальные,
+  // живут только пока открыта карточка.
+  const [confirmRevoke, setConfirmRevoke] = useState(false);
+  const [sessionsNotice, setSessionsNotice] = useState('');
+
+  const revokeSessions = useMutation({
+    mutationFn: () => revokeAdminUserSessions(user.id),
+    onSuccess: () => {
+      setConfirmRevoke(false);
+      setSessionsNotice(t('p10.sessions.revoked'));
+      // Список пустеет сразу, затем подтверждаем состояние запросом.
+      qc.setQueryData<AdminSessionsResponse>(['admin-user-sessions', user.id], { items: [] });
+      void qc.invalidateQueries({ queryKey: ['admin-user-sessions', user.id] });
+    },
+    onError: () => {
+      setConfirmRevoke(false);
+      setSessionsNotice('');
+    },
+  });
+
   const enrollmentsItems = enrollments.data?.items ?? [];
   const paymentsItems = payments.data?.items ?? [];
+  const sessionsItems = sessions.data?.items ?? [];
 
   return (
     <div className="au-modal-overlay" onClick={onClose}>
@@ -274,6 +342,112 @@ function UserDetails({ user, onClose }: { user: AdminUserRow; onClose: () => voi
             </ul>
           )}
         </section>
+
+        {/* ----- Активные сессии (T94) ----- */}
+        <section
+          ref={sessionsSectionRef}
+          className="au-details-section au-sessions"
+          aria-label={t('p10.sessions.title')}
+          tabIndex={-1}
+        >
+          <h3>{t('p10.sessions.title')}</h3>
+          <p className="muted au-sessions-hint">{t('p10.sessions.hint')}</p>
+
+          {sessions.isLoading && (
+            <p className="muted" role="status">
+              {t('common.loading')}
+            </p>
+          )}
+          {sessions.isFetching && !sessions.isLoading && (
+            <p className="muted au-sessions-updating" role="status">
+              {t('common.loading')}
+            </p>
+          )}
+          {sessions.isError && (
+            <div className="au-sessions-error" role="alert">
+              <p className="error">{sessionsErrorText(sessions.error)}</p>
+              <button
+                type="button"
+                className="btn btn-sm"
+                onClick={() => void sessions.refetch()}
+              >
+                {t('common.retry')}
+              </button>
+            </div>
+          )}
+          {sessions.data && sessionsItems.length === 0 && !sessions.isFetching && (
+            <p className="muted">{t('p10.sessions.empty')}</p>
+          )}
+          {sessionsItems.length > 0 && (
+            <>
+              <p className="muted au-sessions-count">
+                {t('p10.sessions.count')}: {sessionsItems.length}
+              </p>
+              <ul className="au-details-list au-sessions-list" aria-live="polite">
+                {sessionsItems.map((session) => (
+                  <li key={session.id}>
+                    <span className="au-details-item-name au-sessions-id">{session.id}</span>
+                    <span className="muted au-details-item-meta">
+                      {t('p10.sessions.createdAt')}: {formatDate(session.createdAt)}
+                    </span>
+                    <span className="muted au-details-item-meta">
+                      {t('p10.sessions.expiresAt')}: {formatDate(session.expiresAt)}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+
+          {sessionsItems.length > 0 && (
+            <div className="au-sessions-actions">
+              {confirmRevoke ? (
+                <>
+                  <span className="au-confirm">{t('p10.sessions.confirmRevokeAll')}</span>
+                  <button
+                    type="button"
+                    className="btn btn-sm au-btn--danger"
+                    disabled={revokeSessions.isPending}
+                    onClick={() => revokeSessions.mutate()}
+                  >
+                    {revokeSessions.isPending ? t('common.loading') : t('common.confirm')}
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-sm"
+                    disabled={revokeSessions.isPending}
+                    onClick={() => setConfirmRevoke(false)}
+                  >
+                    {t('common.cancel')}
+                  </button>
+                </>
+              ) : (
+                <button
+                  type="button"
+                  className="btn btn-sm au-btn--danger"
+                  onClick={() => {
+                    setSessionsNotice('');
+                    revokeSessions.reset();
+                    setConfirmRevoke(true);
+                  }}
+                >
+                  {t('p10.sessions.revokeAll')}
+                </button>
+              )}
+            </div>
+          )}
+
+          {sessionsNotice && (
+            <p className="au-notice au-sessions-notice" role="status" aria-live="polite">
+              {sessionsNotice}
+            </p>
+          )}
+          {revokeSessions.isError && (
+            <p className="error au-sessions-error" role="alert">
+              {sessionsErrorText(revokeSessions.error)}
+            </p>
+          )}
+        </section>
       </div>
     </div>
   );
@@ -323,6 +497,13 @@ export default function AdminUsers(): JSX.Element {
   const [confirm, setConfirm] = useState<PendingConfirm | null>(null);
   // T52: пользователь, открытый в карточке «Профиль» (null — окно закрыто).
   const [detailsUser, setDetailsUser] = useState<AdminUserRow | null>(null);
+  // T94: карточку открыли действием «Принудительный выход» — сразу к сессиям.
+  const [detailsFocusSessions, setDetailsFocusSessions] = useState(false);
+
+  function openDetails(user: AdminUserRow, focusSessions: boolean): void {
+    setDetailsFocusSessions(focusSessions);
+    setDetailsUser(user);
+  }
 
   function setRowError(id: string, text: string): void {
     setRowErrors((prev) => ({ ...prev, [id]: text }));
@@ -693,9 +874,16 @@ export default function AdminUsers(): JSX.Element {
                                   <button
                                     type="button"
                                     className="btn btn-sm"
-                                    onClick={() => setDetailsUser(u)}
+                                    onClick={() => openDetails(u, false)}
                                   >
                                     {t('adminUsers.open')}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="btn btn-sm"
+                                    onClick={() => openDetails(u, true)}
+                                  >
+                                    {t('p10.sessions.forceLogout')}
                                   </button>
                                   <button
                                     type="button"
@@ -759,7 +947,16 @@ export default function AdminUsers(): JSX.Element {
           </section>
 
           {/* ---------- Карточка «Профиль пользователя» (T52) ---------- */}
-          {detailsUser && <UserDetails user={detailsUser} onClose={() => setDetailsUser(null)} />}
+          {detailsUser && (
+            <UserDetails
+              user={detailsUser}
+              focusSessions={detailsFocusSessions}
+              onClose={() => {
+                setDetailsUser(null);
+                setDetailsFocusSessions(false);
+              }}
+            />
+          )}
         </main>
       </div>
     </div>
