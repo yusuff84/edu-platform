@@ -49,6 +49,7 @@ import {
   formatDate,
   formatPrice,
   listPromoCodes,
+  me,
   myTeaching,
   submitCourse,
   updateLesson,
@@ -722,9 +723,16 @@ export default function Constructor(): JSX.Element {
     retry: false,
   });
 
+  // T88: режим супер-админа. Для teacher всё остаётся как было (editable —
+  // только черновик); admin правит содержимое любого курса, кроме архива.
+  const meQuery = useQuery({ queryKey: ['me'], queryFn: me, retry: false });
+  const isAdmin = meQuery.data?.role === 'admin';
+
   const course = detailQuery.data?.course;
   const modules = detailQuery.data?.modules ?? [];
-  const editable = course?.status === 'draft';
+  const editable = course
+    ? course.status === 'draft' || (isAdmin && course.status !== 'archived')
+    : false;
   // T36: в архиве карточка заморожена — PATCH отвечает 409 (контракт T33),
   // поэтому форму правки заранее не показываем, а выводим подсказку.
   const cardFrozen = course?.status === 'archived';
@@ -1641,6 +1649,21 @@ export default function Constructor(): JSX.Element {
                 {t('teach.status')}: {STATUS_LABELS[course.status]} · {formatPrice(course.priceCents)}
               </p>
 
+              {/* T88: спокойный баннер режима супер-админа. Учитель его не видит,
+                  бизнес-логика teacher не меняется. В архиве доступ к правкам
+                  закрыт и для админа (T87) — показываем причину. */}
+              {isAdmin && (
+                <section className="teach-banner" role="note">
+                  <h2>{t('p10.courseAdmin.adminMode')}</h2>
+                  <p>{t('p10.courseAdmin.adminModeHint')}</p>
+                  <p className="teach-note">
+                    {course.status === 'archived'
+                      ? t('p10.courseAdmin.contentLockedArchived')
+                      : t('p10.courseAdmin.contentEditable')}
+                  </p>
+                </section>
+              )}
+
               {/* T28: сводка структуры — по уже загруженному CourseDetail. */}
               <p className="ce-structure">
                 <strong>{t('teach.structure')}:</strong> {t('course.modulesCount')}:{' '}
@@ -2094,8 +2117,10 @@ export default function Constructor(): JSX.Element {
               )}
 
               {/* Отправка на модерацию — только для черновика. Рядом — чеклист
-                  готовности (T56): пока не закрыты все пункты, кнопка выключена. */}
-              {editable ? (
+                  готовности (T56): пока не закрыты все пункты, кнопка выключена.
+                  T88: admin правит содержимое review/published, но отправка на
+                  модерацию остаётся действием черновика (teacher не затронут). */}
+              {course.status === 'draft' ? (
                 <div className="teach-section panel">
                   <div className="ce-checklist">
                     <p className="ce-checklist-title">
@@ -2134,9 +2159,9 @@ export default function Constructor(): JSX.Element {
                   </div>
                   <p className="teach-note">{t('teach.confirmSubmit')}</p>
                 </div>
-              ) : (
+              ) : !editable ? (
                 <p className="teach-note">{MSG_CONTENT_LOCKED}</p>
-              )}
+              ) : null}
 
               {/* Создание модулей и уроков — только в черновике. */}
               {editable && (

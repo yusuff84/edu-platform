@@ -8,6 +8,7 @@ import { ApiError, formatMoney } from '../api/client';
 import { getAdminStats } from '../api/adminConsole';
 import { t } from '../i18n/t';
 import type { RuKey } from '../i18n/t';
+import { useSeo } from '../app/useSeo';
 // Стили экранов консоли изолированы в styles/adminConsole.css (префикс .ac-).
 import '../styles/adminConsole.css';
 
@@ -56,6 +57,7 @@ function StatRow({ label, value }: { label: string; value: string | number }): J
 }
 
 export default function AdminStats(): JSX.Element {
+  useSeo(`${t('adminStats.title')} — ${t('cabinet.adminTitle')} — Edu Platform`);
   const stats = useQuery({
     // Ключ совпадает с инвалидацией в AdminCourses.tsx: действия над курсами
     // и удаление отзыва обновляют и сводку.
@@ -71,6 +73,9 @@ export default function AdminStats(): JSX.Element {
     <div className="wrap">
       <div className="page">
         <main className="ac-page">
+          <p className="muted">
+            <Link to="/admin">{t('p10.nav.backToAdmin')}</Link>
+          </p>
           <div className="ac-head">
             <h1>{t('adminStats.title')}</h1>
             <button

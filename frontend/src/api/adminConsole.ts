@@ -54,7 +54,15 @@ export type AdminCourseRow = {
   modulesCount: number;
   lessonsCount: number;
   studentsCount: number;
+  /**
+   * T87: комментарий модерации в GET /admin/courses/{id}. В элементах
+   * списка GET /admin/courses поле не отдаётся, поэтому оно необязательное.
+   */
+  moderationComment?: string;
 };
+
+/** Курс в ответах действий админки (форма строки GET /admin/courses). */
+export type AdminCourse = AdminCourseRow;
 
 /** Страница админского списка курсов: total — до пагинации. */
 export type AdminCoursePage = {
@@ -138,6 +146,18 @@ export function archiveAdminCourse(id: string): Promise<{ course: AdminCourseRow
 export function unpublishAdminCourse(id: string): Promise<{ course: AdminCourseRow }> {
   return apiFetch<{ course: AdminCourseRow }>(
     `/admin/courses/${encodeURIComponent(id)}/unpublish`,
+    { method: 'POST' },
+  );
+}
+
+/**
+ * POST /admin/courses/{id}/publish — принудительная публикация (T87):
+ * draft → published или review → published без очереди модерации.
+ * published — идемпотентный 200; archived — 409; 404, если курса нет.
+ */
+export function publishAdminCourse(id: string): Promise<{ course: AdminCourse }> {
+  return apiFetch<{ course: AdminCourse }>(
+    `/admin/courses/${encodeURIComponent(id)}/publish`,
     { method: 'POST' },
   );
 }

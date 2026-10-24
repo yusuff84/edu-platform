@@ -74,6 +74,66 @@ main.acd-page {
   white-space: nowrap;
 }
 
+/* ---------- T88: блок «Действия» супер-админа ---------- */
+
+.acd-actions__links,
+.acd-actions__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.acd-actions__links {
+  margin-bottom: 0.75rem;
+}
+
+.acd-actions__links .btn,
+.acd-actions__row .btn {
+  margin-top: 0;
+  white-space: nowrap;
+}
+
+.acd-actions__group {
+  border-top: 1px solid var(--line-soft);
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
+}
+
+.acd-actions__group h4 {
+  margin: 0 0 0.5rem;
+  font-size: 1rem;
+}
+
+.acd-actions__comment {
+  display: grid;
+  gap: 0.35rem;
+  max-width: 38rem;
+  margin: 0;
+}
+
+.acd-actions__hint {
+  margin: 0.35rem 0 0.5rem;
+  font-size: 0.9rem;
+}
+
+/* Неактивная ссылка-кнопка «Редактировать курс» для архива (T87). */
+.btn.acd-btn--disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+/* Комментарий модерации из GET /admin/courses/{id} (T87): спокойная плашка. */
+.acd-moderation-comment {
+  margin: 0 0 1rem;
+  padding: 0.6rem 0.8rem;
+  background: var(--warn-bg);
+  border-left: 3px solid #d98a00;
+  border-radius: var(--r-sm);
+  overflow-wrap: anywhere;
+}
+
 /* Обложка (T54): маленький прямоугольник рядом с шапкой, не ломает поток. */
 .acd-cover {
   width: 5.5rem;
@@ -489,7 +549,8 @@ main.acd-page {
     grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
   }
 
-  .acd-head__actions .btn {
+  .acd-head__actions .btn,
+  .acd-actions__links .btn {
     width: 100%;
   }
 
