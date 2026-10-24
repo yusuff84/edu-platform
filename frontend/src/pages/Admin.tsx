@@ -622,6 +622,9 @@ export default function Admin(): JSX.Element {
         <Link to="/admin/users">{t('adminUsers.title')}</Link>
         <Link to="/admin/courses">{t('adminCourses.title')}</Link>
         <Link to="/admin/enrollments">{t('adminEnrollments.title')}</Link>
+        {/* T84: глобальная модерация отзывов (ссылка добавлена по указанию
+            оркестратора; T88 может добавить свою — конфликт решается при мерже). */}
+        <Link to="/admin/reviews">{t('p10.nav.reviews')}</Link>
       </nav>
 
       {/* ---------- 1. Очередь модерации ---------- */}
