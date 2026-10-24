@@ -32,18 +32,16 @@ function formatRating(value: number): string {
 }
 
 /**
- * T59: быстрые переходы из сводки в разделы супер-админки. Пользователи,
- * курсы и записи — отдельные страницы; журнал платежей и очередь модерации —
- * секции /admin, у Admin.tsx есть якоря (section id="journal"/"queue"),
- * поэтому ведём по ним: после перезагрузки /admin#queue браузер отскроллит
- * к нужной секции (html { scroll-behavior: smooth } из styles.css).
+ * T59: быстрые переходы из сводки в разделы супер-админки. Все пункты —
+ * самостоятельные страницы: журнал платежей и очередь модерации после
+ * разделения админки живут на /admin/payments и /admin/moderation.
  */
 const QUICK_LINKS: Array<{ label: RuKey; to: string }> = [
   { label: 'p7.stats.linksUsers', to: '/admin/users' },
   { label: 'p7.stats.linksCourses', to: '/admin/courses' },
   { label: 'p7.stats.linksEnrollments', to: '/admin/enrollments' },
-  { label: 'p7.stats.linksJournal', to: '/admin#journal' },
-  { label: 'p7.stats.linksQueue', to: '/admin#queue' },
+  { label: 'p7.stats.linksJournal', to: '/admin/payments' },
+  { label: 'p7.stats.linksQueue', to: '/admin/moderation' },
 ];
 
 /** Строка «подпись — значение» внутри карточки сводки. */
