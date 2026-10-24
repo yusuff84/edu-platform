@@ -122,9 +122,10 @@
 
 /* T62: «вверх/вниз», «удалить», «перейти», «отменить» и прочие кнопки без
    .btn — раньше это были голые нативные кнопки разной высоты и ширины.
-   Первичные .btn ниже приведены к той же геометрии (высота/радиус),
-   чтобы в одном ряду не смешивались разные «миры» кнопок. */
-.teach-section button:not(.btn) {
+   T91: компактные действия внутри карточек квиза/тестов помечены .ce-btn-sm
+   и исключены из этой «рядовой» геометрии, иначе 40px-кнопки распирали
+   строку варианта и карточку теста. Остальные кнопки конструктора — как T62. */
+.teach-section button:not(.btn):not(.ce-btn-sm) {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -142,14 +143,64 @@
   transition: background 0.15s, border-color 0.15s, color 0.15s;
 }
 
-.teach-section button:not(.btn):hover:not(:disabled):not(.teach-danger) {
+.teach-section button:not(.btn):not(.ce-btn-sm):hover:not(:disabled):not(.teach-danger) {
   background: #f7f5f0;
   border-color: #d9d4c9;
 }
 
-.teach-section button:not(.btn):disabled {
+.teach-section button:not(.btn):not(.ce-btn-sm):disabled {
   opacity: 0.55;
   cursor: default;
+}
+
+/* T91: компактные действия вопросов/вариантов/тестов — 32px, узкий padding,
+   радиус 8. Не «гигантские» кнопки, но и не нативные: ряд остаётся читаемым. */
+.teach-section .ce-btn-sm {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 32px;
+  height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--fg);
+  font-family: var(--font);
+  font-size: 12.5px;
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  margin-top: 0;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+
+.teach-section .ce-btn-sm:hover:not(:disabled):not(.ce-btn-danger) {
+  background: #f7f5f0;
+  border-color: #d9d4c9;
+}
+
+.teach-section .ce-btn-sm:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* Destructive-действие в компактном ряду: красный контур, hover — заливка. */
+.teach-section .ce-btn-sm.ce-btn-danger {
+  color: #b00020;
+  border-color: #b00020;
+}
+
+.teach-section .ce-btn-sm.ce-btn-danger:hover:not(:disabled) {
+  background: #b00020;
+  border-color: #b00020;
+  color: #fff;
+}
+
+.teach-section .ce-btn-sm:focus-visible {
+  outline: 3px solid var(--focus-ring-color);
+  outline-offset: var(--focus-ring-offset);
 }
 
 /* T62: ряды, где стоят и .btn («Сохранить/Добавить»), и обычные кнопки
@@ -336,53 +387,177 @@
   margin-right: 0.4rem;
 }
 
-/* ---------- Вопросы квиза ---------- */
+/* ---------- Вопросы квиза и тесты кода ---------- */
 
 .teach-counter {
   font-weight: 600;
   margin: 0.5rem 0;
 }
 
+/* T91: карточки вопросов/тестов — «белая» карточка в общем ритме панелей
+   (было #fafafa без общей границы/радиуса). */
 .teach-q-box,
 .teach-test-box {
-  border: 1px solid #e5e5e5;
+  border: 1px solid var(--line);
   border-radius: 8px;
-  padding: 0.75rem;
-  margin: 0.75rem 0;
-  background: #fafafa;
+  padding: 12px;
+  margin: 10px 0;
+  background: var(--surface);
 }
 
-.teach-q-box h3 {
-  margin: 0 0 0.5rem;
-  font-size: 0.95rem;
+/* T91: контейнеры quiz/code — часть .form-grid; min-width: 0 не даёт длинным
+   input/textarea распирать сетку формы (поля не выходят за панель). */
+.ce-quiz,
+.ce-code {
+  min-width: 0;
+  max-width: 100%;
 }
 
+.ce-quiz .teach-q-box,
+.ce-code .teach-test-box {
+  min-width: 0;
+}
+
+/* T91: подписи полей внутри карточек — та же типографика, что у
+   .teach-section .form-grid > label (13px/700/muted). */
+.ce-quiz > label,
+.ce-code > label,
+.teach-q-box > label:not(.teach-check),
+.teach-test-box > label:not(.teach-check) {
+  display: block;
+  margin: 10px 0 4px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.ce-code > label:first-child {
+  margin-top: 0;
+}
+
+/* Первая подпись под шапкой теста не удваивает зазор (шапка уже с border). */
+.ce-test-head + label {
+  margin-top: 0;
+}
+
+/* Счётчик вопросов — первый элемент блока: верхний отступ даёт form-grid. */
+.ce-quiz > .teach-counter:first-child {
+  margin-top: 0;
+}
+
+/* T91: input/select/textarea в quiz/code — ширина контейнера и одна коробка;
+   классы .input/.select дают общие высоту/радиус/границу проекта. */
+.ce-quiz input:not([type='radio']):not([type='checkbox']),
+.ce-code input:not([type='checkbox']),
+.ce-quiz select,
+.ce-code select,
+.ce-quiz textarea,
+.ce-code textarea {
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+.ce-quiz .input,
+.ce-code .input,
+.ce-code .select {
+  min-width: 0;
+}
+
+/* T91: fieldset вариантов — без браузерной рамки, legend как подпись поля. */
 .teach-options {
   border: none;
   padding: 0;
-  margin: 0.5rem 0;
+  margin: 10px 0;
+  min-width: 0;
 }
 
 .teach-options legend {
-  font-weight: 600;
-  font-size: 0.875rem;
   padding: 0;
+  margin: 0 0 6px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--muted);
 }
 
+/* T91: строка варианта — сетка radio | label | input | действия.
+   На десктопе без переносов, на узком экране — аккуратные две строки. */
 .teach-option-row {
-  display: flex;
-  align-items: flex-end;
-  gap: 0.5rem;
-  margin: 0.35rem 0;
+  display: grid;
+  grid-template-columns: auto minmax(72px, max-content) minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 0;
+  min-width: 0;
 }
 
-.teach-option-row label {
+.teach-option-row > label:not(.teach-correct-radio) {
   margin: 0;
-  flex: 1;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.teach-option-row .input {
+  min-width: 0;
+  width: 100%;
 }
 
 .teach-option-row button {
   margin-top: 0;
+}
+
+/* T91: кнопки добавления — обычные вторичные (40px, как рядовые T62);
+   отделяем их от карточки/строки, чтобы не липли к полям. */
+.ce-add {
+  margin-top: 10px;
+}
+
+.ce-q-remove {
+  margin-top: 10px;
+}
+
+/* T91: focus-visible полей и кнопок внутри quiz/code — общий красный ring
+   проекта; у .input:focus подавляем box-shadow, чтобы не было двух колец. */
+.ce-quiz :focus-visible,
+.ce-code :focus-visible,
+.teach-q-box :focus-visible,
+.teach-test-box :focus-visible {
+  outline: 3px solid var(--focus-ring-color);
+  outline-offset: var(--focus-ring-offset);
+}
+
+.ce-quiz .input:focus-visible,
+.ce-code .input:focus-visible,
+.ce-code .select:focus-visible,
+.ce-quiz .teach-options:focus-visible,
+.ce-code .ce-tests-box:focus-visible {
+  outline: 3px solid var(--focus-ring-color);
+  outline-offset: var(--focus-ring-offset);
+  box-shadow: none;
+}
+
+/* T91: узкий экран — radio и подпись в первой строке, поле и действия ниже. */
+@media (max-width: 760px) {
+  .teach-option-row {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .teach-option-row > label:not(.teach-correct-radio) {
+    grid-column: 2;
+    white-space: normal;
+  }
+
+  .teach-option-row > .input {
+    grid-column: 1 / -1;
+  }
+
+  .teach-option-row > .ce-option-actions {
+    grid-column: 1 / -1;
+    justify-self: end;
+    flex-wrap: wrap;
+  }
 }
 
 .teach-correct-radio {
