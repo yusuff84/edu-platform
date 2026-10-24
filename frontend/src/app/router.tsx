@@ -21,6 +21,12 @@ const Favorites = lazy(() => import('../pages/Favorites'));
 const Learn = lazy(() => import('../pages/Learn'));
 const Constructor = lazy(() => import('../pages/Constructor'));
 const Admin = lazy(() => import('../pages/Admin'));
+// Разделы, которые раньше жили якорями на одной странице /admin, вынесены
+// в самостоятельные маршруты со своими чанками.
+const AdminModeration = lazy(() => import('../pages/AdminModeration'));
+const AdminPayments = lazy(() => import('../pages/AdminPayments'));
+const AdminSettings = lazy(() => import('../pages/AdminSettings'));
+const AdminInvites = lazy(() => import('../pages/AdminInvites'));
 // T26/T27/T29/T30: подразделы, разведённые по задачам отдельными страницами,
 // чтобы агенты правили каждый свой файл и не конфликтовали.
 const AdminUsers = lazy(() => import('../pages/AdminUsers'));
@@ -232,8 +238,8 @@ function Layout(): JSX.Element {
           <div>
             <b>Авторам</b>
             <Link to="/teach">Конструктор курса</Link>
-            <Link to="/admin">Модерация</Link>
-            <Link to="/admin">Приглашения</Link>
+            <Link to="/admin/moderation">Модерация</Link>
+            <Link to="/admin/invites">Приглашения</Link>
           </div>
         </div>
       </footer>
@@ -266,6 +272,12 @@ export const router = createBrowserRouter([
       { path: '/teach/stats', element: <RequireRole roles={['teacher', 'admin']}><TeacherStats /></RequireRole> },
       { path: '/teach/:id', element: <RequireRole roles={['teacher', 'admin']}><Constructor /></RequireRole> },
       { path: '/admin', element: <RequireRole roles={['admin']}><Admin /></RequireRole> },
+      // Бывшие секции /admin#... — теперь самостоятельные страницы.
+      // Статичные пути не конфликтуют с /admin/courses/:id (разные сегменты).
+      { path: '/admin/moderation', element: <RequireRole roles={['admin']}><AdminModeration /></RequireRole> },
+      { path: '/admin/payments', element: <RequireRole roles={['admin']}><AdminPayments /></RequireRole> },
+      { path: '/admin/settings', element: <RequireRole roles={['admin']}><AdminSettings /></RequireRole> },
+      { path: '/admin/invites', element: <RequireRole roles={['admin']}><AdminInvites /></RequireRole> },
       // Подразделы супер-админки — отдельные страницы со своим роутом
       // (каждая со своим владельцем-задачей).
       { path: '/admin/users', element: <RequireRole roles={['admin']}><AdminUsers /></RequireRole> },
