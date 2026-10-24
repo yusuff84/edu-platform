@@ -34,17 +34,20 @@ header nav a[aria-current='page'] {
   color: var(--muted);
 }
 
-/* Ссылки «на главную» внутри центрированных экранов — как текстовые ссылки
-   в остальном каркасе (см. .page a:not(.btn) в styles.css). */
+/* T92: ссылки «на главную» внутри центрированных экранов — как обычные
+   текстовые ссылки: в покое цвет/начертание родителя без постоянного
+   подчёркивания, при hover/focus-visible — фирменный акцент и underline. */
 .shell-center p a {
-  color: var(--cta-blue);
-  text-decoration: underline;
-  text-underline-offset: 2px;
+  color: inherit;
+  text-decoration: none;
+  text-underline-offset: 3px;
   font-weight: 600;
 }
 
-.shell-center p a:hover {
-  color: #1f3ae0;
+.shell-center p a:hover,
+.shell-center p a:focus-visible {
+  color: var(--brand);
+  text-decoration: underline;
 }
 
 /* Действия экранов (кнопки ошибки/gоварда). В разметке здесь <button> и

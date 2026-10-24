@@ -131,18 +131,29 @@ h3 {
   color: var(--muted);
 }
 
+/* T92: обычные текстовые ссылки в контенте — спокойные: в покое наследуют
+   цвет и начертание родительского текста и не подчёркнуты; при hover и
+   focus-visible — мягкий фирменный акцент + underline. Полужирность (600)
+   оставляет ссылку отличимой от обычного текста без постоянного подчёркивания.
+   Кнопкообразные ссылки (.btn) и ссылки-кнопки конструктора (.teach-link-btn,
+   карточки .teach-card) исключены — их стилизует constructor.css (T91). */
 .page p a:not(.btn),
-.page li a:not(.btn),
+.page li:not(.teach-card) a:not(.btn):not(.teach-link-btn),
 .empty a:not(.btn) {
-  color: var(--cta-blue);
-  text-decoration: underline;
-  text-underline-offset: 2px;
+  color: inherit;
+  font-weight: 600;
+  text-decoration: none;
+  text-underline-offset: 3px;
 }
 
 .page p a:not(.btn):hover,
-.page li a:not(.btn):hover,
-.empty a:not(.btn):hover {
-  color: #1f3ae0;
+.page p a:not(.btn):focus-visible,
+.page li:not(.teach-card) a:not(.btn):not(.teach-link-btn):hover,
+.page li:not(.teach-card) a:not(.btn):not(.teach-link-btn):focus-visible,
+.empty a:not(.btn):hover,
+.empty a:not(.btn):focus-visible {
+  color: var(--brand);
+  text-decoration: underline;
 }
 
 .error {
@@ -1764,12 +1775,20 @@ tr:last-child td {
 
 .perk p a {
   color: inherit;
-  text-decoration: underline;
+  text-decoration: none;
   text-underline-offset: 3px;
 }
 
-.perk.dark p a:hover {
+.perk p a:hover,
+.perk p a:focus-visible {
+  color: var(--brand);
+  text-decoration: underline;
+}
+
+.perk.dark p a:hover,
+.perk.dark p a:focus-visible {
   color: #fff;
+  text-decoration: underline;
 }
 
 /* ---------- marketing: dreams ---------- */
@@ -1938,12 +1957,14 @@ tr:last-child td {
 
 .diploma p a {
   color: inherit;
-  text-decoration: underline;
+  text-decoration: none;
   text-underline-offset: 3px;
 }
 
-.diploma p a:hover {
+.diploma p a:hover,
+.diploma p a:focus-visible {
   color: var(--brand);
+  text-decoration: underline;
 }
 
 .diploma-visual {
