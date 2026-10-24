@@ -1,0 +1,360 @@
+/* Стили раздела «Вопросы и ответы» супер-админки (T86).
+   Импортируются только из pages/AdminQa.tsx; общий styles.css и admin.css
+   не изменяются — здесь только селекторы с префиксом .aq-.
+   Базовые классы (.panel, .muted, .error, .btn, .input, .sr-only) — из styles.css. */
+
+main.aq-page {
+  max-width: 1100px;
+}
+
+.aq-back {
+  margin: 0 0 0.25rem;
+  font-size: 0.9rem;
+}
+
+/* ---------- Заголовок и обновление ---------- */
+
+.aq-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem 1rem;
+  margin-bottom: 1rem;
+}
+
+.aq-head h1 {
+  margin: 0;
+}
+
+.aq-head p {
+  margin: 0.25rem 0 0;
+}
+
+.aq-head .btn {
+  margin-top: 0;
+  flex: none;
+}
+
+/* ---------- Фильтры ---------- */
+
+.aq-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.aq-field {
+  display: grid;
+  gap: 0.25rem;
+  margin: 0;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.aq-field--search {
+  flex: 1 1 18rem;
+}
+
+.aq-field .input {
+  margin-top: 0;
+}
+
+.aq-select {
+  min-width: 12rem;
+  max-width: 100%;
+}
+
+.aq-hint {
+  margin: 0 0 0.5rem;
+  font-size: 0.85rem;
+}
+
+/* ---------- Итог и уведомления ---------- */
+
+.aq-total {
+  margin: 0 0 0.5rem;
+}
+
+.aq-notice {
+  margin: 0 0 0.75rem;
+  padding: 0.4rem 0.75rem;
+  background: var(--ok-bg);
+  color: #14663a;
+  border-radius: var(--r-sm);
+  font-weight: 600;
+}
+
+.aq-error {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+  margin: 0.5rem 0;
+}
+
+.aq-error p {
+  margin: 0;
+}
+
+.aq-error button {
+  margin-top: 0;
+}
+
+/* ---------- Скелетон загрузки ---------- */
+
+.aq-skeleton {
+  display: grid;
+  gap: 0.5rem;
+  padding: 0.5rem 0;
+}
+
+.aq-skeleton-line {
+  display: block;
+  height: 4.5rem;
+  border-radius: var(--r-sm);
+  background: linear-gradient(90deg, #f1f3f5, #e9ecef, #f1f3f5);
+}
+
+/* ---------- Карточки вопросов ---------- */
+
+.aq-list {
+  display: grid;
+  gap: 0.75rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.aq-card {
+  padding: 1rem 1.1rem;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow-sm);
+}
+
+.aq-card__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.35rem 0.75rem;
+}
+
+.aq-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.25rem 0.5rem;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.aq-link {
+  font-weight: 600;
+}
+
+.aq-count {
+  flex: none;
+  padding: 0.1rem 0.55rem;
+  border-radius: 999px;
+  background: #eef1f4;
+  color: #55606b;
+  font-size: 0.8rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* ---------- Автор и текст ---------- */
+
+.aq-author {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0.55rem 0 0.25rem;
+  font-size: 0.9rem;
+}
+
+.aq-author-name {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.aq-author-email {
+  font-size: 0.85rem;
+  overflow-wrap: anywhere;
+}
+
+.aq-body {
+  margin: 0.4rem 0 0.6rem;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* ---------- Действия и подтверждения ---------- */
+
+.aq-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.aq-actions .btn,
+.aq-answer__actions .btn {
+  margin-top: 0;
+}
+
+.aq-confirm {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.35rem 0.55rem;
+  background: var(--danger-bg);
+  border-radius: var(--r-sm);
+  font-size: 0.85rem;
+}
+
+.aq-confirm .btn {
+  margin-top: 0;
+}
+
+.aq-btn--danger {
+  background: var(--danger);
+  border-color: var(--danger);
+  color: #fff;
+}
+
+.aq-btn--danger:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.aq-row-error {
+  margin: 0.35rem 0 0;
+  font-size: 0.85rem;
+}
+
+/* ---------- Раскрытая ветка ответов ---------- */
+
+.aq-answers {
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--line-soft);
+}
+
+.aq-answer-list {
+  display: grid;
+  gap: 0.6rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.aq-answer {
+  padding: 0.65rem 0.75rem;
+  background: #faf9f6;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--r-sm);
+}
+
+.aq-answer__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.85rem;
+}
+
+.aq-answer-date {
+  margin-left: auto;
+  white-space: nowrap;
+}
+
+.aq-answer .aq-body {
+  margin: 0.4rem 0 0.5rem;
+}
+
+.aq-answer__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.aq-badge {
+  display: inline-block;
+  padding: 0.1rem 0.5rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.aq-badge--teacher {
+  background: #e8f0fe;
+  color: #1a4fa0;
+}
+
+.aq-badge--student {
+  background: #eef1f4;
+  color: #55606b;
+}
+
+/* ---------- Пагинация ---------- */
+
+.aq-pager {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+
+.aq-pager button {
+  margin-top: 0;
+}
+
+.aq-pager button:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+/* ---------- Узкие экраны ---------- */
+
+@media (max-width: 720px) {
+  .aq-head {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .aq-head .btn {
+    align-self: flex-start;
+  }
+
+  .aq-field--search,
+  .aq-field,
+  .aq-select {
+    flex: 1 1 100%;
+    min-width: 0;
+    width: 100%;
+  }
+
+  .aq-card {
+    padding: 0.85rem 0.9rem;
+  }
+
+  .aq-answer-date {
+    margin-left: 0;
+  }
+
+  .aq-pager {
+    justify-content: center;
+  }
+}
