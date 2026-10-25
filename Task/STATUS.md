@@ -903,3 +903,37 @@ DOM-проверки в браузере под `qa-admin@example.test`:
 из-за TLS-таймаута Docker Hub (`nginx:1.27-alpine`); для браузерных проверок
 актуальный `frontend/dist` скопирован в работающий контейнер. Код и Dockerfile
 не менялись — на машине/CI с доступом к Docker Hub сборка штатная.
+
+## Пост-P10: подсветка синтаксиса и отдельные страницы админки
+
+**Ветки:** `fix/syntax-highlighting` и `fix/admin-sections` от `main` (`a0d5158`).
+Обе смержены пользователем через PR; локальная `main` обновлена до `5ed3515`.
+
+| PR | Что сделано | Merge-коммит |
+|---|---|---|
+| #11 | подсветка markdown-блоков, шаблона код-задачи, предпросмотра и редактора (`prism-react-renderer`, `react-simple-code-editor`) | `5ed3515` |
+| #12 | `/admin` — хаб, разделы вынесены на `/admin/moderation`, `/admin/payments`, `/admin/settings`, `/admin/invites`; hash-ссылки редиректят | `0baa0a3` |
+
+| Проверка | Результат |
+|---|---|
+| `npm ci && npm run build` (`tsc --noEmit` + Vite) | ✅ PASS |
+| `npm test` | ✅ **235/235 PASS, 0 FAIL** |
+| Go `vet` и тесты в Docker | ✅ без изменений с P10 (бэкенд не менялся) |
+
+DOM-проверки на live (`localhost:3001`, сборка `index-DT_i9bM8.js`):
+
+- `/admin` — 11 ссылок-разделов, якорей `#...` нет;
+- `/admin/moderation` — «Нет курсов на проверке»;
+- `/admin/payments` — фильтры, таблица, итоги, возврат в журнале;
+- `/admin/settings` — комиссия 15 %, переключатель промо-полосы;
+- `/admin/invites` — форма приглашения, «Всего приглашений: 0»;
+- `/admin#queue|#journal|#settings|#invites` — редиректы на новые маршруты;
+- markdown-блок с языком `python` — 23 токена, `language-python`;
+- шаблон код-задачи — 28 токенов; редактор — 17 токенов;
+- `htmlcss`: HTML → `language-markup` (13 токенов), CSS → `language-css` (11);
+- неизвестный язык — plain `<pre><code>` без токенов и без падения;
+- русский текст в блоках сохраняется.
+
+Live выкачен копированием `frontend/dist` в `edu-platform-web-1` (Docker Hub
+по-прежнему отдаёт TLS-таймаут). Тестовая запись на Python-курс отозвана,
+платёж возвращён, тело урока восстановлено после проверки подсветки.
