@@ -177,6 +177,47 @@ type lessonView struct {
 	CodeTask  any        `json:"codeTask,omitempty"`
 }
 
+// lessonAccess — уровень доступа зрителя к содержимому уроков курса (H1).
+// Гость видит контент только у превью-уроков, ученик с активной записью —
+// у всех уроков, владелец курса и админ — ещё и ответы тестов со скрытыми
+// тестами code-заданий.
+type lessonAccess int
+
+const (
+	// lessonAccessGuest — гость или заблокированный пользователь.
+	lessonAccessGuest lessonAccess = iota
+	// lessonAccessEnrolled — ученик с активной записью на курс.
+	lessonAccessEnrolled
+	// lessonAccessOwnerAdmin — владелец курса или администратор.
+	lessonAccessOwnerAdmin
+)
+
+// isCourseOwnerOrAdmin — полный доступ к курсу у его владельца или админа.
+// Заблокированный пользователь полного доступа не получает, даже если
+// middleware ещё не отсекла его сессию.
+func isCourseOwnerOrAdmin(viewer *repo.User, c *repo.Course) bool {
+	if viewer == nil || viewer.Status == repo.UserBlocked {
+		return false
+	}
+	return viewer.ID == c.TeacherID || viewer.Role == repo.RoleAdmin
+}
+
+// courseAccessFor вычисляет уровень доступа зрителя к урокам курса.
+// Для ученика проверяется именно активная запись: refunded/revoked доступ
+// не дают.
+func (a *App) courseAccessFor(viewer *repo.User, c *repo.Course) lessonAccess {
+	if isCourseOwnerOrAdmin(viewer, c) {
+		return lessonAccessOwnerAdmin
+	}
+	if viewer == nil || viewer.Status == repo.UserBlocked {
+		return lessonAccessGuest
+	}
+	if e, ok := a.Store.GetEnrollment(viewer.ID, c.ID); ok && e.Status == repo.EnrollmentActive {
+		return lessonAccessEnrolled
+	}
+	return lessonAccessGuest
+}
+
 type moduleView struct {
 	ID       string       `json:"id"`
 	Title    string       `json:"title"`
@@ -184,15 +225,22 @@ type moduleView struct {
 	Lessons  []lessonView `json:"lessons"`
 }
 
-// lessonToView строит вид урока; full=true только для владельца/админа.
-func lessonToView(l *repo.Lesson, full bool) lessonView {
+// lessonToViewAccess строит вид урока по уровню доступа зрителя (H1).
+// Контент (bodyMd/videoUrl/liveUrl) у гостя есть только у превью-урока;
+// правильные ответы теста и скрытые тесты code-задания — только у
+// владельца/админа.
+func lessonToViewAccess(l *repo.Lesson, access lessonAccess) lessonView {
 	v := lessonView{
 		ID: l.ID, Title: l.Title, Kind: l.Kind, Position: l.Position,
-		IsPreview: l.IsPreview,
-		BodyMD:    l.BodyMD, VideoURL: l.VideoURL, LiveURL: l.LiveURL, StartsAt: l.StartsAt,
+		IsPreview: l.IsPreview, StartsAt: l.StartsAt,
+	}
+	if access != lessonAccessGuest || l.IsPreview {
+		v.BodyMD = l.BodyMD
+		v.VideoURL = l.VideoURL
+		v.LiveURL = l.LiveURL
 	}
 	if l.Quiz != nil {
-		if full {
+		if access == lessonAccessOwnerAdmin {
 			v.Quiz = l.Quiz
 		} else {
 			qp := quizPublic{}
@@ -205,7 +253,7 @@ func lessonToView(l *repo.Lesson, full bool) lessonView {
 		}
 	}
 	if l.CodeTask != nil {
-		if full {
+		if access == lessonAccessOwnerAdmin {
 			v.CodeTask = l.CodeTask
 		} else {
 			cp := codeTaskPublic{Language: l.CodeTask.Language, Template: l.CodeTask.Template, Tests: []repo.CodeTest{}}
@@ -220,8 +268,20 @@ func lessonToView(l *repo.Lesson, full bool) lessonView {
 	return v
 }
 
+// lessonToView — полный вид урока для teacher API (владелец/админ).
+// Обёртка сохраняет прежний вызов из teacher_edit.go; публичные страницы
+// используют lessonToViewAccess с явным уровнем доступа.
+func lessonToView(l *repo.Lesson, full bool) lessonView {
+	if full {
+		return lessonToViewAccess(l, lessonAccessOwnerAdmin)
+	}
+	return lessonToViewAccess(l, lessonAccessGuest)
+}
+
 // GetCourse — GET /courses/{slug}: страница курса с модулями и уроками.
-// Неопубликованные курсы видят только владелец и админ.
+// Неопубликованные курсы видят только владелец и админ. Уровень доступа к
+// урокам (H1): гость — контент только у превью-уроков, ученик с активной
+// записью — у всех уроков, владелец/админ — полный вид тестов и заданий.
 func (a *App) GetCourse(w http.ResponseWriter, r *http.Request) {
 	slug := chi.URLParam(r, "slug")
 	c, ok := a.Store.GetCourseBySlug(slug)
@@ -230,8 +290,8 @@ func (a *App) GetCourse(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	viewer := a.optionalUser(r)
-	full := viewer != nil && (viewer.ID == c.TeacherID || viewer.Role == repo.RoleAdmin)
-	if c.Status != repo.CoursePublished && !full {
+	access := a.courseAccessFor(viewer, c)
+	if c.Status != repo.CoursePublished && access != lessonAccessOwnerAdmin {
 		writeErr(w, http.StatusNotFound, "Курс не найден")
 		return
 	}
@@ -241,7 +301,7 @@ func (a *App) GetCourse(w http.ResponseWriter, r *http.Request) {
 		lessons := a.Store.ListLessonsByModule(m.ID)
 		lv := make([]lessonView, 0, len(lessons))
 		for _, l := range lessons {
-			lv = append(lv, lessonToView(l, full))
+			lv = append(lv, lessonToViewAccess(l, access))
 		}
 		mv = append(mv, moduleView{ID: m.ID, Title: m.Title, Position: m.Position, Lessons: lv})
 	}
@@ -263,8 +323,9 @@ type coursePreviewRef struct {
 // GetLessonPreview — GET /courses/{slug}/preview/{lessonId}: публичный
 // бесплатный просмотр превью-урока (T75). Курс должен существовать и быть
 // published, урок — принадлежать курсу и иметь isPreview=true; иначе
-// 404 «Курс не найден» / 404 «Урок не найден». Урок отдаётся публичным видом
-// lessonToView(..., false): без правильных ответов теста и скрытых тестов.
+// 404 «Курс не найден» / 404 «Урок не найден». Урок всегда отдаётся
+// гостевым видом (lessonAccessGuest): без правильных ответов теста и
+// скрытых тестов.
 func (a *App) GetLessonPreview(w http.ResponseWriter, r *http.Request) {
 	c, ok := a.Store.GetCourseBySlug(chi.URLParam(r, "slug"))
 	if !ok || c.Status != repo.CoursePublished {
@@ -278,6 +339,6 @@ func (a *App) GetLessonPreview(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"course": coursePreviewRef{ID: c.ID, Slug: c.Slug, Title: c.Title},
-		"lesson": lessonToView(l, false),
+		"lesson": lessonToViewAccess(l, lessonAccessGuest),
 	})
 }
