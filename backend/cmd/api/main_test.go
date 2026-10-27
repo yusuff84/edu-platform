@@ -1,13 +1,17 @@
 package main
 
-// Регресс-тесты T16 (п.7): seedAdmin/ensureAccount чинят демо-учётки с
-// ПОДЕЛЬНЫМИ bcrypt-хешами из миграции 002_seed.sql. Это уже однажды тихо
-// сломалось (админ из миграции не мог войти, qa-abc падал на блоке B),
-// поэтому поведение закреплено тестами: поддельный или несовпадающий хеш
-// перезаписывается настоящим, корректный хеш не трогается, отсутствующий
-// пользователь создаётся.
+// Регресс-тесты P11-7 (критические риски старта C3/C4).
+//
+// C4: в production API не должен молча откатываться в in-memory, если
+// DATABASE_URL пуст или Postgres недоступен. В dev fallback с demo-сидом
+// сохраняется.
+//
+// C3: seedAdmin не создаёт teacher@local/teacher1 без явных TEACHER_*,
+// не сбрасывает пароль и роль существующих пользователей; demo-учитель
+// demo-teacher@local создаётся только в in-memory сиде seedDemo.
 
 import (
+	"strings"
 	"testing"
 
 	"golang.org/x/crypto/bcrypt"
@@ -17,17 +21,23 @@ import (
 )
 
 // fakeMigrationHash — точная заглушка из 002_seed.sql: 50 символов «A»
-// плюс открытый текст пароля. bcrypt.ParseHash на ней падает.
+// плюс открытый текст пароля. bcrypt.Cost на ней падает.
 const fakeMigrationHash = "$2a$10$AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAadmin1234"
 
-// newSeedConfig собирает конфиг для seedAdmin, изолируя env учителя.
-func newSeedConfig(t *testing.T, email, password string) *config.Config {
+// newSeedConfig собирает конфиг для seedAdmin и по умолчанию отключает
+// сид учителя: без явных TEACHER_* никакая учётка учителя создаваться не должна.
+func newSeedConfig(t *testing.T, adminEmail, adminPassword string) *config.Config {
 	t.Helper()
-	// Учителя в тестах не сидируем: env явно указывает на несуществующие
-	// значения, чтобы ensureAccount для teacher не мешал проверкам админа.
-	t.Setenv("TEACHER_EMAIL", "teacher-test-seed@example.test")
-	t.Setenv("TEACHER_PASSWORD", "teacher-test-seed-1")
-	return &config.Config{AdminEmail: email, AdminPassword: password}
+	t.Setenv("TEACHER_EMAIL", "")
+	t.Setenv("TEACHER_PASSWORD", "")
+	return &config.Config{AdminEmail: adminEmail, AdminPassword: adminPassword}
+}
+
+// setTeacherEnv задаёт переменные сида учителя для конкретного теста.
+func setTeacherEnv(t *testing.T, email, password string) {
+	t.Helper()
+	t.Setenv("TEACHER_EMAIL", email)
+	t.Setenv("TEACHER_PASSWORD", password)
 }
 
 // mustCompare сверяет хеш с паролем и падает при расхождении.
@@ -37,6 +47,16 @@ func mustCompare(t *testing.T, hash, password string) {
 		t.Fatalf("хеш не соответствует паролю %q: %v", password, err)
 	}
 }
+
+// mustNotCompare проверяет, что пароль больше не подходит к хешу.
+func mustNotCompare(t *testing.T, hash, password string) {
+	t.Helper()
+	if err := bcrypt.CompareHashAndPassword([]byte(hash), []byte(password)); err == nil {
+		t.Fatalf("пароль %q не должен подходить к хешу", password)
+	}
+}
+
+// ---- seedAdmin (C3) ----
 
 // TestSeedAdminCreatesMissingUser — пользователя нет → создаётся с настоящим
 // bcrypt и ролью admin; пароль реально входит.
@@ -54,10 +74,39 @@ func TestSeedAdminCreatesMissingUser(t *testing.T) {
 	mustCompare(t, u.PasswordHash, "пароль-админа-1")
 }
 
-// TestSeedAdminRepairsFakeHash — пользователь ЕСТЬ с поддельным хешем
-// из миграции (баг 002_seed.sql) → хеш перезаписывается настоящим.
-// Ровно этот сценарий блокировал сквозной прогон до T16.
-func TestSeedAdminRepairsFakeHash(t *testing.T) {
+// TestSeedAdminKeepsExistingPassword — существующий пользователь не должен
+// получать новый пароль при старте (C3): ADMIN_PASSWORD задан, но хеш
+// остаётся прежним, старый пароль продолжает работать.
+func TestSeedAdminKeepsExistingPassword(t *testing.T) {
+	s := repo.NewStore()
+	oldHash, err := bcrypt.GenerateFromPassword([]byte("старый-пароль"), bcrypt.MinCost)
+	if err != nil {
+		t.Fatalf("хеш: %v", err)
+	}
+	if _, err := s.CreateUser("admin-existing@example.test", string(oldHash), repo.RoleAdmin); err != nil {
+		t.Fatalf("создание: %v", err)
+	}
+
+	seedAdmin(s, newSeedConfig(t, "admin-existing@example.test", "новый-пароль"))
+
+	u, ok := s.GetUserByEmail("admin-existing@example.test")
+	if !ok {
+		t.Fatal("пользователь пропал")
+	}
+	if u.PasswordHash != string(oldHash) {
+		t.Fatal("пароль существующего пользователя не должен меняться при старте")
+	}
+	mustCompare(t, u.PasswordHash, "старый-пароль")
+	mustNotCompare(t, u.PasswordHash, "новый-пароль")
+	if u.Role != repo.RoleAdmin {
+		t.Fatalf("роль=%v, ждали admin", u.Role)
+	}
+}
+
+// TestSeedAdminDoesNotRepairFakeHash — поддельный хеш из миграции 002_seed.sql
+// больше не «чинится» автоматически: это был бы сброс пароля. Оператор
+// задаёт пароль вручную.
+func TestSeedAdminDoesNotRepairFakeHash(t *testing.T) {
 	s := repo.NewStore()
 	if _, err := s.CreateUser("admin@local", fakeMigrationHash, repo.RoleAdmin); err != nil {
 		t.Fatalf("создание сид-пользователя: %v", err)
@@ -69,90 +118,226 @@ func TestSeedAdminRepairsFakeHash(t *testing.T) {
 	if !ok {
 		t.Fatal("пользователь пропал")
 	}
-	if u.PasswordHash == fakeMigrationHash {
-		t.Fatal("поддельный хеш не был перезаписан — вход по-прежнему невозможен")
+	if u.PasswordHash != fakeMigrationHash {
+		t.Fatal("хеш существующего пользователя не должен перезаписываться при старте")
 	}
-	mustCompare(t, u.PasswordHash, "admin1234")
 }
 
-// TestSeedAdminRepairsWrongPasswordHash — хеш валидный, но от ДРУГОГО пароля:
-// ADMIN_PASSWORD задан и не совпадает → хеш перезаписывается (семантика:
-// ADMIN_* — источник истины при старте).
-func TestSeedAdminRepairsWrongPasswordHash(t *testing.T) {
+// TestSeedAdminDoesNotChangeRole — существующей учётке роль не меняется:
+// иначе можно неявно повысить до admin уже зарегистрированного пользователя.
+func TestSeedAdminDoesNotChangeRole(t *testing.T) {
 	s := repo.NewStore()
-	otherHash, err := bcrypt.GenerateFromPassword([]byte("старый-пароль"), bcrypt.MinCost)
+	hash, err := bcrypt.GenerateFromPassword([]byte("пароль-студента"), bcrypt.MinCost)
 	if err != nil {
 		t.Fatalf("хеш: %v", err)
 	}
-	if _, err := s.CreateUser("admin-wrong@example.test", string(otherHash), repo.RoleAdmin); err != nil {
+	if _, err := s.CreateUser("admin-role@example.test", string(hash), repo.RoleStudent); err != nil {
 		t.Fatalf("создание: %v", err)
 	}
 
-	seedAdmin(s, newSeedConfig(t, "admin-wrong@example.test", "новый-пароль"))
+	seedAdmin(s, newSeedConfig(t, "admin-role@example.test", "пароль-студента"))
 
-	u, _ := s.GetUserByEmail("admin-wrong@example.test")
-	mustCompare(t, u.PasswordHash, "новый-пароль")
-	if err := bcrypt.CompareHashAndPassword([]byte(u.PasswordHash), []byte("старый-пароль")); err == nil {
-		t.Fatal("старый пароль не должен больше подходить")
+	u, ok := s.GetUserByEmail("admin-role@example.test")
+	if !ok {
+		t.Fatal("пользователь пропал")
+	}
+	if u.Role != repo.RoleStudent {
+		t.Fatalf("роль=%v, ждали student (старт не должен менять роль)", u.Role)
 	}
 }
 
-// TestSeedAdminKeepsValidHash — хеш уже корректен → НЕ перезаписывается
-// (иначе каждый рестарт менял бы хеш и ломал параллельные сессии).
-func TestSeedAdminKeepsValidHash(t *testing.T) {
-	s := repo.NewStore()
-	goodHash, err := bcrypt.GenerateFromPassword([]byte("верный-пароль"), bcrypt.MinCost)
-	if err != nil {
-		t.Fatalf("хеш: %v", err)
-	}
-	if _, err := s.CreateUser("admin-valid@example.test", string(goodHash), repo.RoleAdmin); err != nil {
-		t.Fatalf("создание: %v", err)
-	}
-
-	seedAdmin(s, newSeedConfig(t, "admin-valid@example.test", "верный-пароль"))
-
-	u, _ := s.GetUserByEmail("admin-valid@example.test")
-	if u.PasswordHash != string(goodHash) {
-		t.Fatal("корректный хеш не должен перезаписываться")
-	}
-}
-
-// TestSeedAdminFixesRole — роль приводится к требуемой даже при корректном
-// хеше (миграция могла создать пользователя с другой ролью).
-func TestSeedAdminFixesRole(t *testing.T) {
-	s := repo.NewStore()
-	goodHash, _ := bcrypt.GenerateFromPassword([]byte("п-1"), bcrypt.MinCost)
-	if _, err := s.CreateUser("admin-role@example.test", string(goodHash), repo.RoleStudent); err != nil {
-		t.Fatalf("создание: %v", err)
-	}
-
-	seedAdmin(s, newSeedConfig(t, "admin-role@example.test", "п-1"))
-
-	u, _ := s.GetUserByEmail("admin-role@example.test")
-	if u.Role != repo.RoleAdmin {
-		t.Fatalf("роль=%v, ждали admin", u.Role)
-	}
-}
-
-// TestSeedAdminNoConfigNoAdmin — без ADMIN_EMAIL/ADMIN_PASSWORD админ не
-// сидируется (секретов в коде нет); при этом вызов не падает и трогает
-// только учётку учителя.
-func TestSeedAdminNoConfigNoAdmin(t *testing.T) {
+// TestSeedAdminNoDefaults — без ADMIN_* и TEACHER_* не создаётся ни админ,
+// ни teacher@local/teacher1 (главный риск C3).
+func TestSeedAdminNoDefaults(t *testing.T) {
 	s := repo.NewStore()
 	seedAdmin(s, newSeedConfig(t, "", ""))
 
-	if _, ok := s.GetUserByEmail(""); ok {
-		t.Fatal("пользователь с пустым email создан — ошибка")
+	if users := s.ListUsers(repo.UserFilter{}); len(users) != 0 {
+		t.Fatalf("без явных env не должно создаваться учёток, создано %d", len(users))
 	}
-	for _, e := range []string{"admin@local", "admin@example.test"} {
+	for _, e := range []string{"", "admin@local", "teacher@local", "teacher@example.test"} {
 		if _, ok := s.GetUserByEmail(e); ok {
-			t.Fatalf("без ADMIN_EMAIL не должен создаваться %s", e)
+			t.Fatalf("без явных env не должен создаваться %s", e)
 		}
 	}
-	// Учитель из env (в тестах — тестовые значения) создаётся с настоящим хешем.
-	u, ok := s.GetUserByEmail("teacher-test-seed@example.test")
-	if !ok {
-		t.Fatal("учитель по TEACHER_EMAIL не создан")
+}
+
+// TestSeedAdminTeacherRequiresBothEnv — учитель создаётся только когда заданы
+// И TEACHER_EMAIL, И TEACHER_PASSWORD.
+func TestSeedAdminTeacherRequiresBothEnv(t *testing.T) {
+	cases := []struct {
+		name     string
+		email    string
+		password string
+	}{
+		{name: "только email", email: "teacher@example.test", password: ""},
+		{name: "только пароль", email: "", password: "пароль-учителя"},
 	}
-	mustCompare(t, u.PasswordHash, "teacher-test-seed-1")
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			s := repo.NewStore()
+			cfg := newSeedConfig(t, "", "")
+			setTeacherEnv(t, tc.email, tc.password)
+			seedAdmin(s, cfg)
+
+			if users := s.ListUsers(repo.UserFilter{}); len(users) != 0 {
+				t.Fatalf("при неполных TEACHER_* учётки создаваться не должны, создано %d", len(users))
+			}
+		})
+	}
+}
+
+// TestSeedAdminCreatesTeacherWithExplicitEnv — при полной паре TEACHER_*
+// учитель создаётся с настоящим хешем и ролью teacher.
+func TestSeedAdminCreatesTeacherWithExplicitEnv(t *testing.T) {
+	s := repo.NewStore()
+	cfg := newSeedConfig(t, "", "")
+	setTeacherEnv(t, "teacher@example.test", "сильный-пароль-учителя")
+	seedAdmin(s, cfg)
+
+	u, ok := s.GetUserByEmail("teacher@example.test")
+	if !ok {
+		t.Fatal("учитель по явным TEACHER_* не создан")
+	}
+	if u.Role != repo.RoleTeacher {
+		t.Fatalf("роль=%v, ждали teacher", u.Role)
+	}
+	mustCompare(t, u.PasswordHash, "сильный-пароль-учителя")
+}
+
+// TestSeedAdminTeacherKeepsExistingPassword — если учитель уже есть, старт
+// с другими TEACHER_* не сбрасывает его пароль.
+func TestSeedAdminTeacherKeepsExistingPassword(t *testing.T) {
+	s := repo.NewStore()
+	oldHash, err := bcrypt.GenerateFromPassword([]byte("старый-пароль-учителя"), bcrypt.MinCost)
+	if err != nil {
+		t.Fatalf("хеш: %v", err)
+	}
+	if _, err := s.CreateUser("teacher@example.test", string(oldHash), repo.RoleTeacher); err != nil {
+		t.Fatalf("создание: %v", err)
+	}
+
+	cfg := newSeedConfig(t, "", "")
+	setTeacherEnv(t, "teacher@example.test", "новый-пароль-учителя")
+	seedAdmin(s, cfg)
+
+	u, _ := s.GetUserByEmail("teacher@example.test")
+	if u.PasswordHash != string(oldHash) {
+		t.Fatal("пароль существующего учителя не должен меняться при старте")
+	}
+	mustCompare(t, u.PasswordHash, "старый-пароль-учителя")
+	mustNotCompare(t, u.PasswordHash, "новый-пароль-учителя")
+}
+
+// TestSeedAdminAdminRequiresBothEnv — админ не создаётся при неполной паре
+// ADMIN_EMAIL/ADMIN_PASSWORD.
+func TestSeedAdminAdminRequiresBothEnv(t *testing.T) {
+	cases := []struct {
+		name     string
+		email    string
+		password string
+	}{
+		{name: "только email", email: "admin-only@example.test", password: ""},
+		{name: "только пароль", email: "", password: "пароль-админа"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			s := repo.NewStore()
+			seedAdmin(s, newSeedConfig(t, tc.email, tc.password))
+
+			if users := s.ListUsers(repo.UserFilter{}); len(users) != 0 {
+				t.Fatalf("при неполных ADMIN_* учётки создаваться не должны, создано %d", len(users))
+			}
+		})
+	}
+}
+
+// ---- openStore (C4) ----
+
+// TestOpenStoreCheckedDevFallsBackToMemory — в dev без DATABASE_URL остаётся
+// прежний fallback: in-memory с demo-сидом (курс и demo-teacher@local).
+func TestOpenStoreCheckedDevFallsBackToMemory(t *testing.T) {
+	store, closeDB, err := openStoreChecked(&config.Config{AppEnv: "development", CommissionPct: 15})
+	if err != nil {
+		t.Fatalf("в dev fallback должен работать, получена ошибка: %v", err)
+	}
+	if store == nil {
+		t.Fatal("store не создан")
+	}
+	if closeDB != nil {
+		t.Fatal("для in-memory close должен быть nil")
+	}
+	if _, ok := store.GetCourseBySlug("python-s-nulya"); !ok {
+		t.Fatal("demo-сид не применён: курса python-s-nulya нет")
+	}
+	u, ok := store.GetUserByEmail("demo-teacher@local")
+	if !ok {
+		t.Fatal("demo-учитель не создан в in-memory сиде")
+	}
+	mustCompare(t, u.PasswordHash, "teach1234")
+}
+
+// TestOpenStoreCheckedDevFallsBackOnUnreachableDB — в dev при недоступном
+// Postgres fallback сохраняется (порт 1 гарантированно закрыт, реальная БД
+// не нужна).
+func TestOpenStoreCheckedDevFallsBackOnUnreachableDB(t *testing.T) {
+	cfg := &config.Config{
+		AppEnv:        "development",
+		DatabaseURL:   "postgres://edu:edu@127.0.0.1:1/edu?sslmode=disable",
+		CommissionPct: 15,
+	}
+	store, closeDB, err := openStoreChecked(cfg)
+	if err != nil {
+		t.Fatalf("в dev при недоступной БД ожидали fallback, получена ошибка: %v", err)
+	}
+	if store == nil {
+		t.Fatal("store не создан")
+	}
+	if closeDB != nil {
+		t.Fatal("для in-memory close должен быть nil")
+	}
+	if _, ok := store.GetCourseBySlug("python-s-nulya"); !ok {
+		t.Fatal("demo-сид не применён при dev-fallback")
+	}
+}
+
+// TestOpenStoreCheckedProductionRequiresDatabase — в production пустой
+// DATABASE_URL — ошибка, а не in-memory: вызывающий завершит процесс.
+func TestOpenStoreCheckedProductionRequiresDatabase(t *testing.T) {
+	store, closeDB, err := openStoreChecked(&config.Config{AppEnv: "production", CommissionPct: 15})
+	if err == nil {
+		t.Fatal("в production без DATABASE_URL должна быть ошибка")
+	}
+	if store != nil || closeDB != nil {
+		t.Fatal("при критической ошибке store/close должны быть nil")
+	}
+	if !strings.Contains(err.Error(), "DATABASE_URL") {
+		t.Fatalf("ошибка должна упоминать DATABASE_URL: %v", err)
+	}
+	if !strings.Contains(err.Error(), "production") {
+		t.Fatalf("ошибка должна упоминать production: %v", err)
+	}
+}
+
+// TestOpenStoreCheckedProductionNoFallbackOnUnreachableDB — в production
+// недоступный Postgres — ошибка, а не in-memory с demo-сидом.
+func TestOpenStoreCheckedProductionNoFallbackOnUnreachableDB(t *testing.T) {
+	cfg := &config.Config{
+		AppEnv:        "production",
+		DatabaseURL:   "postgres://edu:edu@127.0.0.1:1/edu?sslmode=disable",
+		CommissionPct: 15,
+	}
+	store, closeDB, err := openStoreChecked(cfg)
+	if err == nil {
+		t.Fatal("в production при недоступной БД должна быть ошибка, а не in-memory fallback")
+	}
+	if store != nil || closeDB != nil {
+		t.Fatal("при критической ошибке store/close должны быть nil")
+	}
+	if !strings.Contains(err.Error(), "Postgres") {
+		t.Fatalf("ошибка должна упоминать Postgres: %v", err)
+	}
+	if !strings.Contains(err.Error(), "production") {
+		t.Fatalf("ошибка должна упоминать production: %v", err)
+	}
 }

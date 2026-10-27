@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -54,23 +55,45 @@ func main() {
 	}
 }
 
-// openStore выбирает хранилище: Postgres при достижимой DATABASE_URL,
-// иначе — in-memory с предупреждением в логе на русском.
+// openStore выбирает хранилище: Postgres при достижимой DATABASE_URL.
+// В dev-режиме при недоступной БД разрешён откат в in-memory с demo-сидом.
+// В production любой сбой — критическая ошибка: log.Fatalf завершает процесс,
+// контейнер перезапускается, но API не начинает молча работать на пустой
+// памяти (иначе данные «теряются», а demo-сид подменяет реальную БД).
 // Возвращает store и опциональный close для пула (nil для in-memory).
 func openStore(cfg *config.Config) (repo.StoreAPI, func()) {
-	newMem := func() (repo.StoreAPI, func()) {
+	store, closeDB, err := openStoreChecked(cfg)
+	if err != nil {
+		log.Fatalf("КРИТИЧЕСКАЯ ОШИБКА старта: %v", err)
+	}
+	return store, closeDB
+}
+
+// openStoreChecked — реализация openStore с возвратом ошибки вместо
+// log.Fatalf: решение «fallback или падать» покрывается тестами без
+// реального Postgres. В dev ошибки БД логируются и приводят к in-memory
+// с demo-сидом, в production возвращается ошибка (openStore завершает
+// процесс через log.Fatalf).
+func openStoreChecked(cfg *config.Config) (repo.StoreAPI, func(), error) {
+	newMem := func() (repo.StoreAPI, func(), error) {
 		s := repo.NewStore()
 		if err := s.SetCommissionPct(cfg.CommissionPct); err != nil {
 			log.Printf("ПРЕДУПРЕЖДЕНИЕ: не удалось задать комиссию в памяти: %v", err)
 		}
 		seedDemo(s)
-		return s, nil
+		return s, nil, nil
+	}
+	fallback := func(reason string) (repo.StoreAPI, func(), error) {
+		if !cfg.IsDev() {
+			return nil, nil, fmt.Errorf("%s; в production (APP_ENV=%q) откат в in-memory и demo-сид запрещены — задайте рабочий DATABASE_URL (контейнер будет перезапущен)", reason, cfg.AppEnv)
+		}
+		log.Printf("ПРЕДУПРЕЖДЕНИЕ: %s — работаем в in-memory режиме без БД (данные сбросятся при перезапуске)", reason)
+		return newMem()
 	}
 
 	dsn := strings.TrimSpace(cfg.DatabaseURL)
 	if dsn == "" {
-		log.Printf("ПРЕДУПРЕЖДЕНИЕ: DATABASE_URL не задан — работаем в in-memory режиме без БД (данные сбросятся при перезапуске)")
-		return newMem()
+		return fallback("DATABASE_URL не задан")
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
@@ -78,38 +101,33 @@ func openStore(cfg *config.Config) (repo.StoreAPI, func()) {
 
 	pool, err := repo.ConnectPool(ctx, dsn)
 	if err != nil {
-		log.Printf("ПРЕДУПРЕЖДЕНИЕ: не удалось создать пул Postgres (%v) — работаем в in-memory режиме без БД", err)
-		return newMem()
+		return fallback(fmt.Sprintf("не удалось создать пул Postgres: %v", err))
 	}
 	if err := pool.Ping(ctx); err != nil {
 		pool.Close()
-		log.Printf("ПРЕДУПРЕЖДЕНИЕ: Postgres по DATABASE_URL недоступен (%v) — работаем в in-memory режиме без БД", err)
-		return newMem()
+		return fallback(fmt.Sprintf("Postgres по DATABASE_URL недоступен: %v", err))
 	}
 
 	dir, err := findMigrationsDir()
 	if err != nil {
 		pool.Close()
-		log.Printf("ПРЕДУПРЕЖДЕНИЕ: %v — работаем в in-memory режиме без БД", err)
-		return newMem()
+		return fallback(err.Error())
 	}
 	if err := migrate.ApplyMigrations(ctx, pool, dir); err != nil {
 		pool.Close()
-		log.Printf("ПРЕДУПРЕЖДЕНИЕ: не удалось применить миграции (%v) — работаем в in-memory режиме без БД", err)
-		return newMem()
+		return fallback(fmt.Sprintf("не удалось применить миграции: %v", err))
 	}
 	// Сид идемпотентен (ON CONFLICT DO NOTHING): применяется только если courses пуста.
 	if err := migrate.SeedIfEmpty(ctx, pool, filepath.Join(dir, "002_seed.sql")); err != nil {
 		pool.Close()
-		log.Printf("ПРЕДУПРЕЖДЕНИЕ: не удалось применить сид (%v) — работаем в in-memory режиме без БД", err)
-		return newMem()
+		return fallback(fmt.Sprintf("не удалось применить сид: %v", err))
 	}
 
 	// Комиссия: при доступной БД — из app_settings (ключ commission_pct), fallback — env.
 	effective := migrate.GetCommissionPct(ctx, pool, cfg.CommissionPct)
 	pg := repo.NewPostgresStore(pool, effective)
 	log.Printf("Postgres подключён: миграции применены, хранилище — pgxpool, комиссия=%d%%", effective)
-	return pg, func() { pool.Close() }
+	return pg, func() { pool.Close() }, nil
 }
 
 func findMigrationsDir() (string, error) {
@@ -132,7 +150,9 @@ func findMigrationsDir() (string, error) {
 
 // seedDemo наполняет in-memory хранилище демо-курсом для локальной проверки
 // сценариев quickstart (каталог, покупка, прохождение). Вызывается только
-// для dev-режима без БД; при рестарте память пуста, сид идемпотентен по slug.
+// из openStoreChecked для dev-режима без БД (в production fallback запрещён);
+// при рестарте память пуста, сид идемпотентен по slug. В Postgres демо-учитель
+// demo-teacher@local не создаётся.
 func seedDemo(s *repo.Store) {
 	if s.SlugTaken("python-s-nulya") {
 		return
@@ -190,80 +210,67 @@ func seedDemo(s *repo.Store) {
 	log.Printf("демо-сид: курс «Python с нуля» (учитель demo-teacher@local / teach1234)")
 }
 
-// seedAdmin создаёт/чинит демо-учётки (Task/T16-backend-bugs.md, п.7).
-// Без ADMIN_EMAIL/ADMIN_PASSWORD сидирование админа не выполняется —
-// секретов в коде нет.
+// seedAdmin создаёт учётные записи только по явно заданным env.
+// Пароли существующих пользователей при старте НЕ меняются: рестарт API —
+// не операция сброса доступа. Демо-учитель demo-teacher@local/teach1234
+// создаётся только в in-memory сиде seedDemo и в Postgres не попадает.
 //
-// Важно: миграция 002_seed.sql создаёт admin@local и teacher@local с
-// ПОДЕЛЬНЫМИ bcrypt-хешами (50 символов-заглушка + открытый текст пароля),
-// поэтому одного лишь «пользователь уже существует» недостаточно — хеш
-// сверяется с ожидаемым паролем и при расхождении перезаписывается
-// настоящим bcrypt. Миграции не трогаем (артефакт SDD, уже применена).
+// ВАЖНО: раньше функция всегда создавала/сбрасывала teacher@local с паролем
+// teacher1, даже без TEACHER_* (критический риск C3). Теперь:
+//   - учитель — только если заданы И TEACHER_EMAIL, И TEACHER_PASSWORD;
+//   - админ — только если заданы И ADMIN_EMAIL, И ADMIN_PASSWORD;
+//   - существующая учётка не получает новый пароль и новую роль.
 func seedAdmin(store repo.StoreAPI, cfg *config.Config) {
-	if cfg.AdminEmail != "" && cfg.AdminPassword != "" {
-		ensureAccount(store, cfg.AdminEmail, cfg.AdminPassword, repo.RoleAdmin, "админ")
+	adminEmail := strings.TrimSpace(cfg.AdminEmail)
+	adminPassword := cfg.AdminPassword
+	switch {
+	case adminEmail != "" && adminPassword != "":
+		ensureAccount(store, adminEmail, adminPassword, repo.RoleAdmin, "админ")
+	case adminEmail != "" || adminPassword != "":
+		log.Printf("ПРЕДУПРЕЖДЕНИЕ: сид админа пропущен — нужны одновременно ADMIN_EMAIL и ADMIN_PASSWORD")
 	}
 
-	// Преподаватель из той же миграции тоже приходит с поддельным хешем.
-	// config.go (T10) не входит во владение T16, поэтому TEACHER_* читаем
-	// напрямую; дефолты совпадают с демо-данными миграции: сам хеш
-	// "$2a$10$BBB...BBBteacher1" заканчивается открытым паролем «teacher1»,
-	// как admin-хеш — «admin1234» (см. .env).
-	email := strings.TrimSpace(os.Getenv("TEACHER_EMAIL"))
-	if email == "" {
-		email = "teacher@local"
+	// TEACHER_* читаем напрямую: в config.Config этих полей нет (config.go —
+	// зона P11-1), а дефолтных учёток с известным паролем в коде быть не должно.
+	teacherEmail := strings.TrimSpace(os.Getenv("TEACHER_EMAIL"))
+	teacherPassword := os.Getenv("TEACHER_PASSWORD")
+	switch {
+	case teacherEmail != "" && teacherPassword != "":
+		ensureAccount(store, teacherEmail, teacherPassword, repo.RoleTeacher, "преподаватель")
+	case teacherEmail != "" || teacherPassword != "":
+		log.Printf("ПРЕДУПРЕЖДЕНИЕ: сид преподавателя пропущен — нужны одновременно TEACHER_EMAIL и TEACHER_PASSWORD")
 	}
-	password := os.Getenv("TEACHER_PASSWORD")
-	if password == "" {
-		password = "teacher1"
-	}
-	ensureAccount(store, email, password, repo.RoleTeacher, "преподаватель")
 }
 
-// ensureAccount создаёт учётку либо чинит её: невалидный bcrypt-хеш или
-// несовпадающий пароль → перезапись настоящим хешем; роль приводится к
-// требуемой. label — имя роли по-русски для логов. Каждое действие
-// логируется (создан / исправлен / уже корректен), чтобы сквозной прогон
-// было видно в docker compose logs api.
+// ensureAccount создаёт учётку, только если её ещё нет. Существующим
+// пользователям пароль и роль при старте не меняются — это исключает
+// неявный сброс доступа (C3) и повышение роли уже зарегистрированного
+// пользователя. label — имя роли по-русски для логов.
 func ensureAccount(store repo.StoreAPI, email, password string, role repo.Role, label string) {
-	user, exists := store.GetUserByEmail(email)
-	if !exists {
-		hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
-		if err != nil {
-			log.Printf("не удалось захешировать пароль %s: %v", email, err)
-			return
-		}
-		if _, err := store.CreateUser(email, string(hash), role); err != nil {
-			log.Printf("не удалось создать %s: %v", email, err)
-			return
-		}
-		log.Printf("создан %s %s", label, email)
+	email = strings.TrimSpace(email)
+	if email == "" || password == "" {
 		return
 	}
 
-	fixed := false
-	// Ошибка парсинга (поддельная заглушка из миграции) или несовпадение
-	// пароля → хеш невалиден для входа, перезаписываем настоящим.
-	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(password)); err != nil {
-		hash, herr := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
-		if herr != nil {
-			log.Printf("не удалось захешировать пароль %s: %v", email, herr)
-			return
+	if user, exists := store.GetUserByEmail(email); exists {
+		// Битый bcrypt-хеш (например, заглушка из 002_seed.sql) не чиним
+		// автоматически: это был бы сброс пароля. Оператор задаёт его вручную.
+		if _, err := bcrypt.Cost([]byte(user.PasswordHash)); err != nil {
+			log.Printf("ПРЕДУПРЕЖДЕНИЕ: %s %s уже существует с невалидным bcrypt-хешем; пароль при старте не сбрасывается — задайте его вручную", label, email)
+		} else {
+			log.Printf("%s %s уже существует — пароль и роль при старте не меняются", label, email)
 		}
-		if !store.SetUserPasswordHash(user.ID, string(hash)) {
-			log.Printf("не удалось исправить пароль %s: пользователь не найден", email)
-			return
-		}
-		log.Printf("исправлен пароль: %s %s — хеш в базе был поддельным или не совпадал с заданным", label, email)
-		fixed = true
+		return
 	}
-	if user.Role != role {
-		if store.SetUserRole(user.ID, role) {
-			log.Printf("исправлена роль: %s %s → %s", email, user.Role, role)
-			fixed = true
-		}
+
+	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	if err != nil {
+		log.Printf("не удалось захешировать пароль %s: %v", email, err)
+		return
 	}
-	if !fixed {
-		log.Printf("%s %s: хеш уже корректен", label, email)
+	if _, err := store.CreateUser(email, string(hash), role); err != nil {
+		log.Printf("не удалось создать %s: %v", email, err)
+		return
 	}
+	log.Printf("создан %s %s", label, email)
 }
