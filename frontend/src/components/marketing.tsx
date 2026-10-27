@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { FormEvent } from 'react';
+import type { FormEvent, MouseEvent } from 'react';
 import { Link } from 'react-router-dom';
 
 function CheckIcon(): JSX.Element {
@@ -18,6 +18,39 @@ function CheckIcon(): JSX.Element {
   );
 }
 
+/** Контакт поддержки — тот же, что в подвале (router.tsx). */
+export const SUPPORT_EMAIL = 'hello@edu-platform.ru';
+export const SUPPORT_PHONE = '8 (800) 600-78-47';
+export const SUPPORT_PHONE_TEL = '+78006007847';
+/** Публичный контакт поддержки в Telegram. */
+export const SUPPORT_TELEGRAM_URL = 'https://t.me/edu_platform';
+export const SUPPORT_TELEGRAM_LABEL = '@edu_platform';
+
+/** Ссылка на каталог с выбранной категорией (фильтр читается из URL). */
+export function catalogCategoryHref(slug: string): string {
+  return `/?category=${encodeURIComponent(slug)}`;
+}
+
+/** Согласованные маршруты: якоря формы заявки и раздела условий возврата. */
+export const LEAD_ANCHOR = '/#lead';
+export const REFUND_ROUTE = '/#refund';
+
+/**
+ * Скролл к якорю, если он есть на текущей странице. Если элемента нет
+ * (переход с другой страницы), не мешаем Link: после монтирования каталога
+ * якорь обработает эффект в Catalog.tsx.
+ */
+function scrollToAnchor(e: MouseEvent<HTMLAnchorElement>, href: string): void {
+  // Не мешаем открытию в новой вкладке/окне и нестандартным кликам.
+  if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+  const id = href.startsWith('/#') ? href.slice(2) : '';
+  if (!id) return;
+  const target = document.getElementById(id);
+  if (!target) return;
+  e.preventDefault();
+  target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
 type SupportKey = 'curators' | 'career' | 'practice' | 'community';
 
 const SUPPORT_TABS: Array<{ key: SupportKey; label: string }> = [
@@ -27,26 +60,33 @@ const SUPPORT_TABS: Array<{ key: SupportKey; label: string }> = [
   { key: 'community', label: 'Сообщество' },
 ];
 
-const SUPPORT_TEXT: Record<SupportKey, { title: string; text: string; btn: string }> = {
+export const SUPPORT_TEXT: Record<
+  SupportKey,
+  { title: string; text: string; btn: string; to: string }
+> = {
   curators: {
     title: 'Даём подробную обратную связь',
     text: 'Каждую вашу работу проверит куратор-эксперт. Это практикующий специалист с опытом от 5 лет. Он расскажет, что улучшить, и объяснит сложное простыми словами.',
     btn: 'Примеры обратной связи',
+    to: catalogCategoryHref('programming'),
   },
   career: {
     title: 'Доводим до оффера',
     text: 'Центр карьеры поможет с резюме, портфолио и собеседованиями. Готовим к техническим интервью и сопровождаем до выхода на работу.',
     btn: 'Как мы трудоустраиваем',
+    to: LEAD_ANCHOR,
   },
   practice: {
     title: 'Учим на реальных проектах',
     text: 'Каждый модуль заканчивается проектом в портфолио: парсер, лендинг, дашборд. Код-ревью обязателен — как в настоящей команде.',
     btn: 'Проекты студентов',
+    to: catalogCategoryHref('design'),
   },
   community: {
     title: 'Вы не одни',
     text: 'Чаты потоков, живые эфиры по четвергам и наставник, который отвечает в течение дня. Новички поддерживают друг друга.',
     btn: 'Познакомиться',
+    to: LEAD_ANCHOR,
   },
 };
 
@@ -98,13 +138,14 @@ export function SupportBlock(): JSX.Element {
     <div className="support">
       <h2>Создаём опору на всём пути</h2>
       <div className="support-card">
-        <div className="seg" role="tablist">
+        {/* Переключатель разделов — не вкладки: tabpanel/стрелок нет, поэтому
+            используем aria-pressed, а не role=tab (иначе скринридер ждёт tabpanel). */}
+        <div className="seg" role="group" aria-label="Разделы поддержки">
           {SUPPORT_TABS.map((t) => (
             <button
               key={t.key}
               type="button"
-              role="tab"
-              aria-selected={tab === t.key}
+              aria-pressed={tab === t.key}
               className={tab === t.key ? 'active' : ''}
               onClick={() => setTab(t.key)}
             >
@@ -116,7 +157,7 @@ export function SupportBlock(): JSX.Element {
           <div>
             <h3>{s.title}</h3>
             <p>{s.text}</p>
-            <Link className="btn" to="/">
+            <Link className="btn" to={s.to} onClick={(e) => scrollToAnchor(e, s.to)}>
               {s.btn}
             </Link>
           </div>
@@ -375,19 +416,69 @@ export function PerksBlock(): JSX.Element {
         </div>
         <b>Вернём деньги, если не найдёте работу</b>
         <p>
-          Это зафиксировано юридически. Подробнее в <Link to="/">Условиях возврата</Link>.
+          Это зафиксировано юридически. Подробнее в{' '}
+          <Link to={REFUND_ROUTE} onClick={(e) => scrollToAnchor(e, REFUND_ROUTE)}>
+            Условиях возврата
+          </Link>
+          .
         </p>
       </div>
     </div>
   );
 }
 
-const DREAMS: Array<{ cls: string; hot?: boolean; n: string; text: string }> = [
-  { cls: 'dream-1', n: '12 курсов', text: 'Ни от кого не зависеть и работать на себя' },
-  { cls: 'dream-2', n: '22 курса', text: 'Стартовать в IT без программирования' },
-  { cls: 'dream-3', hot: true, n: '27 курсов', text: 'Работать на фрилансе из любой точки мира' },
-  { cls: 'dream-4', n: '5 курсов', text: 'Зарабатывать на креативном контенте' },
-  { cls: 'dream-5', n: '5 курсов', text: 'Научиться грамотно инвестировать и тратить' },
+/** Краткие условия возврата — якорь /#refund, на который ведёт PerksBlock. */
+export function RefundBlock(): JSX.Element {
+  return (
+    <section
+      id="refund"
+      className="panel"
+      aria-labelledby="refund-title"
+      style={{ marginTop: 24 }}
+    >
+      <h2 id="refund-title">Условия возврата</h2>
+      <p style={{ margin: 0 }}>
+        Если курс не подошёл, вернём стоимость в течение 7 дней после оплаты. Напишите на{' '}
+        <a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a> или позвоните{' '}
+        <a href={`tel:${SUPPORT_PHONE_TEL}`}>{SUPPORT_PHONE}</a> — подскажем, как оформить
+        возврат.
+      </p>
+    </section>
+  );
+}
+
+export const DREAMS: Array<{ cls: string; hot?: boolean; n: string; text: string; to: string }> = [
+  {
+    cls: 'dream-1',
+    n: '12 курсов',
+    text: 'Ни от кого не зависеть и работать на себя',
+    to: catalogCategoryHref('programming'),
+  },
+  {
+    cls: 'dream-2',
+    n: '22 курса',
+    text: 'Стартовать в IT без программирования',
+    to: catalogCategoryHref('design'),
+  },
+  {
+    cls: 'dream-3',
+    hot: true,
+    n: '27 курсов',
+    text: 'Работать на фрилансе из любой точки мира',
+    to: catalogCategoryHref('marketing'),
+  },
+  {
+    cls: 'dream-4',
+    n: '5 курсов',
+    text: 'Зарабатывать на креативном контенте',
+    to: catalogCategoryHref('design'),
+  },
+  {
+    cls: 'dream-5',
+    n: '5 курсов',
+    text: 'Научиться грамотно инвестировать и тратить',
+    to: catalogCategoryHref('data'),
+  },
 ];
 
 export function DreamsBlock(): JSX.Element {
@@ -396,7 +487,7 @@ export function DreamsBlock(): JSX.Element {
       <h2>Сделайте первый шаг к жизни вашей мечты</h2>
       <div className="dreams-row">
         {DREAMS.map((d) => (
-          <Link key={d.text} className={`dream ${d.cls}${d.hot ? ' hot' : ''}`} to="/">
+          <Link key={d.text} className={`dream ${d.cls}${d.hot ? ' hot' : ''}`} to={d.to}>
             <span className="n">{d.n}</span>
             <p>{d.text}</p>
           </Link>
@@ -493,19 +584,240 @@ export function FinalCta({ onChoose }: { onChoose: () => void }): JSX.Element {
   );
 }
 
-const CONTACTS = [
+export type ContactKey = 'phone' | 'telegram' | 'vk' | 'max';
+
+const CONTACTS: Array<{ key: ContactKey; label: string; bg: string; glyph: string }> = [
   { key: 'phone', label: 'По телефону', bg: '#1F9D55', glyph: 'Т' },
   { key: 'telegram', label: 'В Telegram', bg: '#229ED9', glyph: 'Т' },
   { key: 'vk', label: 'Во VK', bg: '#0077FF', glyph: 'VK' },
   { key: 'max', label: 'В MAX', bg: '#7B5CFF', glyph: 'M' },
 ];
 
-export function LeadBlock(): JSX.Element {
-  const [sent, setSent] = useState(false);
-  function onSubmit(e: FormEvent): void {
-    e.preventDefault();
-    setSent(true);
+const CONTACT_PLACEHOLDER: Record<ContactKey, string> = {
+  phone: 'Телефон, например +7 999 123-45-67',
+  telegram: 'Telegram: @username',
+  vk: 'VK: ссылка или @ник',
+  max: 'MAX: номер или @ник',
+};
+
+/** Состояние формы заявки. Состав полей совпадает с будущим POST /leads. */
+export interface LeadFormData {
+  name: string;
+  contact: string;
+  email: string;
+  method: ContactKey;
+  consent: boolean;
+}
+
+export interface LeadFieldErrors {
+  name?: string;
+  contact?: string;
+  email?: string;
+  consent?: string;
+}
+
+const EMPTY_LEAD: LeadFormData = {
+  name: '',
+  contact: '',
+  email: '',
+  method: 'phone',
+  consent: false,
+};
+
+/** Подпись способа связи для письма. */
+function contactLabel(method: ContactKey): string {
+  return CONTACTS.find((c) => c.key === method)?.label ?? 'Связаться';
+}
+
+/**
+ * Проверка формы перед отправкой. Email необязателен, но если указан —
+ * должен быть похож на адрес; телефон проверяем по количеству цифр.
+ */
+export function validateLead(data: LeadFormData): LeadFieldErrors {
+  const errors: LeadFieldErrors = {};
+
+  const name = data.name.trim();
+  if (!name) errors.name = 'Укажите имя';
+  else if (name.length < 2) errors.name = 'Имя должно содержать хотя бы 2 символа';
+
+  const contact = data.contact.trim();
+  if (!contact) {
+    errors.contact =
+      data.method === 'phone' ? 'Укажите номер телефона' : 'Укажите контакт для связи';
+  } else if (data.method === 'phone') {
+    const digits = contact.replace(/\D/g, '');
+    if (digits.length < 10 || digits.length > 15) {
+      errors.contact = 'Проверьте номер: нужно 10–15 цифр';
+    }
+  } else if (contact.length < 2) {
+    errors.contact = 'Укажите контакт для связи';
   }
+
+  const email = data.email.trim();
+  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    errors.email = 'Проверьте адрес электронной почты';
+  }
+
+  if (!data.consent) errors.consent = 'Нужно согласие на обработку персональных данных';
+
+  return errors;
+}
+
+/** Текст заявки — общий для mailto и ручного копирования. */
+export function buildLeadMessage(data: LeadFormData): string {
+  const label = contactLabel(data.method);
+  const lines = [
+    `Имя: ${data.name.trim()}`,
+    `Контакт (${label}): ${data.contact.trim()}`,
+  ];
+  const email = data.email.trim();
+  if (email) lines.push(`Email: ${email}`);
+  lines.push(`Предпочтительный способ связи: ${label}`);
+  lines.push('Согласие на обработку персональных данных: да');
+  return lines.join('\n');
+}
+
+/** Текст для кнопки «Скопировать»: заявка + адрес, куда её отправить. */
+export function buildLeadCopyText(data: LeadFormData): string {
+  return `${buildLeadMessage(data)}\n\nОтправить на: ${SUPPORT_EMAIL}`;
+}
+
+/**
+ * mailto-ссылка с темой и телом заявки — резервный канал, если вебхук
+ * не настроен или недоступен.
+ */
+export function buildLeadMailto(data: LeadFormData): string {
+  const subject = `Заявка на консультацию — ${data.name.trim()}`;
+  const body = buildLeadMessage(data);
+  return `mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+}
+
+/**
+ * Адрес вебхука заявок из env. Пустая строка — онлайн-отправка выключена.
+ * import.meta.env может отсутствовать вне Vite (например, в Node-тестах),
+ * поэтому читаем его через безопасный cast и проверку на undefined.
+ */
+export const LEADS_WEBHOOK_URL: string = (
+  (import.meta.env as Record<string, string | undefined> | undefined)?.VITE_LEADS_WEBHOOK_URL ??
+  ''
+).trim();
+
+/** Тело POST на вебхук: только данные формы, без служебных полей. */
+export function buildLeadPayload(data: LeadFormData): LeadFormData {
+  return {
+    name: data.name.trim(),
+    contact: data.contact.trim(),
+    email: data.email.trim(),
+    method: data.method,
+    consent: data.consent,
+  };
+}
+
+/**
+ * Отправка заявки на внешний вебхук. Успех — только HTTP 2xx; любой другой
+ * ответ или сетевая ошибка пробрасываются, чтобы форма показала retry.
+ */
+export async function sendLead(
+  url: string,
+  data: LeadFormData,
+  fetchImpl: typeof fetch = fetch,
+): Promise<void> {
+  const res = await fetchImpl(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+    },
+    body: JSON.stringify(buildLeadPayload(data)),
+  });
+  if (!res.ok) {
+    throw new Error(`Вебхук заявок ответил ${res.status}`);
+  }
+}
+
+type LeadStatus = 'idle' | 'sending' | 'sent' | 'error' | 'unavailable';
+
+export function LeadBlock(): JSX.Element {
+  const [form, setForm] = useState<LeadFormData>(EMPTY_LEAD);
+  const [errors, setErrors] = useState<LeadFieldErrors>({});
+  const [status, setStatus] = useState<LeadStatus>('idle');
+  const [copied, setCopied] = useState(false);
+  const [errorText, setErrorText] = useState('');
+
+  /** Обновление поля + сброс прежнего подтверждения/ошибки этого поля. */
+  function updateField<K extends keyof LeadFormData>(field: K, value: LeadFormData[K]): void {
+    setForm((prev) => ({ ...prev, [field]: value }));
+    setStatus((prev) => (prev === 'sent' || prev === 'error' ? 'idle' : prev));
+    setCopied(false);
+    setErrorText('');
+    setErrors((prev) => {
+      const next = { ...prev };
+      if (field === 'method') delete next.contact;
+      else delete next[field as keyof LeadFieldErrors];
+      return next;
+    });
+  }
+
+  async function submitLead(): Promise<void> {
+    if (status === 'sending') return;
+
+    const nextErrors = validateLead(form);
+    setErrors(nextErrors);
+    setCopied(false);
+    setErrorText('');
+
+    const firstError = nextErrors.name
+      ? 'lead-name'
+      : nextErrors.contact
+        ? 'lead-contact'
+        : nextErrors.email
+          ? 'lead-email'
+          : nextErrors.consent
+            ? 'lead-consent'
+            : null;
+    if (firstError) {
+      setStatus('idle');
+      document.getElementById(firstError)?.focus();
+      return;
+    }
+
+    // Без вебхука не изображаем успех: показываем контакты и сохраняем данные.
+    if (!LEADS_WEBHOOK_URL) {
+      setStatus('unavailable');
+      return;
+    }
+
+    setStatus('sending');
+    try {
+      await sendLead(LEADS_WEBHOOK_URL, form);
+      setStatus('sent');
+    } catch {
+      setStatus('error');
+      setErrorText(
+        'Не удалось отправить заявку. Проверьте соединение и попробуйте ещё раз — данные остались в форме.',
+      );
+    }
+  }
+
+  function onSubmit(e: FormEvent<HTMLFormElement>): void {
+    e.preventDefault();
+    void submitLead();
+  }
+
+  async function copyLeadText(): Promise<void> {
+    try {
+      if (!navigator.clipboard?.writeText) throw new Error('clipboard unavailable');
+      await navigator.clipboard.writeText(buildLeadCopyText(form));
+      setCopied(true);
+      setErrorText('');
+    } catch {
+      setCopied(false);
+      setErrorText(
+        `Не удалось скопировать автоматически. Напишите на ${SUPPORT_EMAIL} или позвоните ${SUPPORT_PHONE}.`,
+      );
+    }
+  }
+
   return (
     <div className="lead-zone" id="lead">
       <div className="lead-card">
@@ -534,28 +846,76 @@ export function LeadBlock(): JSX.Element {
             </li>
           </ul>
         </div>
-        <form className="lead-form" onSubmit={onSubmit}>
-          <input className="input" required placeholder="Имя" autoComplete="name" aria-label="Имя" />
+        <form className="lead-form" onSubmit={onSubmit} noValidate>
           <input
+            id="lead-name"
+            name="name"
             className="input"
             required
-            placeholder="Телефон"
-            inputMode="tel"
-            autoComplete="tel"
-            aria-label="Телефон"
+            value={form.name}
+            onChange={(e) => updateField('name', e.target.value)}
+            placeholder="Имя"
+            autoComplete="name"
+            aria-label="Имя"
+            aria-invalid={errors.name ? true : undefined}
+            aria-describedby={errors.name ? 'lead-name-error' : undefined}
           />
+          {errors.name && (
+            <p className="error" id="lead-name-error">
+              {errors.name}
+            </p>
+          )}
+
           <input
+            id="lead-contact"
+            name="contact"
+            className="input"
+            required
+            value={form.contact}
+            onChange={(e) => updateField('contact', e.target.value)}
+            placeholder={CONTACT_PLACEHOLDER[form.method]}
+            inputMode={form.method === 'phone' ? 'tel' : 'text'}
+            autoComplete={form.method === 'phone' ? 'tel' : 'off'}
+            aria-label={form.method === 'phone' ? 'Телефон' : 'Контакт для связи'}
+            aria-invalid={errors.contact ? true : undefined}
+            aria-describedby={errors.contact ? 'lead-contact-error' : undefined}
+          />
+          {errors.contact && (
+            <p className="error" id="lead-contact-error">
+              {errors.contact}
+            </p>
+          )}
+
+          <input
+            id="lead-email"
+            name="email"
             className="input"
             type="email"
-            placeholder="Электронная почта"
+            value={form.email}
+            onChange={(e) => updateField('email', e.target.value)}
+            placeholder="Электронная почта (необязательно)"
             autoComplete="email"
             aria-label="Электронная почта"
+            aria-invalid={errors.email ? true : undefined}
+            aria-describedby={errors.email ? 'lead-email-error' : undefined}
           />
+          {errors.email && (
+            <p className="error" id="lead-email-error">
+              {errors.email}
+            </p>
+          )}
+
           <p className="sv-title">Как с вами связаться?</p>
           <div className="contact-grid">
-            {CONTACTS.map((c, i) => (
+            {CONTACTS.map((c) => (
               <label className="contact" key={c.key}>
-                <input type="radio" name="cm" defaultChecked={i === 0} />
+                <input
+                  type="radio"
+                  name="contactMethod"
+                  value={c.key}
+                  checked={form.method === c.key}
+                  onChange={() => updateField('method', c.key)}
+                />
                 <span className="cm" style={{ background: c.bg }}>
                   {c.glyph}
                 </span>
@@ -563,17 +923,106 @@ export function LeadBlock(): JSX.Element {
               </label>
             ))}
           </div>
+
           <label className="consent">
-            <input type="checkbox" required />
+            <input
+              id="lead-consent"
+              name="consent"
+              type="checkbox"
+              required
+              checked={form.consent}
+              onChange={(e) => updateField('consent', e.target.checked)}
+              aria-invalid={errors.consent ? true : undefined}
+              aria-describedby={errors.consent ? 'lead-consent-error' : undefined}
+            />
             <span>Я соглашаюсь на обработку персональных данных</span>
           </label>
-          <button className="btn btn-primary" type="submit" disabled={sent}>
-            {sent ? 'Заявка отправлена' : 'Получить консультацию'}
-          </button>
-          {sent && (
-            <p className="sv-small" style={{ color: '#14663A', fontWeight: 800 }}>
-              Заявка отправлена! Перезвоним в течение дня.
+          {errors.consent && (
+            <p className="error" id="lead-consent-error">
+              {errors.consent}
             </p>
+          )}
+
+          {!LEADS_WEBHOOK_URL && status !== 'unavailable' && (
+            <p className="notice" style={{ margin: 0 }}>
+              Онлайн-форма временно недоступна. Позвоните{' '}
+              <a href={`tel:${SUPPORT_PHONE_TEL}`}>{SUPPORT_PHONE}</a> или напишите в{' '}
+              <a href={SUPPORT_TELEGRAM_URL} target="_blank" rel="noreferrer">
+                Telegram
+              </a>{' '}
+              — поможем с подбором курса.
+            </p>
+          )}
+
+          <button
+            className="btn btn-primary"
+            type="submit"
+            disabled={status === 'sending' || status === 'sent'}
+          >
+            {status === 'sending'
+              ? 'Отправляем…'
+              : status === 'sent'
+                ? 'Заявка отправлена'
+                : status === 'error'
+                  ? 'Повторить отправку'
+                  : 'Отправить заявку'}
+          </button>
+
+          {status === 'sent' && (
+            <p style={{ color: '#14663A', fontWeight: 800, margin: 0 }} role="status">
+              Заявка отправлена. Перезвоним в течение дня.
+            </p>
+          )}
+
+          {status === 'error' && (
+            <p className="error" style={{ margin: 0 }} role="alert">
+              {errorText}
+            </p>
+          )}
+
+          {status === 'unavailable' && (
+            <div style={{ display: 'grid', gap: 8, marginTop: 4 }}>
+              <p className="error" style={{ margin: 0 }} role="alert">
+                Онлайн-форма временно недоступна. Данные не потеряны — их можно скопировать и
+                отправить нам.
+              </p>
+              <p className="sv-small" style={{ margin: 0 }}>
+                Позвоните <a href={`tel:${SUPPORT_PHONE_TEL}`}>{SUPPORT_PHONE}</a>, напишите в{' '}
+                <a href={SUPPORT_TELEGRAM_URL} target="_blank" rel="noreferrer">
+                  Telegram ({SUPPORT_TELEGRAM_LABEL})
+                </a>{' '}
+                или на <a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a>.
+              </p>
+              <textarea
+                className="input"
+                readOnly
+                rows={4}
+                value={buildLeadCopyText(form)}
+                aria-label="Текст заявки для копирования"
+              />
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                <button
+                  type="button"
+                  className="btn btn-sm"
+                  onClick={() => void copyLeadText()}
+                >
+                  {copied ? 'Текст заявки скопирован' : 'Скопировать текст заявки'}
+                </button>
+                <a className="btn btn-sm" href={buildLeadMailto(form)}>
+                  Отправить по почте
+                </a>
+              </div>
+              {copied && (
+                <p className="sv-small" style={{ margin: 0 }} role="status">
+                  Вставьте скопированный текст в письмо или мессенджер.
+                </p>
+              )}
+              {errorText && (
+                <p className="error" style={{ margin: 0 }} role="alert">
+                  {errorText}
+                </p>
+              )}
+            </div>
           )}
         </form>
       </div>

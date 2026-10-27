@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { Link, useLocation, useSearchParams } from 'react-router-dom';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { getCategories, listCourses, me } from '../api/client';
 import type {
@@ -15,6 +15,7 @@ import {
   FinalCta,
   LeadBlock,
   PerksBlock,
+  RefundBlock,
   SupportBlock,
 } from '../components/marketing';
 import { t } from '../i18n/t';
@@ -103,6 +104,7 @@ export default function Catalog(): JSX.Element {
   // Каталог — точка входа: возвращаем базовые title/description после карточек.
   useSeo();
   const [searchParams, setSearchParams] = useSearchParams();
+  const location = useLocation();
 
   // Единственный источник истины для активных фильтров — URL (ссылка шарится,
   // «назад/вперёд» восстанавливают состояние). Локально живёт только черновик
@@ -204,8 +206,26 @@ export default function Catalog(): JSX.Element {
     );
   }, [data, page, totalPages, setSearchParams]);
 
+  // React Router не скроллит к hash сам, а ScrollToTop в shell реагирует
+  // только на pathname. После перехода с другой страницы (/#lead, /#refund)
+  // прокручиваем к якорю, когда каталог уже отрисован.
+  useEffect(() => {
+    const id = location.hash.slice(1);
+    if (!id) return;
+    const timer = window.setTimeout(() => {
+      document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [location.hash]);
+
+  // Оценка и отзывы считаются только по текущей странице (12 карточек):
+  // total из API — общий, а этих агрегатов в контракте каталога нет.
+  // Курсы без отзывов в среднюю оценку не подмешиваем (их avgRating = 0).
+  const ratedItems = items.filter((c) => (c.ratingsCount ?? 0) > 0);
   const avgRating =
-    items.length > 0 ? items.reduce((n, c) => n + c.avgRating, 0) / items.length : 0;
+    ratedItems.length > 0
+      ? ratedItems.reduce((n, c) => n + c.avgRating, 0) / ratedItems.length
+      : 0;
   const totalReviews = items.reduce((n, c) => n + (c.ratingsCount ?? 0), 0);
 
   const filtersActive = Boolean(
@@ -295,11 +315,13 @@ export default function Catalog(): JSX.Element {
             </div>
             <div>
               <b>{avgRating > 0 ? avgRating.toFixed(1).replace('.', ',') : '—'}</b>
-              <span>средняя оценка</span>
+              <span title="По курсам с отзывами на этой странице">
+                средняя оценка на странице
+              </span>
             </div>
             <div>
               <b>{totalReviews}</b>
-              <span>отзывов студентов</span>
+              <span>отзывов на этой странице</span>
             </div>
           </div>
           <div className="cats">
@@ -602,6 +624,7 @@ export default function Catalog(): JSX.Element {
 
         <SupportBlock />
         <PerksBlock />
+        <RefundBlock />
         <DreamsBlock />
         <DiplomaBlock />
         <FinalCta onChoose={scrollToCards} />
