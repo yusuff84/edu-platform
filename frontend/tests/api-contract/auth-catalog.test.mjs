@@ -232,7 +232,7 @@ test('createReview: POST /courses/{id}/reviews, тело строго rating+bod
 
 // ---------- Обучение ----------
 
-test('enroll: POST /enrollments, provider по умолчанию mock', async () => {
+test('enroll: POST /enrollments, в теле только courseId (provider выбирает backend)', async () => {
   const result = {
     paymentId: 'p1',
     providerPaymentId: 'mock-1',
@@ -247,13 +247,11 @@ test('enroll: POST /enrollments, provider по умолчанию mock', async (
   const req = lastRequest(api);
   assert.equal(req.method, 'POST');
   assert.equal(req.path, '/api/v1/enrollments');
-  assert.deepEqual(expectBodyKeys(jsonBody(req), ['courseId', 'provider']), {
-    courseId: 'c1',
-    provider: 'mock',
-  });
+  assert.deepEqual(jsonBody(req), { courseId: 'c1' });
+  assert.equal('provider' in jsonBody(req), false);
 });
 
-test('enroll: явный provider попадает в тело без изменений', async () => {
+test('enroll: второй аргумент — promoCode, provider не передаётся', async () => {
   api.mockReply({
     json: {
       paymentId: 'p2',
@@ -264,8 +262,8 @@ test('enroll: явный provider попадает в тело без измен
       enrollmentActive: false,
     },
   });
-  await enroll('c9', 'stripe');
-  assert.deepEqual(jsonBody(lastRequest(api)), { courseId: 'c9', provider: 'stripe' });
+  await enroll('c9', 'SALE20');
+  assert.deepEqual(jsonBody(lastRequest(api)), { courseId: 'c9', promoCode: 'SALE20' });
 });
 
 test('myCourses: GET /me/courses, конверт распаковывается в массив MyCourse', async () => {
