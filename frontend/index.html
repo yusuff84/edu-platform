@@ -23,8 +23,212 @@
       rel="stylesheet"
     />
     <title>Edu Platform — IT-курсы</title>
+    <!-- Стартовый сплэш: разметка и стили живут в index.html, чтобы белый
+         экран с логотипом появлялся до загрузки JS-бандла и не «мигал»
+         неоформленным. React убирает оверлей из main.tsx после первого кадра. -->
+    <style>
+      #splash {
+        position: fixed;
+        inset: 0;
+        z-index: 9999;
+        display: grid;
+        place-items: center;
+        background: #fff;
+        opacity: 1;
+        visibility: visible;
+        transition:
+          opacity 480ms cubic-bezier(0.4, 0, 0.2, 1),
+          visibility 0s linear 480ms;
+      }
+
+      #splash.splash--hidden {
+        opacity: 0;
+        visibility: hidden;
+        pointer-events: none;
+      }
+
+      .splash-stage {
+        position: relative;
+        display: grid;
+        place-items: center;
+        animation: splash-rise 720ms cubic-bezier(0.16, 1, 0.3, 1) both;
+      }
+
+      .splash-halo {
+        position: absolute;
+        width: 272px;
+        height: 272px;
+        border-radius: 50%;
+        background: radial-gradient(
+          circle,
+          rgba(99, 91, 255, 0.22) 0%,
+          rgba(99, 91, 255, 0.09) 42%,
+          rgba(99, 91, 255, 0) 70%
+        );
+        animation: splash-halo 2400ms cubic-bezier(0.45, 0, 0.55, 1) infinite;
+        will-change: transform, opacity;
+      }
+
+      .splash-mark {
+        position: relative;
+        display: grid;
+        place-items: center;
+        width: 112px;
+        height: 112px;
+        overflow: hidden;
+        isolation: isolate;
+        border-radius: 30px;
+        background: linear-gradient(145deg, #7c6bff 0%, #5b4bff 46%, #4338ca 100%);
+        box-shadow:
+          0 28px 60px -18px rgba(79, 70, 229, 0.55),
+          0 8px 20px -8px rgba(79, 70, 229, 0.4),
+          inset 0 1px 0 rgba(255, 255, 255, 0.28);
+        animation: splash-float 2600ms cubic-bezier(0.45, 0, 0.55, 1) 200ms infinite;
+        will-change: transform;
+      }
+
+      /* Мягкий блик сверху — объём, как у иконки приложения. */
+      .splash-mark::before {
+        content: '';
+        position: absolute;
+        inset: 1px;
+        border-radius: 29px;
+        background: linear-gradient(160deg, rgba(255, 255, 255, 0.22), transparent 46%);
+        pointer-events: none;
+      }
+
+      /* Периодический блик, пробегающий по квадрату. */
+      .splash-mark::after {
+        content: '';
+        position: absolute;
+        top: -70%;
+        left: 0;
+        width: 42%;
+        height: 240%;
+        background: linear-gradient(
+          90deg,
+          rgba(255, 255, 255, 0) 0%,
+          rgba(255, 255, 255, 0.3) 50%,
+          rgba(255, 255, 255, 0) 100%
+        );
+        transform: translateX(-160%) rotate(18deg);
+        animation: splash-shine 2800ms cubic-bezier(0.4, 0, 0.2, 1) 700ms infinite;
+        pointer-events: none;
+      }
+
+      .splash-letter {
+        position: relative;
+        z-index: 1;
+        transform: translateY(-1px);
+        color: #fff;
+        font-family: 'Manrope', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+        font-size: 58px;
+        font-weight: 800;
+        line-height: 1;
+        letter-spacing: -0.045em;
+        text-shadow: 0 2px 8px rgba(29, 20, 120, 0.28);
+      }
+
+      @keyframes splash-rise {
+        from {
+          opacity: 0;
+          transform: translateY(14px) scale(0.82);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0) scale(1);
+        }
+      }
+
+      @keyframes splash-float {
+        0%,
+        100% {
+          transform: translateY(0) scale(1);
+        }
+        50% {
+          transform: translateY(-5px) scale(1.015);
+        }
+      }
+
+      @keyframes splash-halo {
+        0%,
+        100% {
+          opacity: 0.55;
+          transform: scale(0.86);
+        }
+        50% {
+          opacity: 1;
+          transform: scale(1.08);
+        }
+      }
+
+      @keyframes splash-shine {
+        0%,
+        42% {
+          opacity: 0;
+          transform: translateX(-160%) rotate(18deg);
+        }
+        50% {
+          opacity: 0.9;
+        }
+        72%,
+        100% {
+          opacity: 0;
+          transform: translateX(320%) rotate(18deg);
+        }
+      }
+
+      /* Пользователям с reduce-motion оставляем статичный логотип:
+         сплэш исчезнет без анимаций. */
+      @media (prefers-reduced-motion: reduce) {
+        #splash {
+          transition: none;
+        }
+
+        .splash-stage,
+        .splash-mark,
+        .splash-halo,
+        .splash-mark::after {
+          animation: none;
+        }
+      }
+
+      @media (max-width: 480px) {
+        .splash-mark {
+          width: 96px;
+          height: 96px;
+          border-radius: 26px;
+        }
+
+        .splash-mark::before {
+          border-radius: 25px;
+        }
+
+        .splash-letter {
+          font-size: 50px;
+        }
+
+        .splash-halo {
+          width: 230px;
+          height: 230px;
+        }
+      }
+    </style>
+    <noscript>
+      <style>
+        #splash {
+          display: none;
+        }
+      </style>
+    </noscript>
   </head>
   <body>
+    <div id="splash" role="status" aria-live="polite" aria-label="Загрузка">
+      <span class="splash-stage" aria-hidden="true">
+        <span class="splash-halo"></span>
+        <span class="splash-mark"><span class="splash-letter">S</span></span>
+      </span>
+    </div>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
