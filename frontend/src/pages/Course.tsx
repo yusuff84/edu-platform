@@ -157,7 +157,7 @@ export default function Course(): JSX.Element {
 
   const buyMutation = useMutation({
     mutationFn: (vars: { courseId: string; promoCode?: string }) =>
-      enroll(vars.courseId, 'mock', vars.promoCode),
+      enroll(vars.courseId, vars.promoCode),
     onSuccess: (res) => {
       setMessage('');
       void qc.invalidateQueries({ queryKey: ['my-courses'] });

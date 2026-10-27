@@ -35,7 +35,6 @@ import type {
   PaymentStatus,
   PromoCode,
   PromoValidation,
-  Provider,
   PublicSettings,
   ModerationDecision,
   Review,
@@ -84,7 +83,6 @@ export type {
   PaymentTotals,
   PromoCode,
   PromoValidation,
-  Provider,
   PublicSettings,
   QuizData,
   QuizQuestion,
@@ -461,12 +459,14 @@ export function getPublicSettings(): Promise<PublicSettings> {
 
 export function enroll(
   courseId: string,
-  provider: Provider = 'mock',
   promoCode?: string,
 ): Promise<EnrollmentResult> {
+  // P11: провайдера выбирает только backend (PAYMENTS_PROVIDER). Клиент не
+  // передаёт provider, иначе при PAYMENTS_PROVIDER=stripe запрос с "mock"
+  // отклоняется как попытка подмены платёжного канала.
   // P8 (T63): promoCode — необязательное аддитивное поле; пустое не отправляем,
   // иначе backend проверит его как обычный код и ответит 400.
-  const body: Record<string, string> = { courseId, provider };
+  const body: Record<string, string> = { courseId };
   if (promoCode && promoCode.trim() !== '') body.promoCode = promoCode.trim();
   return apiFetch<EnrollmentResult>('/enrollments', {
     method: 'POST',
