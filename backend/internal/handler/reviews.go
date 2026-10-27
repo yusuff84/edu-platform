@@ -39,9 +39,17 @@ func parseRatingFilter(raw string) (int, bool) {
 // ratingsCount всегда считаются по всем отзывам курса (фильтр на них не
 // влияет). breakdown — аддитивное поле: число отзывов по каждой оценке,
 // ключи-строки "1".."5" присутствуют всегда. Форма конверта прежняя.
+//
+// M2 (H1): отзывы неопубликованного курса видят только владелец и админ;
+// остальным, включая заблокированных пользователей, — 404 «Курс не найден».
 func (a *App) ListReviews(w http.ResponseWriter, r *http.Request) {
 	c, ok := a.resolveCourse(chi.URLParam(r, "id"))
 	if !ok {
+		writeErr(w, http.StatusNotFound, "Курс не найден")
+		return
+	}
+	viewer := a.optionalUser(r)
+	if c.Status != repo.CoursePublished && !isCourseOwnerOrAdmin(viewer, c) {
 		writeErr(w, http.StatusNotFound, "Курс не найден")
 		return
 	}
