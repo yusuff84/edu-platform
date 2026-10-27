@@ -200,6 +200,9 @@ func cloneQuiz(q *QuizData) *QuizData {
 		if q.Questions[i].Options != nil {
 			cp.Questions[i].Options = append([]string(nil), q.Questions[i].Options...)
 		}
+		if q.Questions[i].CorrectIndexes != nil {
+			cp.Questions[i].CorrectIndexes = append([]int(nil), q.Questions[i].CorrectIndexes...)
+		}
 	}
 	return cp
 }

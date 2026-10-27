@@ -14,8 +14,10 @@ import (
 )
 
 // CheckQuiz сверяет ответы ученика с квизом.
-// answers: questionID -> выбранный индекс варианта. Зачёт — все вопросы верно.
-func CheckQuiz(quiz *repo.QuizData, answers map[string]int) (passed bool, correct, total int) {
+// answers: questionID -> выбранные индексы вариантов. Для одиночного вопроса
+// ожидается ровно один индекс, для multi — точный набор (порядок не важен).
+// Зачёт — все вопросы верно.
+func CheckQuiz(quiz *repo.QuizData, answers map[string][]int) (passed bool, correct, total int) {
 	if quiz == nil || len(quiz.Questions) == 0 {
 		return false, 0, 0
 	}
@@ -25,11 +27,37 @@ func CheckQuiz(quiz *repo.QuizData, answers map[string]int) (passed bool, correc
 		if !ok {
 			continue
 		}
-		if got == q.Correct {
+		want := q.CorrectIndexes
+		if !q.Multi || len(want) == 0 {
+			// Старые вопросы и одиночный выбор: correct — единственный ответ.
+			want = []int{q.Correct}
+		}
+		if sameAnswerSet(got, want) {
 			correct++
 		}
 	}
 	return correct == total, correct, total
+}
+
+// sameAnswerSet сравнивает наборы индексов без учёта порядка и повторов.
+func sameAnswerSet(a, b []int) bool {
+	as := make(map[int]struct{}, len(a))
+	for _, v := range a {
+		as[v] = struct{}{}
+	}
+	bs := make(map[int]struct{}, len(b))
+	for _, v := range b {
+		bs[v] = struct{}{}
+	}
+	if len(as) != len(bs) {
+		return false
+	}
+	for v := range as {
+		if _, ok := bs[v]; !ok {
+			return false
+		}
+	}
+	return true
 }
 
 // runnerRequest — контракт запроса к code-runner (POST {runnerURL}/run).

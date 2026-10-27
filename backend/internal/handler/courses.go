@@ -145,10 +145,13 @@ func (a *App) ListCourses(w http.ResponseWriter, r *http.Request) {
 // ---- Публичный вид урока: без правильных ответов и скрытых тестов ----
 
 type quizQuestionPublic struct {
-	ID          string   `json:"id"`
-	Text        string   `json:"text"`
-	Options     []string `json:"options"`
-	Explanation string   `json:"explanation,omitempty"`
+	ID      string   `json:"id"`
+	Text    string   `json:"text"`
+	Options []string `json:"options"`
+	// Multi — вопрос с множественным выбором (FR-010). Правильные индексы
+	// в публичный вид не попадают.
+	Multi       bool   `json:"multi,omitempty"`
+	Explanation string `json:"explanation,omitempty"`
 }
 
 type quizPublic struct {
@@ -246,7 +249,7 @@ func lessonToViewAccess(l *repo.Lesson, access lessonAccess) lessonView {
 			qp := quizPublic{}
 			for _, q := range l.Quiz.Questions {
 				qp.Questions = append(qp.Questions, quizQuestionPublic{
-					ID: q.ID, Text: q.Text, Options: q.Options, Explanation: q.Explanation,
+					ID: q.ID, Text: q.Text, Options: q.Options, Multi: q.Multi, Explanation: q.Explanation,
 				})
 			}
 			v.Quiz = qp

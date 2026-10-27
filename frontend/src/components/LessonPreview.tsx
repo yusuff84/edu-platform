@@ -29,6 +29,9 @@ export type LessonPreviewData = {
       text: string;
       options: string[];
       correct: number;
+      /** FR-010: множественный выбор — правильные варианты в correctIndexes. */
+      multi?: boolean;
+      correctIndexes?: number[];
       explanation?: string;
     }>;
   };
@@ -88,7 +91,9 @@ function QuizPreview({
           </p>
           <ul className="ce-quiz-options">
             {q.options.map((opt, oi) => {
-              const isCorrect = oi === q.correct;
+              const isCorrect = q.multi
+                ? (q.correctIndexes ?? []).includes(oi)
+                : oi === q.correct;
               return (
                 <li
                   key={oi}
