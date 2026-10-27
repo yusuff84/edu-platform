@@ -121,6 +121,19 @@ const PROMO_STATUS_LABELS: Record<PromoStatus, string> = {
 };
 
 /**
+ * Конец выбранного дня по локальному времени → RFC3339 (UTC) для API.
+ * input[type=date] отдаёт YYYY-MM-DD; дописывать «Z» нельзя: в Москве
+ * 23:59:59Z — это 02:59 следующего дня. Строка без зоны парсится как
+ * локальное время, toISOString() уже приводит её к UTC.
+ */
+export function promoExpiresAt(date: string): string | undefined {
+  if (!date) return undefined;
+  const d = new Date(`${date}T23:59:59`);
+  if (Number.isNaN(d.getTime())) return undefined;
+  return d.toISOString();
+}
+
+/**
  * Статус промокода — вычисляется на клиенте (отдельного поля в модели нет):
  * отключённый важнее истёкшего, истёкший — активный, но expiresAt уже прошёл.
  */
@@ -980,8 +993,9 @@ export default function Constructor(): JSX.Element {
   /**
    * Клиентская предвалидация по замороженным ключам p8.promo.*Invalid.
    * Код нормализуется (trim+upper), дата «действует до» — конец выбранного
-   * дня UTC: YYYY-MM-DDT23:59:59Z. Ошибки сервера показываются отдельно
-   * текстом ApiError.message (notice), клиентские — под полями.
+   * дня по локальному времени, в API уходит RFC3339 UTC. Ошибки сервера
+   * показываются отдельно текстом ApiError.message (notice), клиентские —
+   * под полями.
    */
   function onPromoSubmit(e: FormEvent): void {
     e.preventDefault();
@@ -1001,9 +1015,10 @@ export default function Constructor(): JSX.Element {
 
     let expiresAt: string | undefined;
     if (promoForm.expiresAt) {
-      expiresAt = `${promoForm.expiresAt}T23:59:59Z`;
-      const expiresTime = new Date(expiresAt).getTime();
-      if (Number.isNaN(expiresTime) || expiresTime <= Date.now()) {
+      // Конец дня по локальному времени; в API — RFC3339 UTC (см. promoExpiresAt).
+      expiresAt = promoExpiresAt(promoForm.expiresAt);
+      const expiresTime = expiresAt ? new Date(expiresAt).getTime() : NaN;
+      if (!expiresAt || Number.isNaN(expiresTime) || expiresTime <= Date.now()) {
         errors.expiresAt = t('p8.promo.expiresInvalid');
       }
     }
