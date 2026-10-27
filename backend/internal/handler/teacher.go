@@ -181,14 +181,17 @@ type createLessonRequest struct {
 // quizQuestionRequest — вопрос теста в теле запроса. Индекс правильного
 // ответа принимается под обоими именами: correct (как хранится и отдаётся
 // репозиторием — форма фронтенда) и correctIndex (как названо в контракте
-// P7 и qa-скрипте). Ответ всегда содержит correct.
+// P7 и qa-скрипте). Для вопроса с multi правильные варианты перечислены в
+// correctIndexes; correct при этом остаётся первым из них для старых клиентов.
 type quizQuestionRequest struct {
-	ID           string   `json:"id"`
-	Text         string   `json:"text"`
-	Options      []string `json:"options"`
-	Correct      *int     `json:"correct"`
-	CorrectIndex *int     `json:"correctIndex"`
-	Explanation  string   `json:"explanation,omitempty"`
+	ID             string   `json:"id"`
+	Text           string   `json:"text"`
+	Options        []string `json:"options"`
+	Correct        *int     `json:"correct"`
+	CorrectIndex   *int     `json:"correctIndex"`
+	Multi          bool     `json:"multi"`
+	CorrectIndexes []int    `json:"correctIndexes"`
+	Explanation    string   `json:"explanation,omitempty"`
 }
 
 // quizRequest — тест из вопросов: на POST/PATCH его проверяет validate
@@ -222,6 +225,12 @@ func (q *quizRequest) validate() string {
 		return "Некорректный тест: должен быть хотя бы один вопрос"
 	}
 	for _, in := range q.Questions {
+		if in.Multi {
+			if len(in.CorrectIndexes) < 2 {
+				return "Некорректный тест: у вопроса с несколькими ответами должно быть не менее двух правильных вариантов"
+			}
+			continue
+		}
 		if in.Correct == nil && in.CorrectIndex == nil {
 			return "Некорректный тест: не указан правильный вариант ответа"
 		}
@@ -238,12 +247,22 @@ func (q *quizRequest) toRepo() *repo.QuizData {
 	}
 	out := &repo.QuizData{Questions: make([]repo.QuizQuestion, len(q.Questions))}
 	for i, in := range q.Questions {
+		correct := in.correctAnswerIndex()
+		var correctIndexes []int
+		if in.Multi {
+			correctIndexes = append([]int(nil), in.CorrectIndexes...)
+			if len(correctIndexes) > 0 {
+				correct = correctIndexes[0]
+			}
+		}
 		out.Questions[i] = repo.QuizQuestion{
-			ID:          in.ID,
-			Text:        in.Text,
-			Options:     in.Options,
-			Correct:     in.correctAnswerIndex(),
-			Explanation: in.Explanation,
+			ID:             in.ID,
+			Text:           in.Text,
+			Options:        in.Options,
+			Correct:        correct,
+			Multi:          in.Multi,
+			CorrectIndexes: correctIndexes,
+			Explanation:    in.Explanation,
 		}
 	}
 	return out
@@ -269,6 +288,22 @@ func validateQuiz(qd *repo.QuizData) string {
 			if strings.TrimSpace(opt) == "" {
 				return "Некорректный тест: у вопроса есть пустой вариант ответа"
 			}
+		}
+		if q.Multi {
+			if len(q.CorrectIndexes) < 2 {
+				return "Некорректный тест: у вопроса с несколькими ответами должно быть не менее двух правильных вариантов"
+			}
+			seen := make(map[int]struct{}, len(q.CorrectIndexes))
+			for _, idx := range q.CorrectIndexes {
+				if idx < 0 || idx >= len(q.Options) {
+					return "Некорректный тест: индекс правильного ответа вне диапазона вариантов"
+				}
+				if _, ok := seen[idx]; ok {
+					return "Некорректный тест: повторяющийся правильный вариант ответа"
+				}
+				seen[idx] = struct{}{}
+			}
+			continue
 		}
 		if q.Correct < 0 || q.Correct >= len(q.Options) {
 			return "Некорректный тест: индекс правильного ответа вне диапазона вариантов"

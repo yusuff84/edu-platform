@@ -156,6 +156,7 @@ const MSG_QUIZ_NO_QUESTIONS = 'Добавьте хотя бы один вопр�
 const MSG_QUIZ_TEXT = 'Укажите текст вопроса';
 const MSG_QUIZ_OPTIONS = 'В вопросе должно быть минимум 2 варианта ответа';
 const MSG_QUIZ_CORRECT = 'Отметьте правильный вариант ответа';
+const MSG_QUIZ_CORRECT_MULTI = 'Отметьте не менее двух правильных вариантов';
 const MSG_CODE_NO_TESTS = 'Добавьте хотя бы один тест';
 const MSG_TEST_NAME = 'Укажите название теста';
 const MSG_TEST_EXPECTED = 'Укажите ожидаемый результат';
@@ -300,8 +301,12 @@ interface QuestionState {
   id?: string;
   text: string;
   options: string[];
-  /** Индекс правильного варианта [0, options.length). */
+  /** Индекс правильного варианта [0, options.length) для одиночного вопроса. */
   correct: number;
+  /** FR-010: множественный выбор — можно отметить несколько правильных вариантов. */
+  multi: boolean;
+  /** Правильные индексы для multi (после валидации — не менее двух). */
+  correctIndexes: number[];
   explanation: string;
 }
 
@@ -345,7 +350,7 @@ function emptyLesson(moduleId: string): LessonDraft {
     videoUrl: '',
     liveUrl: '',
     startsAt: '',
-    questions: [{ text: '', options: ['', ''], correct: 0, explanation: '' }],
+    questions: [{ text: '', options: ['', ''], correct: 0, multi: false, correctIndexes: [0], explanation: '' }],
     language: 'python',
     template: '',
     tests: [{ name: '', input: '', expected: '', hidden: false }],
@@ -379,15 +384,22 @@ function lessonToDraft(l: Lesson, moduleId: string): LessonDraft {
   d.liveUrl = l.liveUrl ?? '';
   d.startsAt = toLocalInput(l.startsAt);
   if (l.kind === 'quiz' && l.quiz) {
-    d.questions = l.quiz.questions.map((q) => ({
-      id: q.id,
-      text: q.text,
-      options: [...q.options],
-      correct: q.correct ?? 0,
-      explanation: q.explanation ?? '',
-    }));
+    d.questions = l.quiz.questions.map((q) => {
+      const correct = q.correct ?? 0;
+      const correctIndexes =
+        q.correctIndexes && q.correctIndexes.length > 0 ? [...q.correctIndexes] : [correct];
+      return {
+        id: q.id,
+        text: q.text,
+        options: [...q.options],
+        correct: q.multi ? (correctIndexes[0] ?? correct) : correct,
+        multi: Boolean(q.multi),
+        correctIndexes,
+        explanation: q.explanation ?? '',
+      };
+    });
     if (d.questions.length === 0) {
-      d.questions = [{ text: '', options: ['', ''], correct: 0, explanation: '' }];
+      d.questions = [{ text: '', options: ['', ''], correct: 0, multi: false, correctIndexes: [0], explanation: '' }];
     }
   }
   if (l.kind === 'code' && l.codeTask) {
@@ -427,8 +439,12 @@ function lessonToPreview(d: LessonDraft): LessonPreviewData {
         const question: NonNullable<LessonPreviewData['quiz']>['questions'][number] = {
           text: q.text,
           options: [...q.options],
-          correct: q.correct,
+          correct: q.multi ? (q.correctIndexes[0] ?? q.correct) : q.correct,
         };
+        if (q.multi) {
+          question.multi = true;
+          question.correctIndexes = [...q.correctIndexes];
+        }
         if (q.explanation) question.explanation = q.explanation;
         return question;
       }),
@@ -485,7 +501,14 @@ function validateLesson(d: LessonDraft): { errors: Record<string, string>; first
       if (!q.text.trim()) put(`q-${qi}-text`, MSG_QUIZ_TEXT);
       const filled = q.options.filter((o) => o.trim()).length;
       if (filled < 2) put(`q-${qi}-options`, MSG_QUIZ_OPTIONS);
-      if (q.correct < 0 || q.correct >= q.options.length) put(`q-${qi}-options`, MSG_QUIZ_CORRECT);
+      if (q.multi) {
+        const valid =
+          q.correctIndexes.length >= 2 &&
+          q.correctIndexes.every((idx) => idx >= 0 && idx < q.options.length);
+        if (!valid) put(`q-${qi}-options`, MSG_QUIZ_CORRECT_MULTI);
+      } else if (q.correct < 0 || q.correct >= q.options.length) {
+        put(`q-${qi}-options`, MSG_QUIZ_CORRECT);
+      }
     });
   }
   if (d.kind === 'code') {
@@ -547,8 +570,14 @@ function buildLessonInput(d: LessonDraft): CreateLessonInput {
             const question: NonNullable<CreateLessonInput['quiz']>['questions'][number] = {
               text: q.text.trim(),
               options: q.options.map((o) => o.trim()),
-              correct: q.correct,
+              // correct остаётся первым правильным индексом и для multi —
+              // старые клиенты продолжают понимать вопрос.
+              correct: q.multi ? (q.correctIndexes[0] ?? q.correct) : q.correct,
             };
+            if (q.multi) {
+              question.multi = true;
+              question.correctIndexes = [...q.correctIndexes];
+            }
             const explanation = q.explanation.trim();
             if (explanation) question.explanation = explanation;
             return question;
@@ -601,8 +630,12 @@ function buildLessonPatchBody(d: LessonDraft): Record<string, unknown> {
           const question: Record<string, unknown> = {
             text: q.text.trim(),
             options: q.options.map((o) => o.trim()),
-            correct: q.correct,
+            correct: q.multi ? (q.correctIndexes[0] ?? q.correct) : q.correct,
           };
+          if (q.multi) {
+            question.multi = true;
+            question.correctIndexes = [...q.correctIndexes];
+          }
           // Сохраняем id исходных вопросов: ответы студентов привязаны к ним.
           if (q.id) question.id = q.id;
           const explanation = q.explanation.trim();
@@ -654,9 +687,10 @@ function lessonReady(l: Lesson): boolean {
           (q) =>
             q.text.trim() !== '' &&
             q.options.filter((o) => o.trim() !== '').length >= 2 &&
-            q.correct !== undefined &&
-            q.correct >= 0 &&
-            q.correct < q.options.length,
+            (q.multi
+              ? (q.correctIndexes ?? []).length >= 2 &&
+                (q.correctIndexes ?? []).every((idx) => idx >= 0 && idx < q.options.length)
+              : q.correct !== undefined && q.correct >= 0 && q.correct < q.options.length),
         )
       );
     }
@@ -1351,10 +1385,44 @@ export default function Constructor(): JSX.Element {
     }));
   }
 
+  /** FR-010: переключение вопроса между одиночным и множественным выбором. */
+  function setQuestionMulti(qi: number, multi: boolean): void {
+    setLesson((prev) => ({
+      ...prev,
+      questions: prev.questions.map((q, i) => {
+        if (i !== qi) return q;
+        if (multi) {
+          const indexes = q.correctIndexes.length > 0 ? q.correctIndexes : [q.correct];
+          return { ...q, multi: true, correctIndexes: indexes, correct: indexes[0] ?? q.correct };
+        }
+        const correct = q.correctIndexes[0] ?? q.correct;
+        return { ...q, multi: false, correct, correctIndexes: [correct] };
+      }),
+    }));
+  }
+
+  /** FR-010: отметить/снять правильный вариант (radio — один, checkbox — много). */
+  function toggleCorrectOption(qi: number, oi: number): void {
+    setLesson((prev) => ({
+      ...prev,
+      questions: prev.questions.map((q, i) => {
+        if (i !== qi) return q;
+        if (!q.multi) return { ...q, correct: oi, correctIndexes: [oi] };
+        const next = q.correctIndexes.includes(oi)
+          ? q.correctIndexes.filter((idx) => idx !== oi)
+          : [...q.correctIndexes, oi].sort((a, b) => a - b);
+        return { ...q, correctIndexes: next, correct: next[0] ?? q.correct };
+      }),
+    }));
+  }
+
   function addQuestion(): void {
     setLesson((prev) => ({
       ...prev,
-      questions: [...prev.questions, { text: '', options: ['', ''], correct: 0, explanation: '' }],
+      questions: [
+        ...prev.questions,
+        { text: '', options: ['', ''], correct: 0, multi: false, correctIndexes: [0], explanation: '' },
+      ],
     }));
   }
 
@@ -1399,8 +1467,12 @@ export default function Constructor(): JSX.Element {
       questions: prev.questions.map((q, i) => {
         if (i !== qi) return q;
         const options = q.options.filter((_, j) => j !== oi);
-        const correct = Math.max(0, Math.min(q.correct, options.length - 1));
-        return { ...q, options, correct };
+        const shifted = q.correct > oi ? q.correct - 1 : q.correct;
+        const correct = Math.max(0, Math.min(shifted, options.length - 1));
+        const correctIndexes = q.correctIndexes
+          .filter((idx) => idx !== oi)
+          .map((idx) => (idx > oi ? idx - 1 : idx));
+        return { ...q, options, correct, correctIndexes };
       }),
     }));
   }
@@ -1425,7 +1497,10 @@ export default function Constructor(): JSX.Element {
         let correct = q.correct;
         if (correct === oi) correct = j;
         else if (correct === j) correct = oi;
-        return { ...q, options, correct };
+        const correctIndexes = q.correctIndexes.map((idx) =>
+          idx === oi ? j : idx === j ? oi : idx,
+        );
+        return { ...q, options, correct, correctIndexes };
       }),
     }));
   }
@@ -2402,6 +2477,17 @@ export default function Constructor(): JSX.Element {
                                 <p className="error">{lessonErrors[`q-${qi}-text`]}</p>
                               )}
 
+                              {/* FR-010: множественный выбор. Подпись без нового
+                                  ключа i18n (ru.json в этой задаче не меняем). */}
+                              <label className="ce-multi-toggle">
+                                <input
+                                  type="checkbox"
+                                  checked={q.multi}
+                                  onChange={(e) => setQuestionMulti(qi, e.target.checked)}
+                                />{' '}
+                                Несколько правильных ответов
+                              </label>
+
                               <fieldset
                                 id={`q-${qi}-options`}
                                 className="teach-options teach-focusable"
@@ -2412,10 +2498,12 @@ export default function Constructor(): JSX.Element {
                                   <div key={oi} className="teach-option-row ce-option-row">
                                     <label className="teach-correct-radio">
                                       <input
-                                        type="radio"
+                                        type={q.multi ? 'checkbox' : 'radio'}
                                         name={`q-correct-${qi}`}
-                                        checked={q.correct === oi}
-                                        onChange={() => updateQuestion(qi, { correct: oi })}
+                                        checked={
+                                          q.multi ? q.correctIndexes.includes(oi) : q.correct === oi
+                                        }
+                                        onChange={() => toggleCorrectOption(qi, oi)}
                                       />
                                       <span className="sr-only">{t('teach.correctOption')}</span>
                                     </label>

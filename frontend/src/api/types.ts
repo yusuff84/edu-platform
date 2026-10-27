@@ -221,8 +221,9 @@ export interface LessonPreview {
 }
 
 /**
- * Вопрос квиза. В публичном виде (/courses/{slug}) поле correct отсутствует —
- * ответы не утекают; в запросе создания (createLesson) correct обязателен.
+ * Вопрос квиза. В публичном виде (/courses/{slug}) поля correct и
+ * correctIndexes отсутствуют — ответы не утекают; multi остаётся, чтобы
+ * ученик видел, что можно выбрать несколько вариантов.
  */
 export interface QuizQuestion {
   id: string;
@@ -231,6 +232,10 @@ export interface QuizQuestion {
   options: string[];
   /** Индекс правильного ответа [0, len(options)); в публичном виде отсутствует. */
   correct?: number;
+  /** FR-010: множественный выбор — можно отметить несколько вариантов. */
+  multi?: boolean;
+  /** Правильные индексы для multi; в публичном виде отсутствуют. */
+  correctIndexes?: number[];
   explanation?: string;
 }
 
@@ -498,13 +503,21 @@ export interface PublicSettings {
 
 // ---------- Входные формы запросов ----------
 
-/** Вопрос квиза для создания урока: correct обязателен и в диапазоне вариантов. */
+/**
+ * Вопрос квиза для создания урока. Для одиночного вопроса обязателен correct,
+ * для multi — не менее двух correctIndexes (correct остаётся первым из них).
+ */
 export interface QuizQuestionInput {
   /** Если не передать — backend сгенерирует. */
   id?: string;
   text: string;
   options: string[];
-  correct: number;
+  /** Индекс единственного правильного ответа (для обратной совместимости). */
+  correct?: number;
+  /** FR-010: множественный выбор. */
+  multi?: boolean;
+  /** Правильные индексы для multi (не менее двух, без повторов). */
+  correctIndexes?: number[];
   explanation?: string;
 }
 
@@ -533,8 +546,11 @@ export interface CreateLessonInput {
 
 /** Тело POST .../complete: для video/live можно не слать вообще. */
 export interface CompleteLessonInput {
-  /** Для kind='quiz': { "<questionId>": индексВарианта }. */
-  quizAnswers?: Record<string, number>;
+  /**
+   * Для kind='quiz': { "<questionId>": индексВарианта } для одиночного
+   * вопроса или массив индексов для multi (FR-010).
+   */
+  quizAnswers?: Record<string, number | number[]>;
   /** Для kind='code'. */
   code?: string;
   /** Необязательно: если пусто, backend берёт язык из задания урока. */

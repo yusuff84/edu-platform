@@ -1,7 +1,8 @@
 // Просмотр урока: все четыре kind (video_text, live, quiz, code).
 // Формы полей строго по контракту Task/00-api-contract.md:
 //   - текст урока — bodyMd (markdown-строка контракта);
-//   - квиз — quiz.questions[] c полем text, ответы { [questionId]: index варианта };
+//   - квиз — quiz.questions[] c полем text, ответы { [questionId]: index } или
+//     массив индексов для вопроса с multi (FR-010);
 //   - эфир — liveUrl + startsAt;
 //   - код — codeTask.{language, template, tests}, редактор инициализируется шаблоном.
 // Вердикт «Зачтено / Не зачтено» показывает родитель (Learn.tsx) по полю passed.
@@ -203,42 +204,68 @@ export function QuizForm({
   disabled,
 }: {
   lesson: Lesson;
-  onSubmit: (answers: Record<string, number>) => void;
+  onSubmit: (answers: Record<string, number | number[]>) => void;
   disabled: boolean;
 }): JSX.Element {
   const questions = lesson.quiz?.questions ?? [];
-  const [answers, setAnswers] = useState<Record<string, number>>({});
+  // Ответ всегда храним массивом: для одиночного вопроса в нём один индекс,
+  // для multi — все отмеченные (FR-010).
+  const [answers, setAnswers] = useState<Record<string, number[]>>({});
   // Пояснения показываем только после отправки ответов на проверку.
   const [answered, setAnswered] = useState(false);
   // Отправка заблокирована, пока не выбраны ответы на все вопросы.
   const allAnswered =
-    questions.length > 0 && questions.every((q) => answers[q.id] !== undefined);
+    questions.length > 0 &&
+    questions.every((q) => {
+      const picked = answers[q.id];
+      return q.multi ? (picked?.length ?? 0) > 0 : picked?.length === 1;
+    });
   return (
     <form
       className="quiz"
       onSubmit={(e) => {
         e.preventDefault();
         if (!disabled && allAnswered) {
+          const payload: Record<string, number | number[]> = {};
+          for (const q of questions) {
+            const picked = answers[q.id] ?? [];
+            // Одиночный вопрос отправляем числом (старый контракт), multi —
+            // массивом индексов.
+            payload[q.id] = q.multi ? picked : (picked[0] ?? -1);
+          }
           setAnswered(true);
-          onSubmit(answers);
+          onSubmit(payload);
         }
       }}
     >
       {questions.map((q, qi) => (
         <fieldset key={q.id || `q${qi}`}>
           <legend>{q.text}</legend>
-          {q.options.map((opt, oi) => (
-            <label key={oi} className="radio">
-              <input
-                type="radio"
-                name={`q-${q.id || qi}`}
-                checked={answers[q.id] === oi}
-                onChange={() => setAnswers((a) => ({ ...a, [q.id]: oi }))}
-                disabled={disabled}
-              />{' '}
-              {opt}
-            </label>
-          ))}
+          {q.options.map((opt, oi) => {
+            const picked = answers[q.id] ?? [];
+            const checked = q.multi ? picked.includes(oi) : picked[0] === oi;
+            return (
+              <label key={oi} className="radio">
+                <input
+                  type={q.multi ? 'checkbox' : 'radio'}
+                  name={`q-${q.id || qi}`}
+                  checked={checked}
+                  onChange={() =>
+                    setAnswers((a) => {
+                      const current = a[q.id] ?? [];
+                      if (!q.multi) return { ...a, [q.id]: [oi] };
+                      const next = current.includes(oi)
+                        ? current.filter((x) => x !== oi)
+                        : [...current, oi].sort((x, y) => x - y);
+                      return { ...a, [q.id]: next };
+                    })
+                  }
+                  disabled={disabled}
+                />{' '}
+                {opt}
+              </label>
+            );
+          })}
           {/* Пояснение показываем после ответа (backend отдаёт explanation в публичном виде). */}
           {answered && q.explanation && (
             <p className="quiz-explanation">

@@ -2,6 +2,8 @@ package handler
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"net/http"
 	"strings"
 	"time"
@@ -60,10 +62,30 @@ func (a *App) MyCourses(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"items": items, "total": len(items)})
 }
 
+// quizAnswerValue принимает ответ на вопрос в двух формах: число (одиночный
+// выбор, старый контракт) или массив чисел (множественный выбор, FR-010).
+type quizAnswerValue struct {
+	Indexes []int
+}
+
+func (v *quizAnswerValue) UnmarshalJSON(data []byte) error {
+	var single int
+	if err := json.Unmarshal(data, &single); err == nil {
+		v.Indexes = []int{single}
+		return nil
+	}
+	var many []int
+	if err := json.Unmarshal(data, &many); err == nil {
+		v.Indexes = many
+		return nil
+	}
+	return errors.New("ответ на вопрос должен быть числом или массивом чисел")
+}
+
 type completeRequest struct {
-	QuizAnswers map[string]int `json:"quizAnswers"`
-	Code        string         `json:"code"`
-	Language    string         `json:"language"`
+	QuizAnswers map[string]quizAnswerValue `json:"quizAnswers"`
+	Code        string                     `json:"code"`
+	Language    string                     `json:"language"`
 }
 
 // CompleteLesson — POST /me/courses/{id}/lessons/{lessonId}/complete.
@@ -150,7 +172,11 @@ func (a *App) CompleteLesson(w http.ResponseWriter, r *http.Request) {
 			writeErr(w, http.StatusBadRequest, "Пришлите ответы на вопросы (quizAnswers)")
 			return
 		}
-		passed, correct, total := service.CheckQuiz(l.Quiz, req.QuizAnswers)
+		answers := make(map[string][]int, len(req.QuizAnswers))
+		for id, v := range req.QuizAnswers {
+			answers[id] = v.Indexes
+		}
+		passed, correct, total := service.CheckQuiz(l.Quiz, answers)
 		if !passed {
 			a.Store.BumpAttempt(u.ID, l.ID)
 			failWithProgress("Не все ответы верны, попробуйте ещё раз", map[string]any{

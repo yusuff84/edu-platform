@@ -122,11 +122,18 @@ type Module struct {
 }
 
 type QuizQuestion struct {
-	ID          string   `json:"id"`
-	Text        string   `json:"text"`
-	Options     []string `json:"options"`
-	Correct     int      `json:"correct"`
-	Explanation string   `json:"explanation,omitempty"`
+	ID      string   `json:"id"`
+	Text    string   `json:"text"`
+	Options []string `json:"options"`
+	// Correct — индекс единственного правильного ответа; для multi хранит
+	// первый элемент CorrectIndexes (обратная совместимость со старыми
+	// клиентами, которые ещё не знают про множественный выбор).
+	Correct int `json:"correct"`
+	// Multi (FR-010) включает множественный выбор: правильные варианты
+	// перечислены в CorrectIndexes, а Correct остаётся первым из них.
+	Multi          bool   `json:"multi,omitempty"`
+	CorrectIndexes []int  `json:"correctIndexes,omitempty"`
+	Explanation    string `json:"explanation,omitempty"`
 }
 
 type QuizData struct {
