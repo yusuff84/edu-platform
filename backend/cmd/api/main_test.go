@@ -7,8 +7,10 @@ package main
 // сохраняется.
 //
 // C3: seedAdmin не создаёт teacher@local/teacher1 без явных TEACHER_*,
-// не сбрасывает пароль и роль существующих пользователей; demo-учитель
-// demo-teacher@local создаётся только в in-memory сиде seedDemo.
+// не сбрасывает пароль и роль существующих пользователей; точные
+// placeholder-хеши из 002_seed.sql заменяются паролем из env, чтобы свежая
+// Postgres-БД не оставалась без входа. demo-учитель demo-teacher@local
+// создаётся только в in-memory сиде seedDemo.
 
 import (
 	"strings"
@@ -20,9 +22,13 @@ import (
 	"edu-platform/backend/internal/repo"
 )
 
-// fakeMigrationHash — точная заглушка из 002_seed.sql: 50 символов «A»
-// плюс открытый текст пароля. bcrypt.Cost на ней падает.
-const fakeMigrationHash = "$2a$10$AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAadmin1234"
+// fakeMigrationHash / fakeTeacherMigrationHash — точные заглушки из
+// 002_seed.sql: 50 символов «A»/«B» плюс открытый текст пароля.
+// bcrypt.Cost на них падает.
+const (
+	fakeMigrationHash        = "$2a$10$AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAadmin1234"
+	fakeTeacherMigrationHash = "$2a$10$BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBteacher1"
+)
 
 // newSeedConfig собирает конфиг для seedAdmin и по умолчанию отключает
 // сид учителя: без явных TEACHER_* никакая учётка учителя создаваться не должна.
@@ -103,10 +109,10 @@ func TestSeedAdminKeepsExistingPassword(t *testing.T) {
 	}
 }
 
-// TestSeedAdminDoesNotRepairFakeHash — поддельный хеш из миграции 002_seed.sql
-// больше не «чинится» автоматически: это был бы сброс пароля. Оператор
-// задаёт пароль вручную.
-func TestSeedAdminDoesNotRepairFakeHash(t *testing.T) {
+// TestSeedAdminRepairsAdminPlaceholder — точная заглушка admin@local из
+// 002_seed.sql заменяется настоящим bcrypt-хешем пароля из ADMIN_PASSWORD:
+// иначе на свежей Postgres-БД войти под admin@local невозможно.
+func TestSeedAdminRepairsAdminPlaceholder(t *testing.T) {
 	s := repo.NewStore()
 	if _, err := s.CreateUser("admin@local", fakeMigrationHash, repo.RoleAdmin); err != nil {
 		t.Fatalf("создание сид-пользователя: %v", err)
@@ -118,8 +124,57 @@ func TestSeedAdminDoesNotRepairFakeHash(t *testing.T) {
 	if !ok {
 		t.Fatal("пользователь пропал")
 	}
-	if u.PasswordHash != fakeMigrationHash {
-		t.Fatal("хеш существующего пользователя не должен перезаписываться при старте")
+	if u.PasswordHash == fakeMigrationHash {
+		t.Fatal("точная seed-заглушка должна быть заменена при старте")
+	}
+	mustCompare(t, u.PasswordHash, "admin1234")
+	if u.Role != repo.RoleAdmin {
+		t.Fatalf("роль=%v, ждали admin (замена хеша не меняет роль)", u.Role)
+	}
+}
+
+// TestSeedAdminRepairsTeacherPlaceholder — та же замена для точной заглушки
+// teacher@local при явных TEACHER_*.
+func TestSeedAdminRepairsTeacherPlaceholder(t *testing.T) {
+	s := repo.NewStore()
+	if _, err := s.CreateUser("teacher@local", fakeTeacherMigrationHash, repo.RoleTeacher); err != nil {
+		t.Fatalf("создание сид-учителя: %v", err)
+	}
+
+	cfg := newSeedConfig(t, "", "")
+	setTeacherEnv(t, "teacher@local", "teacher1")
+	seedAdmin(s, cfg)
+
+	u, ok := s.GetUserByEmail("teacher@local")
+	if !ok {
+		t.Fatal("пользователь пропал")
+	}
+	if u.PasswordHash == fakeTeacherMigrationHash {
+		t.Fatal("точная seed-заглушка учителя должна быть заменена при старте")
+	}
+	mustCompare(t, u.PasswordHash, "teacher1")
+	if u.Role != repo.RoleTeacher {
+		t.Fatalf("роль=%v, ждали teacher (замена хеша не меняет роль)", u.Role)
+	}
+}
+
+// TestSeedAdminDoesNotRepairSimilarFakeHash — похожий, но не точный
+// placeholder не трогаем: иначе можно случайно сбросить реальный пароль.
+func TestSeedAdminDoesNotRepairSimilarFakeHash(t *testing.T) {
+	s := repo.NewStore()
+	similar := fakeMigrationHash + "x"
+	if _, err := s.CreateUser("admin@local", similar, repo.RoleAdmin); err != nil {
+		t.Fatalf("создание пользователя: %v", err)
+	}
+
+	seedAdmin(s, newSeedConfig(t, "admin@local", "admin1234"))
+
+	u, ok := s.GetUserByEmail("admin@local")
+	if !ok {
+		t.Fatal("пользователь пропал")
+	}
+	if u.PasswordHash != similar {
+		t.Fatal("незнакомый битый хеш не должен перезаписываться при старте")
 	}
 }
 

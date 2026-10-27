@@ -242,10 +242,27 @@ func seedAdmin(store repo.StoreAPI, cfg *config.Config) {
 	}
 }
 
+// Точные placeholder-хеши из миграции 002_seed.sql. Это не настоящие
+// bcrypt-хеши: после 50 символов «A»/«B» в строке стоит открытый пароль,
+// поэтому bcrypt.Cost на них падает, а вход невозможен. Чиним только эти
+// два конкретных значения, чтобы не сбросить реальный пароль пользователя
+// (C3): любое другое значение, включая похожие подделки, не трогаем.
+const (
+	seedAdminPlaceholderHash   = "$2a$10$AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAadmin1234"
+	seedTeacherPlaceholderHash = "$2a$10$BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBteacher1"
+)
+
+// isSeedPlaceholderHash сообщает, что хеш — точная заглушка из 002_seed.sql.
+func isSeedPlaceholderHash(hash string) bool {
+	return hash == seedAdminPlaceholderHash || hash == seedTeacherPlaceholderHash
+}
+
 // ensureAccount создаёт учётку, только если её ещё нет. Существующим
 // пользователям пароль и роль при старте не меняются — это исключает
 // неявный сброс доступа (C3) и повышение роли уже зарегистрированного
-// пользователя. label — имя роли по-русски для логов.
+// пользователя. Исключение — точные placeholder-хеши из 002_seed.sql:
+// они не являются bcrypt и без замены оставляют свежую БД без входа.
+// label — имя роли по-русски для логов.
 func ensureAccount(store repo.StoreAPI, email, password string, role repo.Role, label string) {
 	email = strings.TrimSpace(email)
 	if email == "" || password == "" {
@@ -253,8 +270,21 @@ func ensureAccount(store repo.StoreAPI, email, password string, role repo.Role, 
 	}
 
 	if user, exists := store.GetUserByEmail(email); exists {
-		// Битый bcrypt-хеш (например, заглушка из 002_seed.sql) не чиним
-		// автоматически: это был бы сброс пароля. Оператор задаёт его вручную.
+		// Заменяем только известную заглушку миграции на пароль из env.
+		// Реальный bcrypt-хеш (и любой незнакомый битый хеш) не трогаем.
+		if isSeedPlaceholderHash(user.PasswordHash) {
+			hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+			if err != nil {
+				log.Printf("не удалось захешировать пароль %s: %v", email, err)
+				return
+			}
+			if !store.SetUserPasswordHash(user.ID, string(hash)) {
+				log.Printf("не удалось заменить seed-заглушку пароля для %s", email)
+				return
+			}
+			log.Printf("%s %s: seed-заглушка пароля заменена паролем из env", label, email)
+			return
+		}
 		if _, err := bcrypt.Cost([]byte(user.PasswordHash)); err != nil {
 			log.Printf("ПРЕДУПРЕЖДЕНИЕ: %s %s уже существует с невалидным bcrypt-хешем; пароль при старте не сбрасывается — задайте его вручную", label, email)
 		} else {
