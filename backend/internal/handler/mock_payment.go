@@ -21,9 +21,18 @@ import (
 // Неизвестный id по-прежнему отдаёт 200 с «Платёж не найден» — так же, как
 // прежний обработчик, чтобы страница не превращалась в 404 после рестарта.
 func (a *App) MockPaymentPage(w http.ResponseWriter, r *http.Request) {
+	// P11: вторая линия защиты после условной регистрации маршрута —
+	// прямой вызов хендлера вне dev тоже не должен отдавать mock-страницу.
+	if !a.Config.IsDev() {
+		writeErr(w, http.StatusNotFound, "Страница не найдена")
+		return
+	}
 	id := strings.TrimSpace(chi.URLParam(r, "id"))
 	data := payments.MockConfirmData{ID: id, IDJSON: jsString(id)}
-	if p, ok := a.Store.GetPaymentByProviderID(id); ok {
+	// P11 (cross-provider): страница mock не должна показывать чужой платёж
+	// (stripe/yookassa). Иначе она раскрывала бы сумму/курс и предлагала
+	// «подтвердить» платёж, который mock-вебхук всё равно отклонит (404).
+	if p, ok := a.Store.GetPaymentByProviderID(id); ok && strings.EqualFold(p.Provider, "mock") {
 		description := ""
 		if c, found := a.Store.GetCourseByID(p.CourseID); found {
 			description = c.Title

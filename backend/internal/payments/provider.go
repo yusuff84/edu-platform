@@ -66,22 +66,33 @@ type PaymentProvider interface {
 	// провайдер использует свой секрет из env, прочитанный в конструкторе.
 	VerifyWebhook(r *http.Request, secret []byte) error
 	HandleWebhook(r *http.Request) (WebhookEvent, error)
-	// Refund и GetStatus реализованы всеми тремя провайдерами (включая тесты
-	// mock), но пока не вызываются ни одним хендлером: в MVP возврат средств
-	// и ручная сверка статуса не вынесены в API. Оставлены в интерфейсе как
-	// готовый API для будущего (админ-действия «вернуть платёж»).
-	// См. отчёт T13.
-	Refund(ctx context.Context, providerPaymentID string) error
+	// Refund возвращает платёж у провайдера. Необязательный idempotencyKey
+	// позволяет админке передать стабильный ключ refund-<внутренний id>;
+	// без него провайдер использует refund-<providerPaymentID>. Оба варианта
+	// стабильны, поэтому ретрай возврата не создаёт второй возврат.
+	Refund(ctx context.Context, providerPaymentID string, idempotencyKey ...string) error
 	GetStatus(ctx context.Context, providerPaymentID string) (string, error)
 }
 
 // NewProvider — фабрика провайдеров по имени из env PAYMENTS_PROVIDER.
 // Конструкторы stripe/yookassa возвращают ErrNotConfigured, если ключи не заданы:
 // это ошибка конфигурации, а не молчаливая заглушка.
-func NewProvider(name string) (PaymentProvider, error) {
+//
+// Необязательный dev-флаг задаёт режим для mock: вне dev mock-провайдер
+// запрещён (ErrNotConfigured). Handler всегда передаёт режим явно из Config.
+// Без флага сохраняется историческое поведение фабрики (mock доступен):
+// так юнит-тесты пакета не зависят от DATABASE_URL/APP_ENV окружения.
+func NewProvider(name string, dev ...bool) (PaymentProvider, error) {
+	devMode := true
+	if len(dev) > 0 {
+		devMode = dev[0]
+	}
 	switch strings.ToLower(strings.TrimSpace(name)) {
 	case "", "mock":
-		return NewMockProvider(), nil
+		if !devMode {
+			return nil, fmt.Errorf("%w: mock-провайдер запрещён вне dev", ErrNotConfigured)
+		}
+		return NewMockProvider(true), nil
 	case "stripe":
 		return NewStripeProvider()
 	case "yookassa":

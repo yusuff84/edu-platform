@@ -101,7 +101,11 @@ func NewRouter(app *App) http.Handler {
 	// chi r.Get требует http.HandlerFunc — оборачиваем Handler через ServeHTTP.
 	// Страница читает платёж из Store (handler/mock_payment.go), а не из
 	// in-memory реестра провайдера: статус переживает рестарт API.
-	r.Get("/pay/mock/{id}", app.MockPaymentPage)
+	// P11: mock — только dev-инструмент. Вне dev маршрут не регистрируется
+	// вовсе (404), чтобы тестовая страница не оказалась в проде.
+	if app.Config.IsDev() {
+		r.Get("/pay/mock/{id}", app.MockPaymentPage)
+	}
 	// T13: обслуживание уже загруженных файлов (обложки курсов и т.п.,
 	// см. internal/storage). Загрузочного эндпоинта в MVP нет — раздаются
 	// только файлы, которые уже лежат в каталоге uploads/.

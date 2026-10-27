@@ -334,7 +334,7 @@ func (y *YookassaProvider) HandleWebhook(r *http.Request) (WebhookEvent, error) 
 }
 
 // Refund возвращает платёж полностью: GET платёж → POST /v3/refunds с Idempotence-Key.
-func (y *YookassaProvider) Refund(ctx context.Context, providerPaymentID string) error {
+func (y *YookassaProvider) Refund(ctx context.Context, providerPaymentID string, idempotencyKey ...string) error {
 	p, err := y.getPayment(ctx, providerPaymentID)
 	if err != nil {
 		return err
@@ -358,7 +358,13 @@ func (y *YookassaProvider) Refund(ctx context.Context, providerPaymentID string)
 	}
 	y.authorize(httpReq)
 	httpReq.Header.Set("Content-Type", "application/json")
-	httpReq.Header.Set("Idempotence-Key", uuid.NewString())
+	// P11: стабильный ключ идемпотентности возврата. Повторный вызов Refund
+	// по тому же платежу (ретрай админки/сети) не создаст второй возврат.
+	key := "refund-" + providerPaymentID
+	if len(idempotencyKey) > 0 && strings.TrimSpace(idempotencyKey[0]) != "" {
+		key = strings.TrimSpace(idempotencyKey[0])
+	}
+	httpReq.Header.Set("Idempotence-Key", key)
 	resp, err := y.client.Do(httpReq)
 	if err != nil {
 		return fmt.Errorf("%w: yookassa недоступен: %v", ErrUpstream, err)

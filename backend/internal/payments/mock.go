@@ -42,10 +42,23 @@ var mockRegistry = struct {
 const MockPaymentIDPrefix = "mock_"
 
 // MockProvider — mock-провайдер.
-type MockProvider struct{}
+type MockProvider struct {
+	// dev разрешает работу без MOCK_WEBHOOK_SECRET и вообще существование
+	// mock-провайдера. Вне dev mock запрещён (см. NewProvider).
+	dev bool
+}
 
-// NewMockProvider создаёт mock-провайдер.
-func NewMockProvider() *MockProvider { return &MockProvider{} }
+// NewMockProvider создаёт mock-провайдер. Без явного dev-флага сохраняется
+// историческое поведение (dev): handler всегда передаёт режим из Config и
+// запрещает mock вне dev. Явный false делает mock непригодным и для
+// CreatePayment, и для unsigned-вебхука.
+func NewMockProvider(dev ...bool) *MockProvider {
+	devMode := true
+	if len(dev) > 0 {
+		devMode = dev[0]
+	}
+	return &MockProvider{dev: devMode}
+}
 
 // Name возвращает имя провайдера.
 func (m *MockProvider) Name() string { return "mock" }
@@ -58,6 +71,9 @@ func MockConfirmPath(paymentID string) string {
 
 // CreatePayment создаёт mock-платёж и ссылку на рабочую страницу оплаты.
 func (m *MockProvider) CreatePayment(_ context.Context, req CreatePaymentRequest) (CreatePaymentResult, error) {
+	if !m.dev {
+		return CreatePaymentResult{}, fmt.Errorf("%w: mock-провайдер запрещён вне dev", ErrNotConfigured)
+	}
 	if req.AmountCents < 0 {
 		return CreatePaymentResult{}, errors.New("mock: отрицательная сумма платежа")
 	}
@@ -92,7 +108,13 @@ func (m *MockProvider) VerifyWebhook(r *http.Request, secret []byte) error {
 		}
 	}
 	if len(key) == 0 {
-		return nil
+		// Пустой MOCK_WEBHOOK_SECRET допустим только в dev: вне dev mock-
+		// вебхук без подписи принимать нельзя (защита в глубину — сам
+		// провайдер вне dev уже не создаётся).
+		if m.dev {
+			return nil
+		}
+		return fmt.Errorf("%w: mock: MOCK_WEBHOOK_SECRET не задан вне dev", ErrUnauthorized)
 	}
 	raw, err := readRawBody(r)
 	if err != nil {
@@ -140,7 +162,7 @@ func (m *MockProvider) HandleWebhook(r *http.Request) (WebhookEvent, error) {
 }
 
 // Refund помечает mock-платёж возвращённым.
-func (m *MockProvider) Refund(_ context.Context, providerPaymentID string) error {
+func (m *MockProvider) Refund(_ context.Context, providerPaymentID string, _ ...string) error {
 	mockRegistry.Lock()
 	defer mockRegistry.Unlock()
 	p, ok := mockRegistry.items[providerPaymentID]
