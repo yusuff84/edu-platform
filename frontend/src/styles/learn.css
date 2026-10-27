@@ -374,3 +374,280 @@
    sticky у .side-nav: сверху программа (сайдбар), под ней урок — сайдбар
    никуда не «выпадает» и не уводит горизонталь. Дополнительного сброса
    сетки здесь не требуется; защита ширины — .lesson-pane { min-width: 0 }. */
+
+/* ==========================================================================
+   Экран обучения — Skillbox-inspired шапка и навигация по урокам
+   --------------------------------------------------------------------------
+   Светлая карточка курса с крупным процентом, мягкий sidebar и стрелки
+   «предыдущий / следующий» над уроком. Логика прогресса и complete не меняется.
+   ========================================================================== */
+
+.learn-head {
+  margin: 4px 0 24px;
+  padding: 26px 28px;
+  border: 1px solid #e6e9f2;
+  border-radius: 28px;
+  background:
+    radial-gradient(480px 220px at 100% 0%, rgba(108, 124, 255, 0.1), transparent 66%),
+    linear-gradient(120deg, #ffffff 0%, #f8f9ff 100%);
+  box-shadow: var(--shadow-sm);
+}
+
+.learn-head-row {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 24px;
+}
+
+.learn-eyebrow {
+  margin: 0 0 8px;
+  color: #5d65d9;
+  font-size: 11.5px;
+  font-weight: 800;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+}
+
+.learn-head h1 {
+  margin: 0;
+  font-size: clamp(27px, 3.5vw, 42px);
+  line-height: 1.05;
+  letter-spacing: -0.04em;
+}
+
+.learn-head-sub {
+  margin: 9px 0 0;
+  color: var(--muted);
+  font-size: 13.5px;
+  font-weight: 600;
+}
+
+.learn-percent {
+  flex: none;
+  text-align: right;
+}
+
+.learn-percent b {
+  display: block;
+  font-size: 32px;
+  line-height: 1;
+  letter-spacing: -0.05em;
+}
+
+.learn-percent span {
+  display: block;
+  margin-top: 5px;
+  color: var(--muted);
+  font-size: 11.5px;
+  font-weight: 700;
+}
+
+.learn-head .learn-progress {
+  margin: 18px 0 0;
+}
+
+.learn-head .learn-progress .progress {
+  height: 8px;
+}
+
+/* Sidebar: мягкие pill-пункты и спокойный активный урок. */
+.learn-head ~ .lesson-shell .side-nav {
+  border-color: #e9ebf2;
+}
+
+.side-nav {
+  padding: 16px;
+  border-radius: 24px;
+}
+
+.side-nav > div + div {
+  margin-top: 14px;
+}
+
+.side-nav .side-title {
+  padding: 6px 11px 8px;
+  color: #707480;
+  font-size: 11.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.side-nav .learn-link {
+  padding: 10px 12px;
+  border-radius: 12px;
+  color: #5f636e;
+  font-size: 13.5px;
+  font-weight: 600;
+  transition: background 0.15s, color 0.15s;
+}
+
+.side-nav .learn-link:hover {
+  background: #f4f6fb;
+  color: var(--fg);
+}
+
+.side-nav a.learn-link-active,
+.side-nav a.learn-link-active:hover {
+  background: #eef2ff;
+  color: #2735c9;
+  font-weight: 800;
+}
+
+.side-nav .learn-link-done {
+  color: #21784a;
+}
+
+.learn-link-check {
+  flex: none;
+  color: #21784a;
+  font-weight: 800;
+}
+
+/* Верхняя строка урока: kind + модуль + стрелки. */
+.lesson-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: -4px;
+}
+
+.lesson-toolbar-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 9px;
+  min-width: 0;
+}
+
+.lesson-toolbar-module {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 12.5px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lesson-arrows {
+  display: flex;
+  flex: none;
+  gap: 8px;
+}
+
+.lesson-arrow {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: #fff;
+  color: var(--fg);
+  text-decoration: none;
+  box-shadow: var(--shadow-sm);
+  transition: background 0.15s, border-color 0.15s, transform 0.15s;
+}
+
+.lesson-arrow:hover {
+  border-color: #dfe3ee;
+  background: #f5f6fa;
+  transform: translateY(-1px);
+}
+
+.lesson-arrow.is-disabled {
+  opacity: 0.35;
+  pointer-events: none;
+  box-shadow: none;
+}
+
+/* Контент урока — больше воздуха, как в учебных карточках Skillbox. */
+.lesson-pane > .panel {
+  padding: 28px 30px;
+  border-radius: 26px;
+}
+
+.lesson-pane > .panel > h3 {
+  margin: 0 0 14px;
+  font-size: clamp(23px, 2.7vw, 31px);
+  line-height: 1.15;
+  letter-spacing: -0.03em;
+}
+
+.lesson-pane .panel .md p,
+.lesson-pane .panel > p {
+  line-height: 1.65;
+}
+
+.learn-next-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+@media (min-width: 961px) {
+  .learn-head ~ .lesson-shell .side-nav {
+    top: 96px;
+  }
+}
+
+@media (max-width: 760px) {
+  .learn-head {
+    padding: 22px;
+  }
+
+  .learn-head-row {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .learn-percent {
+    text-align: left;
+  }
+
+  .learn-percent b {
+    font-size: 26px;
+  }
+
+  .lesson-pane > .panel {
+    padding: 22px 20px;
+  }
+}
+
+@media (max-width: 520px) {
+  .learn-head {
+    border-radius: 24px;
+    padding: 20px;
+  }
+
+  .lesson-toolbar {
+    align-items: flex-start;
+  }
+
+  .lesson-toolbar-module {
+    max-width: 46vw;
+  }
+}
+
+/* В боковом списке достаточно названия урока: kind и «следующий» уже есть
+   в шапке урока и в кнопке снизу. Иначе длинные названия ломают строку. */
+.side-nav .learn-link-kind,
+.side-nav .learn-link-next {
+  display: none;
+}
+
+/* Не оставляем пустую «дыру» под уроком, пока вердикта нет. */
+.lesson-pane {
+  gap: 14px;
+}
+
+.lesson-pane .learn-verdict:empty {
+  min-height: 0;
+  margin: 0;
+}
+
+.lesson-pane > p {
+  margin: 0;
+}

@@ -1204,7 +1204,8 @@ textarea.input:focus {
 
 .buybox {
   position: sticky;
-  top: 20px;
+  /* 76px шапка + 20px воздуха, чтобы карточка не уезжала под неё. */
+  top: 96px;
   display: grid;
   gap: 14px;
 }
@@ -2324,7 +2325,7 @@ tr:last-child td {
   display: grid;
   grid-template-columns: 1.4fr 1fr 1fr 1fr;
   gap: 24px;
-  padding: 44px 0 40px;
+  padding: 44px 28px 40px;
   /* T60: колонки выровнены по верхнему краю независимо от числа ссылок. */
   align-items: start;
 }
@@ -2483,7 +2484,249 @@ tr:last-child td {
     font-size: 12.5px;
   }
   .footer-in {
-    padding: 36px 0 32px;
+    padding: 36px 28px 32px;
     gap: 20px;
+  }
+}
+
+/* ==========================================================================
+   Skillbox-inspired refresh
+   --------------------------------------------------------------------------
+   Светлая «воздушная» оболочка, мягкие поверхности, аккуратные pill-кнопки
+   и спокойная навигация. Функциональные классы и старые селекторы сохранены:
+   слой идёт после базовых правил и меняет только оформление.
+   ========================================================================== */
+
+:root {
+  --bg: #f6f7fa;
+  --surface: #ffffff;
+  --fg: #14151a;
+  --muted: #686b75;
+  --faint: #a7a9b2;
+  --line: #e8e9ef;
+  --line-soft: #f1f2f6;
+  --soft-blue: #eef2ff;
+  --soft-blue-strong: #dfe6ff;
+  --progress-start: #5b6cff;
+  --progress-end: #9a7bff;
+  --shadow-sm: 0 1px 2px rgba(20, 21, 26, 0.04);
+  --shadow: 0 10px 30px -12px rgba(20, 21, 26, 0.18), 0 2px 6px rgba(20, 21, 26, 0.04);
+}
+
+html {
+  scroll-padding-top: 92px;
+}
+
+body {
+  background: var(--bg);
+  color: var(--fg);
+}
+
+/* Шапка: белая, с мягкой линией и «плавающими» pill-пунктами. */
+.topbar {
+  position: sticky;
+  top: 0;
+  /* Ниже слоёв модальных окон (40–100), иначе шапка перекрывает диалоги. */
+  z-index: 30;
+  background: rgba(255, 255, 255, 0.94);
+  border-bottom: 1px solid #eceef3;
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+}
+
+.topbar-in {
+  min-height: 76px;
+  gap: 18px;
+}
+
+.topbar .logo {
+  color: var(--fg);
+}
+
+.topbar .logo-mark {
+  background: var(--fg);
+  color: #fff;
+  border-radius: 12px;
+}
+
+.topbar .nav {
+  margin-left: 8px;
+}
+
+.topbar .nav a {
+  color: #6f727c;
+  font-size: 14px;
+  padding: 10px 15px;
+}
+
+.topbar .nav a.active,
+.topbar .nav a:hover {
+  background: #f2f3f7;
+  color: #111219;
+}
+
+.topbar :focus-visible {
+  outline-color: var(--brand);
+}
+
+.topbar .btn-ghost {
+  background: transparent;
+  border-color: #e4e5ea;
+  color: #191a1f;
+}
+
+.topbar .btn-ghost:hover {
+  background: #f5f6f9;
+  border-color: #d7d9e1;
+  color: #111219;
+}
+
+.topbar .btn-ghost:active:not(:disabled) {
+  background: #eceef3;
+}
+
+.top-actions {
+  gap: 8px;
+}
+
+.user-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding: 5px 10px 5px 5px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  color: var(--fg);
+  text-decoration: none;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.user-chip:hover {
+  background: #f5f6f9;
+  border-color: #eceef3;
+}
+
+.user-avatar {
+  width: 34px;
+  height: 34px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #4e5cf6, #9a7bff);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+
+.user-chip-text {
+  display: grid;
+  min-width: 0;
+  line-height: 1.15;
+}
+
+.user-chip-name {
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13.5px;
+  font-weight: 800;
+}
+
+.user-chip-sub {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.topbar-logout {
+  margin-left: 2px;
+}
+
+/* Кнопки: тёмная pill для основного действия в обучении и мягкая — рядом. */
+.btn-ink {
+  background: #14151a;
+  border-color: #14151a;
+  color: #fff;
+  box-shadow: 0 10px 22px -10px rgba(20, 21, 26, 0.45);
+}
+
+.btn-ink:hover {
+  background: #000;
+  border-color: #000;
+  color: #fff;
+}
+
+.btn-ink:active:not(:disabled) {
+  background: #000;
+  border-color: #000;
+}
+
+.btn-soft {
+  background: #f3f4f8;
+  border-color: #eceef3;
+  color: var(--fg);
+}
+
+.btn-soft:hover {
+  background: #e9ebf2;
+  border-color: #e0e3ec;
+  color: var(--fg);
+}
+
+/* Прогресс обучения — спокойный сине-фиолетовый градиент. */
+.progress {
+  height: 9px;
+  background: #eceef4;
+}
+
+.progress i,
+.progress-bar {
+  background: linear-gradient(90deg, var(--progress-start), var(--progress-end));
+}
+
+/* Поверхности становятся мягче и «чище». */
+.panel {
+  border-color: var(--line);
+  border-radius: 24px;
+  box-shadow: var(--shadow-sm);
+}
+
+@media (max-width: 560px) {
+  .topbar-in {
+    min-height: 64px;
+    gap: 12px;
+    row-gap: 4px;
+  }
+
+  .user-chip-text {
+    display: none;
+  }
+
+  .user-chip {
+    padding: 3px;
+  }
+
+  .topbar-logout {
+    padding-left: 14px;
+    padding-right: 14px;
+  }
+
+  /* На узком экране футер читается одной колонкой, а не сжатыми
+     двумя колонками, где бренд и контакты упираются в край. */
+  .footer-in {
+    grid-template-columns: 1fr;
+    gap: 26px;
+    padding: 32px 16px 28px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .topbar {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
   }
 }
