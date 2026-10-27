@@ -17,7 +17,7 @@
 | Сервис   | Технологии                          | Порт (host) |
 |----------|-------------------------------------|-------------|
 | backend  | Go, chi, pgxpool, миграции SQL      | 8082 (внутри контейнера 8080) |
-| frontend | React + Vite + TypeScript, nginx    | 3000        |
+| frontend | React + Vite + TypeScript, nginx    | 3001 (в dev-`.env`; шаблон — `3000`) |
 | runner   | Go (python/js/htmlcss sandbox)      | — (внутренняя сеть `runner_net`, 8081; наружу не публикуется) |
 | db       | Postgres 16                         | — (наружу не публикуется) |
 
@@ -25,41 +25,54 @@
 
 ## Быстрый старт
 
+В репозитории уже лежит dev-`.env` (отслеживается git): `ADMIN_EMAIL=admin@local`,
+`ADMIN_PASSWORD=admin1234`, `WEB_PORT=3001`. Для локального запуска копировать
+шаблон не нужно:
+
 ```bash
-cp .env.example .env          # задать ADMIN_EMAIL / ADMIN_PASSWORD — создастся админ при старте
 docker compose up -d --build
-# http://localhost:3000 — веб, http://localhost:8082 — API
+# http://localhost:3001 — веб, http://localhost:8082 — API
 # http://localhost:8082/healthz → {"status":"ok"}
+# admin@local / admin1234 — из .env
+# teacher@local / teacher1 создаётся автоматически — это dev-учётка,
+# см. «Демо-учётки → Преподаватель».
 ```
 
 Миграции применяются автоматически при старте API.
 
-### Если порт 3000 занят другим проектом
+Шаблон для своего окружения — [.env.example](.env.example): там `WEB_PORT=3000`
+и пустые `ADMIN_EMAIL`/`ADMIN_PASSWORD`. Скопируйте его в отдельный env-файл,
+заполните секреты и запускайте `docker compose --env-file .env.local up -d`
+(имя файла — любое, в git его не добавлять).
 
-Порт фронта настраивается через `WEB_PORT`, но **CSRF и CORS привязаны к
-origin'у** — просто перенаправить 3000 на другой порт недостаточно, браузер
-получит отказ на любых не-GET запросах (вход, регистрация). Меняйте обе
-переменные одной парой:
+### Смена порта web
+
+`WEB_PORT` в `.env` задаёт host-порт web-контейнера; в текущем dev-`.env` — `3001`.
+**CSRF и CORS привязаны к origin'у** — просто перенаправить порт недостаточно,
+браузер получит отказ на любых не-GET запросах (вход, регистрация). Меняйте
+`WEB_PORT` и `ALLOWED_ORIGINS` одной парой. Пример — переезд на `3002`:
 
 ```bash
 # PowerShell
-$env:WEB_PORT="3001"
-# Важно: список — это allowlist. Оставьте в нём и :3000, иначе сквозные
-# скрипты (они шлют Origin http://localhost:3000) получат 403 на не-GET.
-$env:ALLOWED_ORIGINS="http://localhost:3000,http://127.0.0.1:3000,http://localhost:3001,http://127.0.0.1:3001"
+$env:WEB_PORT="3002"
+# Важно: список — это allowlist. Оставьте в нём :3000/:3001, иначе сквозные
+# скрипты получат 403 на не-GET: qa-abc.ps1 всегда шлёт Origin :3000,
+# qa-p10.ps1 по умолчанию — :3001.
+$env:ALLOWED_ORIGINS="http://localhost:3000,http://127.0.0.1:3000,http://localhost:3001,http://127.0.0.1:3001,http://localhost:3002,http://127.0.0.1:3002"
 docker compose up -d --build --force-recreate api web
 
 # bash
-WEB_PORT=3001 ALLOWED_ORIGINS="http://localhost:3000,http://127.0.0.1:3000,http://localhost:3001,http://127.0.0.1:3001" \
+WEB_PORT=3002 ALLOWED_ORIGINS="http://localhost:3000,http://127.0.0.1:3000,http://localhost:3001,http://127.0.0.1:3001,http://localhost:3002,http://127.0.0.1:3002" \
   docker compose up -d --build --force-recreate api web
 ```
 
-`ALLOWED_ORIGINS` по умолчанию — `http://localhost:3000,http://127.0.0.1:3000`
-(см. `docker-compose.yml`, `internal/config/config.go`). Если фронтенд отдаётся
-на другом порту, а `ALLOWED_ORIGINS` не поправлен, UI отвечает
-`403 «Недопустимый источник запроса»` на любой не-GET — вход, сохранение,
-архивацию курса. Сквозные скрипты принимают порт отдельно:
-`powershell -File qa-abc.ps1 -WebUrl http://localhost:3001`.
+`ALLOWED_ORIGINS` по умолчанию (когда переменная не задана) —
+`http://localhost:3000,http://127.0.0.1:3000` (см. `docker-compose.yml`,
+`internal/config/config.go`). Если фронтенд отдаётся на другом порту, а
+`ALLOWED_ORIGINS` не поправлен, UI отвечает `403 «Недопустимый источник
+запроса»` на любой не-GET — вход, сохранение, архивацию курса. Сквозные скрипты
+принимают адрес фронтенда отдельно: `powershell -File qa-abc.ps1 -WebUrl
+http://localhost:3001` (на заголовок `Origin` это не влияет — см. «Тесты и QA»).
 
 ## Демо-учётки
 
@@ -69,8 +82,8 @@ WEB_PORT=3001 ALLOWED_ORIGINS="http://localhost:3000,http://127.0.0.1:3000,http:
 поэтому после `docker compose up` админ входит **без ручных действий**:
 
 ```bash
-docker compose up -d --build db api runner
-# http://localhost:3000  →  admin@local / admin1234
+docker compose up -d --build db api web runner
+# http://localhost:3001  →  admin@local / admin1234
 ```
 
 В чём была проблема и как она закрыта (T16): в
@@ -89,42 +102,76 @@ bcrypt-заглушки** — `$2a$10$AAA…Aadmin1234`, то есть 50 сим
 docker compose --env-file .env.prod up -d
 ```
 
-### Преподаватель
+### Преподаватель — создаётся автоматически (dev)
 
-`teacher@local` из SQL-сида по-прежнему с поддельным хешем — переменных под
-него нет, чтобы не расширять scope. **Два рабочих способа получить учителя:**
+`seedAdmin` в `backend/cmd/api/main.go` при **каждом** старте API вызывает
+`ensureAccount` для преподавателя. Если `TEACHER_EMAIL`/`TEACHER_PASSWORD`
+пусты, используются `teacher@local` / `teacher1`. Если пользователь уже есть,
+несовпадающий bcrypt-хеш перезаписывается хешем заданного пароля, а роль
+принудительно ставится `teacher`. Поэтому `teacher@local / teacher1` работает
+и на Postgres-сиде, хотя в `002_seed.sql` лежит поддельный хеш.
 
-1. **Рекомендуемый — приглашение.** Войдите админом → `/admin` → создайте
-   приглашение. Если настроен SMTP, письмо со ссылкой уйдёт учителю
-   автоматически; иначе скопируйте `inviteLink`/токен из UI и откройте
-   `/register?inviteToken=...` вручную. Регистрация сразу даст роль
-   преподавателя (T17 починил чтение токена из query).
-2. **In-memory режим** (без `DATABASE_URL`, только разработка):
-   `demo-teacher@local / teach1234`.
+Это **известные dev-учётки, а не безопасный прод-дефолт**:
 
-### Ручная установка пароля (запасной вариант)
+- сид преподавателя нельзя выключить переменной — он выполняется всегда;
+- при расхождении хеша пароль сбрасывается к `TEACHER_PASSWORD` при старте;
+- `docker-compose.yml` сейчас **не передаёт** `TEACHER_*` в `api`, поэтому в
+  контейнере действуют дефолты; свои значения требуют правки compose
+  (отдельная задача) или прямого запуска API с env;
+- не задавайте `TEACHER_EMAIL` равным админу: роль существующей учётки будет
+  понижена до `teacher`.
 
-Если нужен именно `teacher@local`:
+Для реального преподавателя используйте приглашение: админ → `/admin/invites`
+→ создайте приглашение. Если настроен SMTP, письмо со ссылкой уйдёт
+автоматически; иначе скопируйте `inviteLink` из UI/API и откройте
+`/register?inviteToken=...` вручную. Регистрация по приглашению даёт роль
+преподавателя (T17 починил чтение токена из query).
 
-```bash
-# сгенерировать хеш (нужен Docker; $2y$ принимается backend'ом — проверено)
-docker run --rm httpd:alpine sh -c "htpasswd -bnBC 10 '' teacher1 | tr -d ':\n'; echo"
-# применить (в PowerShell хеш — в одинарных кавычках!)
-docker compose exec db psql -U edu -d edu \
-  -c "UPDATE users SET password_hash='<ХЕШ>' WHERE email='teacher@local';"
-```
+В in-memory режиме (без `DATABASE_URL`) дополнительно есть
+`demo-teacher@local / teach1234` — только для локальной разработки.
+
+### Вход через Яндекс
+
+Маршруты `GET /api/v1/auth/yandex/start` и `.../callback` зарегистрированы
+(см. `backend/internal/handler/middleware.go`, `auth_yandex.go`):
+
+- без `YANDEX_CLIENT_ID` `start` отвечает `503 «Вход через Яндекс не настроен
+  на сервере»`; при заданном `CLIENT_ID` — `302` на `oauth.yandex.ru` и
+  httpOnly cookie `oauth_state` (10 минут);
+- `callback` сверяет `state` (иначе `400`), меняет `code` на профиль и ставит
+  `session_id`; ошибка провайдера или незаданные `YANDEX_CLIENT_SECRET` —
+  `502`; заблокированный пользователь — `403`; при успехе — `302` на `/`;
+- новый пользователь создаётся с ролью `student`; если Яндекс не вернул email,
+  используется синтетический `yandex-<id>@oauth.invalid`.
+
+Для рабочего входа нужны все три переменные `YANDEX_*` и Redirect URI,
+совпадающий с настройками приложения. Живой провайдер в тестах не
+использовался — проверены только `503` без ключей и юнит-сценарии.
 
 ## Тесты и QA
 
-```bash
-cd backend  && go test ./...     # юнит-тесты бэкенда
-cd runner   && go test ./...     # тесты песочницы
-cd frontend && npm ci && npm run build   # tsc --noEmit + vite build
+Go-тесты запускаются в Docker: на хосте Go может быть не установлен, а версия
+должна совпадать с `go.mod` (1.24). Из корня репозитория (PowerShell):
+
+```powershell
+# Бэкенд: сборка, vet и все тесты (включая contract и handler)
+docker run --rm -v "${PWD}\backend:/src" -v gomodcache:/go/pkg/mod -w /src -e GOFLAGS=-mod=mod golang:1.24-alpine sh -c "go build ./... && go vet ./... && go test ./... -count=1"
+
+# Runner: те же проверки в bookworm-образе
+docker run --rm -v "${PWD}\runner:/src" -v gomodcache:/go/pkg/mod -w /src -e GOFLAGS=-mod=mod golang:1.24-bookworm sh -c "go build ./... && go vet ./... && go test ./... -count=1"
+
+# Frontend: установка зависимостей, сборка (tsc --noEmit + vite build) и контрактные тесты
+cd frontend
+npm ci
+npm run build
+npm test        # vite build SSR-клиента + node --test tests/api-contract/*.test.mjs
 ```
+
+В bash те же Go-команды: замените `${PWD}` на `"$PWD"`.
 
 ### Проверка runner (python3/nodejs)
 
-Тесты `cd runner && go test ./...` пропускают (`SKIP`) реальный запуск python/js,
+Тесты runner в контейнере пропускают (`SKIP`) реальный запуск python/js,
 если интерпретаторов нет в окружении, а слой сборки `runner/Dockerfile` может
 быть взят из кэша — поэтому песочницу целиком проверяем так (из корня репозитория):
 
@@ -133,14 +180,27 @@ docker run --rm -v "${PWD}\runner:/src" -w /src golang:1.24-bookworm sh -c "apt-
 ```
 
 Ожидаемый итог — `ok runner` без единого `SKIP`/`FAIL`. Если репозиторий Debian
-недоступен из вашей сети, замените `deb.debian.org` на рабочее зеркало
-(например, `mirror.yandex.ru`) в команде `apt-get update`.
+недоступен из вашей сети, замените `deb.debian.org` на рабочее зеркало в
+apt-источниках контейнера — добавьте в начало `sh -c` команду
+`sed -i 's|deb.debian.org|mirror.yandex.ru|g' /etc/apt/sources.list.d/debian.sources &&`.
 
-Сквозной QA-скрипт (**49 проверок**, код возврата 0/1):
+Сквозные QA-скрипты (код возврата 0/1; каждый создаёт свои сущности с меткой
+времени, поэтому повторный прогон на той же базе не ломается):
+
+| Скрипт | Волна | Проверок | Что покрывает |
+|---|---|---|---|
+| `qa-abc.ps1` | 1–C | 49 | базовый сценарий: auth, каталог, покупка, конструктор, US6 |
+| `qa-p3.ps1` | P3 | 80 | конструктор, ученики курса, кабинет ученика, супер-админ |
+| `qa-p4.ps1` | P4 | 37 | журнал платежей, guard архива, blocked |
+| `qa-p5.ps1` | P5 | 19 | slug-транслитерация, CORS-preflight |
+| `qa-p6.ps1` | P6 | 43 | приглашения/возврат, фильтры, записи на курсы |
+| `qa-p7.ps1` | P7 | 59 | unpublish/валидация квиза, обложки, детали курса |
+| `qa-p8.ps1` | P8 | 66 | промокоды, фильтры каталога, сертификаты, ответы на отзывы |
+| `qa-p9.ps1` | P9 | 93 | Q&A, избранное, превью, аналитика, похожие, профиль |
+| `qa-p10.ps1` | P10 | 69 | глобальные отзывы/Q&A/промокоды, супер-админ, сессии |
 
 ```bash
-# Требует запущенного стенда. web (фронтенд) не обязателен — недоступность
-# считается SKIP, а не провалом:
+# Требует запущенного стенда. web (фронтенд) не обязателен для API-скриптов:
 docker compose up -d db api runner
 
 powershell -File qa-abc.ps1 -AdminEmail admin@local -AdminPassword admin1234
@@ -151,36 +211,36 @@ pwsh -File qa-abc.ps1 -AdminEmail admin@local -AdminPassword admin1234  # PS 7
 # Значения -AdminEmail/-AdminPassword — из ADMIN_EMAIL/ADMIN_PASSWORD в .env
 # (там уже подставлены dev-заглушки, см. «Демо-учётки»).
 powershell -File qa-abc.ps1 -SkipAdmin         # без админ-блока (US6)
-powershell -File qa-abc.ps1 -BaseUrl http://127.0.0.1:8082 -WebUrl http://127.0.0.1:3000
+powershell -File qa-abc.ps1 -BaseUrl http://127.0.0.1:8082 -WebUrl http://127.0.0.1:3001
+
+# Остальные волны — тем же админом; qa-p7..qa-p10 проверяют только API.
+powershell -File qa-p3.ps1  -AdminEmail admin@local -AdminPassword admin1234
+powershell -File qa-p4.ps1  -AdminEmail admin@local -AdminPassword admin1234
+powershell -File qa-p5.ps1  -AdminEmail admin@local -AdminPassword admin1234
+powershell -File qa-p6.ps1  -AdminEmail admin@local -AdminPassword admin1234
+powershell -File qa-p7.ps1  -AdminEmail admin@local -AdminPassword admin1234
+powershell -File qa-p8.ps1  -AdminEmail admin@local -AdminPassword admin1234
+powershell -File qa-p9.ps1  -AdminEmail admin@local -AdminPassword admin1234
+powershell -File qa-p10.ps1 -AdminEmail admin@local -AdminPassword admin1234
 ```
 
-Все не-GET запросы в сценарии шлют `Origin: http://localhost:3000` — иначе
-CSRF-защита (T10) вернёт `403`. Лимиты rate-limit на `/auth/login` составляют
-10/мин на IP; при частых повторных запусках задайте `RATE_LIMIT_AUTH_PER_MIN=0`
-на время прогона ( сами лимиты покрыты контрактными тестами).
+Все не-GET запросы шлют `Origin`, иначе CSRF-защита (T10) вернёт `403`:
+
+- `qa-abc.ps1` всегда шлёт `http://localhost:3000` — параметра `-Origin` у него
+  нет; `-WebUrl` меняет только адрес проверки фронтенда, но не `Origin`;
+- `qa-p3..qa-p10` принимают `-Origin` (по умолчанию `http://localhost:3000`,
+  у `qa-p10` — `http://localhost:3001`). При стенде на другом порту передайте
+  `-Origin http://localhost:<порт>`.
+
+У `qa-p3..qa-p6` есть `-SkipWeb`; у `qa-p7..qa-p10` проверок web нет. Лимиты
+rate-limit на `/auth/login` — 10/мин на IP; при частых повторных запусках задайте
+`RATE_LIMIT_AUTH_PER_MIN=0` на время прогона (сами лимиты покрыты контрактными
+тестами).
 
 Автосид qa-админа: при неудачном входе под `-AdminEmail` `qa-abc.ps1` один раз запускает
 `qa-seed-admin.ps1` — тот заводит учётку через сид-админа (`-SeedAdminEmail`/`-SeedAdminPassword`,
 дефолты `admin@local`/`admin1234` — как в .env) и выдаёт роль admin, затем вход повторяется.
 Отключается switch'ем `-NoAutoSeed`; отдельный запуск — `powershell -File qa-seed-admin.ps1`.
-
-### Волна P3: `qa-p3.ps1` (**80 проверок**)
-
-Разделы «конструктор курса», «ученики», «супер-админ» проверяет отдельный
-скрипт — прежние 49 проверок остаются в `qa-abc.ps1` как регрессия:
-
-```bash
-docker compose up -d --build db api web runner
-
-# Блоки: D — конструктор (T21), E — ученики курса (T22),
-#        F — кабинет ученика (T23), G — супер-админ (T24/T25).
-powershell -File qa-p3.ps1 -AdminEmail admin@local -AdminPassword admin1234
-```
-
-Скрипт создаёт свои сущности с меткой времени (`p3-teacher-<stamp>@example.test`
-и т. д.), поэтому повторный прогон на той же базе тоже даёт 80/80. Требуется
-поднятый `web` — но только для проверки `P0`; без него она уходит в `SKIP`
-(`-SkipWeb`, чтобы не проверять вовсе).
 
 ### Интеграционные тесты Postgres (`backend/tests/postgres`)
 
@@ -202,7 +262,7 @@ docker run --rm --network host -v "$PWD\backend:/src" -v gomodcache:/go/pkg/mod 
 docker stop edu-pgtest
 ```
 
-Если Postgres установлен нативно и Docker недоступен:
+Если Docker недоступен, но Go и клиент Postgres установлены нативно:
 
 ```powershell
 createdb -h 127.0.0.1 -p 5432 -U postgres edu_test
@@ -227,8 +287,11 @@ Q&A и правка ответов, избранное, похожие курс�
 
 - [`docs/API.md`](docs/API.md) — сводный обзор эндпоинтов, формы запросов/ответов и таблица кодов ошибок.
 - `specs/001-it-courses-mvp/contracts/openapi.yaml` — машинно-читаемый контракт
-  (OpenAPI 3.0). **Может отставать от кода**: эндпоинты US6 (`/admin/payments`,
-  `/admin/settings`) и mock-страница оплаты добавлены позже и в yaml не отражены.
+  (OpenAPI 3.0). **Отстаёт от кода**: покрывает ранние волны; админ-консоль,
+  журнал платежей и настройки, mock-страница оплаты, Яндекс OAuth, Q&A,
+  промокоды, избранное, сертификаты, сессии и часть teacher-маршрутов в него
+  не внесены. Актуальные пути и формы — `docs/API.md` и код
+  `backend/internal/handler`.
 
 ## Доработки (папка `Task/`)
 
@@ -246,7 +309,8 @@ Q&A и правка ответов, избранное, похожие курс�
 ## Окружение
 
 Все переменные — в [.env.example](.env.example) с комментариями. Сводка
-(значения по умолчанию взяты из `config.Load()` и `internal/payments/*`):
+(значения по умолчанию — из `config.Load()`, `internal/payments/*` и
+`docker-compose.yml`):
 
 | Переменная | Смысл | По умолчанию | Обязательна в проде |
 |---|---|---|---|
@@ -254,6 +318,7 @@ Q&A и правка ответов, избранное, похожие курс�
 | `SESSION_SECRET` | HMAC-подпись сессионных cookie | `change-me` (dev) | **да**; пустой в проде → API не стартует |
 | `APP_ENV` | `development` \| `production`; пусто — дедукция по `DATABASE_URL` | — (пусто) | рекомендуется `production` |
 | `PORT` | порт API внутри контейнера (host — 8082) | `8080` | нет |
+| `WEB_PORT` | порт web-контейнера на хосте (читает `docker-compose.yml`, не Go) | `3000` | нет (свой при публикации) |
 | `MIGRATIONS_DIR` | override каталога миграций | — (авто-поиск) | нет |
 | `PAYMENTS_PROVIDER` | `mock` \| `stripe` \| `yookassa` | `mock` | да, если не mock |
 | `COMMISSION_PCT` | комиссия платформы, 0..90 | `15` | нет (меняется админом через API) |
@@ -269,18 +334,26 @@ Q&A и правка ответов, избранное, похожие курс�
 | `RATE_LIMIT_WEBHOOK_PER_MIN` | лимит `/payments/webhook/{provider}` | `120` | нет |
 | `COOKIE_SAMESITE` | `lax` \| `strict` \| `none` для сессионной cookie | `lax` | нет |
 | `CSRF_ALLOW_MISSING_ORIGIN` | разрешить не-GET без `Origin`/`Referer` (для локальных qa-скриптов) | `false` | держать `false` |
-| `ALLOWED_ORIGINS` | CORS-источники через запятую | `http://localhost:3000, http://127.0.0.1:3000` | да (свои домены) |
+| `ALLOWED_ORIGINS` | CORS-источники через запятую | `http://localhost:3000,http://127.0.0.1:3000` | да (свои домены) |
 | `RUNNER_URL` | базовый URL песочницы кода | `http://runner:8081` | нет (в compose уже зашит) |
 | `YANDEX_CLIENT_ID` | OAuth-приложение Яндекса | — | да, если включён вход через Яндекс |
 | `YANDEX_CLIENT_SECRET` | секрет OAuth-приложения Яндекса | — | да, если включён вход через Яндекс |
 | `YANDEX_REDIRECT_URI` | Redirect URI, должен совпадать с зарегистрированным | — | да, если включён вход через Яндекс |
 | `ADMIN_EMAIL` + `ADMIN_PASSWORD` | опциональный сид админа (создаётся только пара) | — (пусто) | нет |
+| `TEACHER_EMAIL` + `TEACHER_PASSWORD` | dev-сид преподавателя при каждом старте API; compose эти переменные пока не передаёт | `teacher@local` / `teacher1` | нет (известные dev-учётки, не для прода) |
 | `PUBLIC_APP_URL` | публичная база ссылок в письмах-приглашениях | `http://localhost:3000` | да (свой домен) |
 | `SMTP_ADDR` | SMTP `host:port` для приглашений; пусто — письма выключены | — (пусто) | нет |
 | `SMTP_FROM` | адрес отправителя писем | — | да, если включён SMTP |
 | `SMTP_USERNAME` + `SMTP_PASSWORD` | SMTP-аутентификация | — (без auth) | зависит от провайдера |
 | `SMTP_TLS` | `starttls` (587) \| `implicit` (465) \| `none` (локальный тест) | `starttls` | рекомендуется `starttls`/`implicit` |
 | `VITE_API_URL` | базовый URL API для фронтенда; нужен только локальному `npm run dev` (в docker nginx проксирует `/api` сам) | `/api/v1` (в коде клиента) | нет |
+| `VITE_API_PROXY` | target dev-прокси Vite для `/api` и `/uploads` (`frontend/vite.config.ts`) | `http://localhost:8082` | нет |
+| `TEST_DATABASE_URL` | DSN для интеграционных тестов `backend/tests/postgres`; пусто — тесты пропускаются | — (пусто) | нет |
+
+`PAYMENTS_RETURN_URL` по умолчанию — `http://localhost:3000/`
+(`payments.DefaultReturnURL`), а в отслеживаемом dev-`.env` веб отдаётся на
+`:3001`. Для Stripe/YooKassa задайте URL возврата явно; mock-страница
+`/pay/mock/{id}` эту настройку не использует.
 
 SMTP проверяется тестами на локальном SMTP-сервере (формат письма, UTF-8,
 обработка ошибок), но не против реального провайдера. Для продакшена задайте
@@ -288,6 +361,11 @@ SMTP проверяется тестами на локальном SMTP-серв
 затем создайте тестовое приглашение и проверьте доставку. Если SMTP не задан,
 `POST /admin/invites` продолжает работать: админ получает `inviteLink` и
 `emailSent: false`.
+
+`inviteLink` строится из `PUBLIC_APP_URL`. В отслеживаемом dev-`.env` переменная
+не задана, поэтому compose подставляет `http://localhost:3000`, хотя web в dev
+отдаётся на `:3001`; для корректных ссылок задайте
+`PUBLIC_APP_URL=http://localhost:3001` (или свой публичный адрес).
 
 ### Про `.env` в репозитории
 
@@ -300,38 +378,81 @@ dev-значения (`SESSION_SECRET=change-me` и т.п.) — иначе не 
 
 ## Статус реализации
 
-Закрыто (волны 1–2): новый API-клиент и типобезопасный i18n (T01/T02),
-экран обучения (T03), каталог и отзывы (T04), роутинг и гварды (T05),
-конструктор (T06), журнал платежей и комиссия (T07/T08), Stripe/YooKassa
-и подпись вебхуков (T09), подпись cookie, rate-limit, CSRF, displayName (T10),
-песочница runner (T11), редирект после входа (T15).
+В `main @ df9ed31` влиты волны 1–3, A–C и P3–P10, затем пост-P10 правки (PR #11/#12).
 
-Завершено (волна 3): контрактные тесты и qa-скрипт `qa-abc.ps1` (T12),
-сквозная проводка маршрутов и compose (T13), документация (T14).
+- **Волны 1–3 и A–C (T01–T20):** API-клиент и i18n, экран обучения, каталог и отзывы,
+  роутинг и гварды, конструктор, журнал платежей и комиссия, Stripe/YooKassa,
+  cookie/CSRF/rate-limit, runner, контрактные тесты и `qa-abc.ps1`, демо-учётки,
+  CRUD конструктора.
+- **P3 (T21–T30):** жизненный цикл курса, ученики и статистика, кабинет ученика,
+  супер-админка (пользователи, сводка, курсы, записи).
+- **P4 (T31–T40):** поиск и период в журнале платежей, блокировка OAuth, guard архива,
+  Postgres-тесты, hardening вебхуков, конструктор по `id`, CSV-выгрузки.
+- **P5 (T41–T46):** транслитерация slug, CORS-preflight, предупреждение об обрезке CSV,
+  тесты runner с интерпретаторами, автосид qa-админа, каскад Postgres.
+- **P6 (T47–T52):** приглашения и возвраты, фильтры админки, записи на курсы, UI админки.
+- **P7 (T53–T62):** unpublish и валидация квиза, обложки курсов, детали курса, UI/стили.
+- **P8 (T63–T70):** промокоды, категории и фильтры каталога, сертификаты, ответы на отзывы.
+- **P9 (T71–T82):** Q&A по урокам, избранное, превью, аналитика, похожие курсы,
+  публичный профиль преподавателя.
+- **P10 (T83–T94):** глобальные отзывы/Q&A/промокоды, супер-админ в конструкторе,
+  принудительная публикация, сессии и принудительный выход.
+- **Пост-P10:** подсветка синтаксиса (PR #11), отдельные страницы админки (PR #12).
 
-Закрыто (волны A–C): 7 бэкенд-багов включая **демо-учётки** (T16),
-`inviteToken` из ссылки и редирект со входа (T17), code-splitting и
-дедупликация стилей (T18), CRUD конструктора (T19), +15 тестов и сверка
-контракта (T20).
+Подробности, коммиты и ограничения волн — [`Task/STATUS.md`](Task/STATUS.md).
+P11 (ограничение mock-платежей dev/test) идёт отдельными PR и в `df9ed31` не входит.
 
-Статус всех 20 задач — [`Task/STATUS.md`](Task/STATUS.md).
+## Известные ограничения
 
-Известные ограничения:
+- **Mock-платежи доступны в любом окружении.** `payments.NewProvider("mock")` не
+  проверяет `APP_ENV`; при `PAYMENTS_PROVIDER=mock` (дефолт) оплата проходит и в
+  production. Ограничение «mock только dev/test» — целевая модель P11, в этот
+  срез не входит.
+- **Вебхук выбирает провайдера по пути.** `POST /payments/webhook/{provider}`
+  проверяет подпись/источник выбранного провайдера, но не сверяет `{provider}` с
+  `PAYMENTS_PROVIDER`.
+- **`App.webhookMu` — process-local.** Несколько инстансов API с общим Postgres
+  не сериализуют применение одного события; для боевого контура нужен атомарный
+  переход статуса на уровне БД.
+- **Автосид `teacher@local / teacher1`** выполняется при каждом старте API,
+  перезаписывает несовпадающий хеш и принудительно ставит роль `teacher`;
+  `docker-compose.yml` не передаёт `TEACHER_*`, поэтому в контейнере действуют
+  дефолты (см. «Демо-учётки»).
+- **Удаление курса — только `draft`** для всех ролей: каскад в Postgres удаляет
+  платежи и записи, что сломало бы журнал. Архивация — мягкий статус `archived`;
+  `PATCH` карточки намеренно работает в `review`/`published`, в архиве —
+  `409 «Курс в архиве: карточка заморожена»`. Контентные операции: `teacher` —
+  только `draft`, `admin` — любой неархивный курс (T87).
+- **Обложки хранятся локально** в каталоге `uploads/` (в compose — volume
+  `uploads`), внешнего object storage (S3 и т.п.) и CDN нет: без общего volume
+  инстансы не видят файлы друг друга.
+- **Внешние интеграции не проверены вживую.** Stripe/YooKassa требуют реальных
+  ключей и публичного HTTPS-вебхука, SMTP — реального провайдера; в репозитории
+  проверены mock-провайдер, подпись/идемпотентность вебхуков и локальный
+  SMTP-сервер. Перед публикацией задайте ключи и прогоните тестовую оплату и
+  письмо-приглашение.
+- **Docker Hub по TLS.** На машине, где готовился этот срез, `docker pull` к
+  Docker Hub периодически падал с TLS-ошибкой; рабочие образы уже были в
+  локальном кэше. Если `docker compose build` не может скачать базовый образ,
+  проверьте сеть/прокси и повторите pull.
+- **Живой Yandex OAuth не проверялся:** покрыты `503` без ключей, `400` по
+  `state` и юнит-сценарии; реальный редирект и обмен кода с провайдером — нет.
+- **CSV-выгрузки админки** собираются на клиенте по 100 строк и обрезаются на
+  5000 строках; при обрезке UI показывает предупреждение.
 
-- конструктор: создание, правка карточки курса и модуля, правка/удаление
-  урока, удаление модуля и курса, перестановка модулей и уроков, счётчики
-  в списке курсов — **закрыто T19**. В бэклоге осталась только **архивация
-  опубликованных курсов**: `DELETE` работает только в `draft`, потому что
-  каскад в Postgres удаляет платежи и записи, что сломало бы журнал US6;
-- `PATCH /teacher/courses/{id}` не имеет guard по статусу и работает для
-  `review`/`published`, тогда как остальные операции конструктора возвращают
-  `409` вне `draft`. Метаданные правятся в любом статусе — единообразия нет;
-- `GET /admin/payments` отдаёт `studentEmail`/`studentName` (T16), но
-  **фильтра по email студента нет**;
-- `teacher@local` из SQL-сида по-прежнему с поддельным хешем — переменных под
-  него нет. Учителя заводите приглашением (см. «Демо-учётки»);
-- `slugRe` пропускает только латиницу, цифры и дефис: кириллический slug
-  отклоняется `400`, а публичный каталог не транслитерирует.
+## Безопасность платежей (целевая модель P11)
+
+Текущее поведение `main @ df9ed31`:
+
+- mock-провайдер не зависит от окружения: `NewProvider("mock")` возвращает
+  рабочий провайдер и в production;
+- `POST /payments/webhook/{provider}` проверяет подпись/источник провайдера из
+  URL, но не требует совпадения с `PAYMENTS_PROVIDER`;
+- `webhookMu` сериализует применение события только внутри одного процесса API.
+
+Целевая модель P11 — запрет mock-платежей в production. Правки идут отдельными
+PR и в `df9ed31` не входят; до их мержа не публикуйте стенд с
+`PAYMENTS_PROVIDER=mock` в интернет.
 
 ## Спецификации
 
