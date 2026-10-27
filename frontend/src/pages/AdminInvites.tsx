@@ -49,7 +49,7 @@ export default function AdminInvites(): JSX.Element {
   const [tokenCopied, setTokenCopied] = useState(false);
   const [tokenCopyError, setTokenCopyError] = useState('');
 
-  const { register, handleSubmit, reset, formState } = useForm<InviteForm>({
+  const { register, handleSubmit, reset, formState, clearErrors } = useForm<InviteForm>({
     resolver: zodResolver(inviteSchema),
   });
 
@@ -135,9 +135,30 @@ export default function AdminInvites(): JSX.Element {
           <section className="admin-section panel" aria-label={t('admin.invites')}>
             <form className="form-grid" onSubmit={handleSubmit((v) => inviteMutation.mutate(v))}>
               <label htmlFor="admin-invite-email">{t('admin.inviteEmail')}</label>
-              <input id="admin-invite-email" className="input" type="email" {...register('email')} />
+              <input
+                id="admin-invite-email"
+                className="input"
+                type="email"
+                aria-invalid={formState.errors.email || inviteError ? true : undefined}
+                aria-describedby={
+                  [
+                    formState.errors.email ? 'admin-invite-email-error' : '',
+                    inviteError ? 'admin-invite-error' : '',
+                  ]
+                    .filter(Boolean)
+                    .join(' ') || undefined
+                }
+                {...register('email', {
+                  // Ошибка поля (и серверная ошибка прошлой попытки) снимается,
+                  // как только пользователь начал исправлять email.
+                  onChange: () => {
+                    if (formState.errors.email) clearErrors('email');
+                    if (inviteError) setInviteError('');
+                  },
+                })}
+              />
               {formState.errors.email && (
-                <p role="alert" className="error">
+                <p id="admin-invite-email-error" role="alert" className="error">
                   {formState.errors.email.message}
                 </p>
               )}
@@ -147,7 +168,7 @@ export default function AdminInvites(): JSX.Element {
             </form>
 
             {inviteError && (
-              <p role="alert" className="error">
+              <p id="admin-invite-error" role="alert" className="error">
                 {inviteError}
               </p>
             )}
