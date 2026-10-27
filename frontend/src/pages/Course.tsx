@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { CourseStatus, Lesson, PromoValidation } from '../api/client';
+import type { CourseDetail, CourseStatus, Lesson, PromoValidation } from '../api/client';
 import {
   ApiError,
   enroll,
@@ -50,6 +50,67 @@ function coverFor(key: string): string {
 }
 
 const ALL_CLOSED = '__closed';
+
+/** Направления, где блок «Чему вы научитесь» уместен. Для marketing/other
+ *  универсальные IT-обещания были бы выдумкой — блок скрываем. */
+const OUTCOME_CATEGORIES = new Set(['programming', 'design', 'data', 'ai']);
+
+/** Первая буква заглавная: части описания после запятой идут строчными. */
+function capitalize(text: string): string {
+  return text ? text.charAt(0).toLocaleUpperCase('ru') + text.slice(1) : text;
+}
+
+/**
+ * P11: пункты «Чему вы научитесь» из реальных данных курса.
+ * 1) Смысловые части описания (по , . : ; ! ?) — то, что автор обещает
+ *    в программе; мета-фразы вроде «Базовый курс Python» отбрасываем.
+ * 2) Если описание дало меньше двух пунктов — названия модулей (фактическая
+ *    программа курса).
+ * Ничего не придумываем: нет данных — нет блока. Для маркетинга и «другого»
+ * универсальные IT-обещания были бы выдумкой — возвращаем пустой список.
+ */
+export function courseOutcomes(
+  course: Pick<CourseDetail, 'category' | 'description' | 'modules'>,
+): string[] {
+  const category = (course.category ?? '').trim() || 'other';
+  if (!OUTCOME_CATEGORIES.has(category)) return [];
+
+  const collect = (rawParts: string[]): string[] => {
+    const outcomes: string[] = [];
+    const seen = new Set<string>();
+    for (const raw of rawParts) {
+      const text = capitalize(
+        raw
+          .replace(/\s+/g, ' ')
+          .replace(/^[\s—–-]+|[\s.;:!?]+$/g, '')
+          .trim(),
+      );
+      if (text.length < 3) continue;
+      // Мета-фразы описания («Базовый курс Python», «Программа курса») —
+      // это не навык, в список не берём.
+      if (
+        /^(этот\s+|данный\s+|это\s+|первый\s+|базовый\s+)?курс(?:\s|$)/i.test(text) ||
+        /^программа(?:\s|$)/i.test(text)
+      ) {
+        continue;
+      }
+      const key = text.toLocaleLowerCase('ru');
+      if (seen.has(key)) continue;
+      seen.add(key);
+      outcomes.push(text);
+    }
+    return outcomes;
+  };
+
+  // Описание — авторская формулировка того, что получит студент.
+  const fromDescription = collect((course.description ?? '').split(/[,.;:!?]+/));
+  if (fromDescription.length >= 2) return fromDescription.slice(0, 6);
+
+  // Описание слишком короткое — берём фактические темы модулей.
+  const modules = [...(course.modules ?? [])].sort((a, b) => a.position - b.position);
+  const fromModules = collect(modules.map((module) => module.title));
+  return (fromModules.length > 0 ? fromModules : fromDescription).slice(0, 6);
+}
 
 export default function Course(): JSX.Element {
   // slug — человекоприятный слаг из URL, не UUID; контракт: GET /courses/{slug}.
@@ -259,6 +320,9 @@ export default function Course(): JSX.Element {
   // Кнопка покупки — только когда список записей загружен (не мигает для записанных).
   const owned = (myQuery.data ?? []).some((m) => m.course.id === course.id);
   const modules = course.modules ?? [];
+  // P11: пункты «Чему вы научитесь» — из модулей/описания этого курса,
+  // а не один и тот же набор для всех (для не-IT направлений список пуст).
+  const outcomes = courseOutcomes(course);
   // Контракт не отдаёт lessonsCount/modulesCount — считаем из модулей.
   const lessonsCount = modules.reduce((n, m) => n + m.lessons.length, 0);
   const modulesCount = modules.length;
@@ -421,15 +485,19 @@ export default function Course(): JSX.Element {
               </div>
             </section>
 
-            <section className="panel">
-              <h2>Чему вы научитесь</h2>
-              <div className="outcomes">
-                <div>✓ Писать программы</div>
-                <div>✓ Читать ошибки</div>
-                <div>✓ Собрать мини-проект</div>
-                <div>✓ Задавать вопросы куратору</div>
-              </div>
-            </section>
+            {/* P11: блок показываем только когда есть настоящие пункты
+                (IT-направление и данные курса). Текст-заголовок — литерал:
+                отдельного ключа в ru.json нет. */}
+            {outcomes.length > 0 && (
+              <section className="panel">
+                <h2>Чему вы научитесь</h2>
+                <div className="outcomes">
+                  {outcomes.map((item) => (
+                    <div key={item}>✓ {item}</div>
+                  ))}
+                </div>
+              </section>
+            )}
 
             <Reviews courseId={course.id} canReply={isAuthor || isAdmin} />
 

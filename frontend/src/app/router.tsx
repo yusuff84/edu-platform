@@ -4,17 +4,20 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { getPublicSettings, logout } from '../api/client';
 import { t } from '../i18n/t';
 import Catalog from '../pages/Catalog';
-import Course from '../pages/Course';
 import { Login, Register } from '../pages/Auth';
 import { ErrorBoundary, RouteError } from '../components/ErrorBoundary';
 import { RequireAuth, RequireRole, meQueryOptions } from '../components/RouteGuards';
 import '../styles/shell.css';
 
-// T18: route-based code splitting. Каталог, страница курса и вход остаются
-// статическими — это первый экран анонимного посетителя, он не должен ждать
-// догрузки. Админка, конструктор, обучение, кабинеты и 404 видны только после
-// входа/роли или встречаются редко — их чанки подгружаются по факту рендера
-// (после прохождения гвардов), из главного чанка они исключены.
+// T18: route-based code splitting. Каталог и вход остаются статическими — это
+// первый экран анонимного посетителя, он не должен ждать догрузки. Страница
+// курса вынесена в отдельный чанк: она тянет Markdown/Prism и редактор кода,
+// которым не место в стартовом бандле. Остальные разделы (админка, конструктор,
+// обучение, кабинеты, 404) видны после входа/роли или открываются редко — их
+// чанки подгружаются по факту рендера, из главного чанка они исключены.
+// P11: прямой заход на /courses/:slug работает так же: Layout рендерит
+// Suspense-fallback, пока грузится чанк Course.
+const Course = lazy(() => import('../pages/Course'));
 const MyCourses = lazy(() => import('../pages/MyCourses'));
 // T74: избранное — личный раздел вошедшего, отдельный чанк.
 const Favorites = lazy(() => import('../pages/Favorites'));
@@ -57,12 +60,31 @@ const TeacherCab = lazy(async () => {
 });
 const NotFound = lazy(() => import('../pages/NotFound'));
 
-/** Прокрутка к началу страницы при смене маршрута (иначе позиция скролла «уезжает»). */
+/**
+ * Прокрутка к началу страницы при смене маршрута (иначе позиция скролла
+ * «уезжает»). Если в URL есть якорь (#lead и т.п.) — прокручиваем
+ * к нему: так осмысленные ссылки в футере работают и при переходе с другой
+ * страницы, а не только при открытии URL напрямую.
+ */
 function ScrollToTop(): null {
-  const { pathname } = useLocation();
+  const { pathname, hash } = useLocation();
   useEffect(() => {
+    if (hash) {
+      let id = hash.slice(1);
+      try {
+        id = decodeURIComponent(id);
+      } catch {
+        // Некорректный percent-encoding — оставляем якорь как есть.
+      }
+      // Даём React зафиксировать разметку страницы до поиска элемента.
+      const timer = window.setTimeout(() => {
+        document.getElementById(id)?.scrollIntoView({ block: 'start' });
+      }, 0);
+      return () => window.clearTimeout(timer);
+    }
     window.scrollTo(0, 0);
-  }, [pathname]);
+    return undefined;
+  }, [pathname, hash]);
   return null;
 }
 
@@ -124,7 +146,9 @@ function Layout(): JSX.Element {
           <Link className="logo" to="/">
             <span className="logo-mark">E</span>Edu&nbsp;Platform
           </Link>
-          <nav className="nav" aria-label={t('nav.catalog')}>
+          {/* P11: aria-label описывает всю навигацию, а не только «Каталог».
+              Литерал: отдельного ключа в ru.json нет (словарём владеет T02). */}
+          <nav className="nav" aria-label="Основная навигация">
             <NavLink to="/" end className={({ isActive }) => (isActive ? 'active' : '')}>
               {t('nav.catalog')}
             </NavLink>
@@ -215,16 +239,22 @@ function Layout(): JSX.Element {
           </div>
           <div>
             <b>Направления</b>
-            <Link to="/">Программирование</Link>
-            <Link to="/">Дизайн</Link>
-            <Link to="/">Данные</Link>
-            <Link to="/">Маркетинг</Link>
-            <Link to="/">Нейросети</Link>
+            {/* P11: ссылки направлений ведут в каталог с фильтром по категории,
+                а не на общий «/» (иначе все пункты выглядели одинаково). */}
+            <Link to="/?category=programming">Программирование</Link>
+            <Link to="/?category=design">Дизайн</Link>
+            <Link to="/?category=data">Данные</Link>
+            <Link to="/?category=marketing">Маркетинг</Link>
+            <Link to="/?category=ai">Нейросети</Link>
             <Link to="/">Все курсы</Link>
           </div>
           <div>
             <b>Студенту</b>
             <Link to="/">Каталог</Link>
+            {/* P11: осмысленные якоря на существующий блок подбора курса
+                в каталоге (#lead). Новых страниц под эти ссылки не заводим. */}
+            <Link to="/#lead">Помощь с выбором</Link>
+            <Link to="/#lead">Условия возврата</Link>
             {/* Авторизационные ссылки — по состоянию сессии, как в шапке. */}
             {user ? (
               <Link to="/me">Мои курсы</Link>
@@ -238,8 +268,14 @@ function Layout(): JSX.Element {
           <div>
             <b>Авторам</b>
             <Link to="/teach">Конструктор курса</Link>
-            <Link to="/admin/moderation">Модерация</Link>
-            <Link to="/admin/invites">Приглашения</Link>
+            {/* P11: админ-разделы видны только администратору — тот же
+                query ['me'], что и в шапке/гвардах, без нового запроса. */}
+            {user?.role === 'admin' && (
+              <>
+                <Link to="/admin/moderation">Модерация</Link>
+                <Link to="/admin/invites">Приглашения</Link>
+              </>
+            )}
           </div>
         </div>
       </footer>

@@ -7,11 +7,17 @@
   --faint: #a8a6a0;
   --line: #e8e4dc;
   --line-soft: #f0ede6;
-  --brand: #e63223;
+  /* P11: белый текст на исходном #e63223 давал ~4.34:1 (ниже AA).
+     #cf3021 — тот же красный, но ≥ 4.5:1 и на белом, и на фоне #f4f3ef. */
+  --brand: #cf3021;
   --brand-dark: #b71f14;
   --sun: #fec466;
   --sun-soft: #fff3d4;
+  /* #7CA0FF остаётся брендовым акцентом (декор/подсветка), но как фон
+     под белым текстом он даёт ~2.5:1. Для шапки и hero — тёмный оттенок:
+     белый на #2F5FD0 — ~5.7:1, с запасом выше AA. */
   --hero: #7ca0ff;
+  --hero-strong: #2f5fd0;
   --cta-blue: #2f4bff;
   --ok: #1f9d55;
   --ok-bg: #e4f5ea;
@@ -43,7 +49,9 @@
   --btn-font-size: 14.5px; --btn-font-size-sm: 13.5px;
   --control-border-w: 1.5px;
   --control-h: 48px; /* однострочные поля = высоте обычной кнопки */
-  --focus-ring-color: rgba(230, 50, 35, 0.55);
+  /* P11: сплошной тёмный оттенок вместо полупрозрачного красного —
+     кольцо фокуса видно на светлом фоне (контраст ≥ 3:1). */
+  --focus-ring-color: #b71f14;
   --focus-ring-offset: 2px;
   --press-shift: 1px;
 }
@@ -229,7 +237,7 @@ a.sr-only:focus-visible {
 }
 
 .topbar {
-  background: var(--hero);
+  background: var(--hero-strong);
 }
 
 .topbar-in {
@@ -282,12 +290,14 @@ a.sr-only:focus-visible {
   font-size: 14.5px;
   padding: 10px 15px;
   border-radius: 999px;
-  color: rgba(255, 255, 255, 0.92);
+  color: #fff;
 }
 
+/* P11: активная/наведённая «пилюля» затемняет синий фон, а не осветляет:
+   белый текст на полупрозрачном белом не проходил AA. */
 .nav a.active,
 .nav a:hover {
-  background: rgba(255, 255, 255, 0.22);
+  background: rgba(0, 0, 0, 0.18);
   color: #fff;
 }
 
@@ -306,8 +316,9 @@ a.sr-only:focus-visible {
   color: #fff;
   font-size: 13.5px;
   font-weight: 700;
-  background: rgba(255, 255, 255, 0.18);
-  border: 1px solid rgba(255, 255, 255, 0.28);
+  /* P11: тёмная подложка сохраняет белый текст читаемым (AA). */
+  background: rgba(0, 0, 0, 0.18);
+  border: 1px solid rgba(255, 255, 255, 0.38);
   border-radius: 999px;
   padding: 8px 14px;
   max-width: clamp(140px, 18vw, 260px);
@@ -378,20 +389,44 @@ a.sr-only:focus-visible {
   border-color: var(--brand-dark);
 }
 
-/* .btn-ghost рассчитан на тёмный/цветной фон (шапка, hero). */
+/* P11: «призрачная» кнопка по умолчанию живёт на светлых панелях
+   (отзывы, кабинет, сертификат) — тёмный текст на нейтральной подложке.
+   На тёмных поверхностях каркаса её переопределяют правила ниже. */
 .btn-ghost {
-  background: rgba(255, 255, 255, 0.16);
-  border-color: rgba(255, 255, 255, 0.55);
-  color: #fff;
+  background: rgba(20, 20, 20, 0.04);
+  border-color: var(--line);
+  color: var(--fg);
 }
 
 .btn-ghost:hover {
-  background: rgba(255, 255, 255, 0.28);
-  border-color: #fff;
+  background: rgba(20, 20, 20, 0.08);
+  border-color: #c9c5ba;
+  color: var(--fg);
 }
 
 .btn-ghost:active:not(:disabled) {
-  background: rgba(255, 255, 255, 0.34);
+  background: rgba(20, 20, 20, 0.12);
+}
+
+/* На синей шапке и hero — белый текст, но на затемняющей подложке:
+   полупрозрачный белый фон снижал контраст ниже AA. */
+.topbar .btn-ghost,
+.hero .btn-ghost {
+  background: rgba(0, 0, 0, 0.16);
+  border-color: rgba(255, 255, 255, 0.7);
+  color: #fff;
+}
+
+.topbar .btn-ghost:hover,
+.hero .btn-ghost:hover {
+  background: rgba(0, 0, 0, 0.26);
+  border-color: #fff;
+  color: #fff;
+}
+
+.topbar .btn-ghost:active:not(:disabled),
+.hero .btn-ghost:active:not(:disabled) {
+  background: rgba(0, 0, 0, 0.32);
 }
 
 .btn-blue {
@@ -447,6 +482,7 @@ button:focus-visible {
 .topbar :focus-visible,
 .hero :focus-visible,
 .lead-zone :focus-visible,
+.panel-dark :focus-visible,
 .footer :focus-visible {
   outline-color: rgba(255, 255, 255, 0.9);
 }
@@ -455,7 +491,7 @@ button:focus-visible {
 .hero {
   position: relative;
   overflow: hidden;
-  background: var(--hero);
+  background: var(--hero-strong);
   padding: 70px 48px 60px;
   margin: 0 calc(50% - 50vw) 8px;
   display: grid;
@@ -468,9 +504,11 @@ button:focus-visible {
   content: '';
   position: absolute;
   inset: 0;
+  /* P11: светлые блики приглушены, чтобы не «съедать» контраст белого
+     заголовка/статистики; акцентный #7CA0FF остаётся в декоре. */
   background:
-    radial-gradient(600px 300px at 15% 20%, rgba(255, 255, 255, 0.28), transparent 60%),
-    radial-gradient(700px 340px at 85% 15%, rgba(255, 255, 255, 0.22), transparent 60%);
+    radial-gradient(600px 300px at 15% 20%, rgba(124, 160, 255, 0.12), transparent 60%),
+    radial-gradient(700px 340px at 85% 15%, rgba(20, 20, 20, 0.12), transparent 60%);
   pointer-events: none;
 }
 
@@ -507,7 +545,9 @@ button:focus-visible {
 }
 
 .lead {
-  color: rgba(255, 255, 255, 0.94);
+  /* P11: чистый белый вместо 94% — на самом светлом участке блика
+     полупрозрачный текст опускался ниже AA для обычного кегля. */
+  color: #fff;
   font-size: 18px;
   margin: 0 0 24px;
   max-width: 60ch;
@@ -539,7 +579,9 @@ button:focus-visible {
 
 .stats span {
   font-size: 14px;
-  color: rgba(255, 255, 255, 0.9);
+  /* P11: подписи статистики — обычный кегль, поэтому чистый белый:
+     на блике hero он даёт ≥ 4.5:1, полупрозрачный — уже нет. */
+  color: #fff;
 }
 
 .cats {
