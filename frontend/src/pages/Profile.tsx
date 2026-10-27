@@ -60,6 +60,9 @@ export default function Profile(): JSX.Element {
   const name = nameDraft ?? profileQuery.data?.displayName ?? '';
   const trimmedName = name.trim();
   const nameValid = trimmedName.length >= NAME_MIN && trimmedName.length <= NAME_MAX;
+  // Причина недоступности кнопки «Сохранить»: пустое/слишком короткое/длинное
+  // имя. Показываем её явно, а не только держим кнопку disabled.
+  const nameError = nameValid ? '' : 'Имя должно быть от 2 до 60 символов';
 
   const saveMutation = useMutation({
     mutationFn: (displayName: string) => updateProfile(displayName),
@@ -144,10 +147,20 @@ export default function Profile(): JSX.Element {
                     setSaveMsg(null);
                   }}
                   placeholder={t('profile.namePlaceholder')}
-                  aria-invalid={nameValid ? undefined : true}
+                  aria-invalid={nameError ? true : undefined}
+                  aria-describedby={
+                    nameError ? 'pf-name-hint pf-name-error' : 'pf-name-hint'
+                  }
                   autoComplete="nickname"
                 />
-                <p className="pf-hint muted">{t('profile.nameHint')}</p>
+                <p id="pf-name-hint" className="pf-hint muted">
+                  {t('profile.nameHint')}
+                </p>
+                {nameError && (
+                  <p id="pf-name-error" role="alert" className="error">
+                    {nameError}
+                  </p>
+                )}
                 {saveMsg && (
                   <p
                     role={saveMsg.ok ? 'status' : 'alert'}
@@ -160,6 +173,7 @@ export default function Profile(): JSX.Element {
                   type="submit"
                   className="btn btn-primary pf-save"
                   disabled={!nameValid || saveMutation.isPending}
+                  title={nameError || undefined}
                 >
                   {saveMutation.isPending ? t('common.loading') : t('profile.save')}
                 </button>

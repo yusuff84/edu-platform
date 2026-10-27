@@ -51,6 +51,30 @@ function NoAccess(): JSX.Element {
   );
 }
 
+/** Полный адрес внутри SPA, который нужно вернуть после входа. */
+export type LoginRedirectLocation = {
+  pathname: string;
+  search: string;
+  hash: string;
+};
+
+/**
+ * State для /login: from — не только pathname, но и query/hash.
+ * Auth.tsx уже принимает объект Location, поэтому после входа пользователь
+ * возвращается ровно на ту страницу, с которой его перенаправил гвард.
+ */
+export function loginRedirectState(location: LoginRedirectLocation): {
+  from: LoginRedirectLocation;
+} {
+  return {
+    from: {
+      pathname: location.pathname,
+      search: location.search,
+      hash: location.hash,
+    },
+  };
+}
+
 /**
  * Гвард «нужен вход». Пропускает только авторизованных.
  * Сессия = query ['me'] — та же, что грузится в Layout, без дублей запроса.
@@ -60,9 +84,9 @@ export function RequireAuth({ children }: { children: ReactNode }): JSX.Element 
   const query = useQuery(meQueryOptions);
 
   if (query.isLoading) return <AuthSkeleton />;
-  // Нет сессии (401) — на логин, с запоминанием, откуда пришли.
+  // Нет сессии (401) — на логин, с запоминанием полного адреса (pathname+search+hash).
   if (query.isError || !query.data)
-    return <Navigate to="/login" state={{ from: location.pathname }} replace />;
+    return <Navigate to="/login" state={loginRedirectState(location)} replace />;
   return <>{children}</>;
 }
 
@@ -82,7 +106,7 @@ export function RequireRole({
 
   if (query.isLoading) return <AuthSkeleton />;
   if (query.isError || !query.data)
-    return <Navigate to="/login" state={{ from: location.pathname }} replace />;
+    return <Navigate to="/login" state={loginRedirectState(location)} replace />;
   if (!roles.includes(query.data.role)) return <NoAccess />;
   return <>{children}</>;
 }

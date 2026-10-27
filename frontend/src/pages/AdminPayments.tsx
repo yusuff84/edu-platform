@@ -187,8 +187,13 @@ export default function AdminPayments(): JSX.Element {
   const [refundError, setRefundError] = useState('');
   const [refundNotice, setRefundNotice] = useState('');
   const paymentTitleRef = useRef<HTMLHeadingElement | null>(null);
+  const paymentDialogRef = useRef<HTMLDivElement | null>(null);
+  // Элемент, на который вернём фокус после закрытия модалки.
+  const paymentReturnFocusRef = useRef<HTMLElement | null>(null);
 
   function openPaymentDetails(item: PaymentJournalItem): void {
+    const active = document.activeElement;
+    paymentReturnFocusRef.current = active instanceof HTMLElement ? active : null;
     setPaymentDetails(item);
     setRefundError('');
   }
@@ -198,16 +203,53 @@ export default function AdminPayments(): JSX.Element {
     setRefundError('');
   }
 
-  // Пока модалка открыта: фокус — на заголовке (модалкой можно управлять
-  // с клавиатуры), Esc — закрытие. Обработчик снимается вместе с модалкой.
+  // Пока модалка открыта: фокус — на заголовке, Esc — закрытие, Tab ходит
+  // только по элементам диалога. При закрытии возвращаем фокус на кнопку,
+  // которая открыла окно (требование доступности модалок).
   useEffect(() => {
     if (!paymentDetails) return;
+    const dialog = paymentDialogRef.current;
     paymentTitleRef.current?.focus();
     function onKeyDown(e: KeyboardEvent): void {
-      if (e.key === 'Escape') closePaymentDetails();
+      if (e.key === 'Escape') {
+        closePaymentDetails();
+        return;
+      }
+      if (e.key !== 'Tab' || !dialog) return;
+      const focusable = Array.from(
+        dialog.querySelectorAll<HTMLElement>(
+          'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])',
+        ),
+      ).filter((node) => !node.hidden);
+      if (focusable.length === 0) {
+        e.preventDefault();
+        return;
+      }
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      const active = document.activeElement;
+      // Заголовок модалки тоже получает фокус (tabIndex=-1), но в списке
+      // фокусируемых его нет: Tab/Shift+Tab с него должны уходить внутрь окна,
+      // а не за его пределы.
+      const index = active instanceof HTMLElement ? focusable.indexOf(active) : -1;
+      if (index === -1) {
+        e.preventDefault();
+        (e.shiftKey ? last : first).focus();
+      } else if (e.shiftKey && index === 0) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && index === focusable.length - 1) {
+        e.preventDefault();
+        first.focus();
+      }
     }
     document.addEventListener('keydown', onKeyDown);
-    return () => document.removeEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('keydown', onKeyDown);
+      const back = paymentReturnFocusRef.current;
+      if (back && back.isConnected) back.focus();
+      paymentReturnFocusRef.current = null;
+    };
   }, [paymentDetails]);
 
   const refundMutation = useMutation({
@@ -369,6 +411,13 @@ export default function AdminPayments(): JSX.Element {
             )}
 
             {journal.isLoading && <p>{t('admin.loading')}</p>}
+            {/* Фоновое обновление (refetch/инвалидация) не прячет таблицу,
+                но честно сообщает, что данные ещё обновляются. */}
+            {journal.isFetching && !journal.isLoading && (
+              <p className="muted" role="status" aria-live="polite">
+                Обновление…
+              </p>
+            )}
             {journal.isError && (
               <div className="admin-error" role="alert">
                 <p className="error">{errorText(journal.error)}</p>
@@ -402,6 +451,7 @@ export default function AdminPayments(): JSX.Element {
                 role="region"
                 aria-label={t('admin.journal')}
                 tabIndex={0}
+                aria-busy={journal.isFetching || undefined}
               >
                 <table className="admin-table">
                   <thead>
@@ -513,6 +563,7 @@ export default function AdminPayments(): JSX.Element {
               }}
             >
               <div
+                ref={paymentDialogRef}
                 className="admin-modal"
                 role="dialog"
                 aria-modal="true"

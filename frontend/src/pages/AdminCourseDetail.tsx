@@ -26,6 +26,7 @@ import {
 import type { AdminReviewRow } from '../api/adminConsole';
 import { listAdminCourseDetail } from '../api/adminCourseDetail';
 import { listAdminEnrollments } from '../api/adminEnrollments';
+import { coverUrl } from '../api/teacherCover';
 import type {
   AdminEnrollmentRow,
   AdminEnrollmentStatus,
@@ -37,6 +38,14 @@ import '../styles/adminCourseDetail.css';
 
 /** Размер страницы списка записей (потолок контрактного limit — 100). */
 const ENROLLMENTS_LIMIT = 100;
+
+/**
+ * Ссылка на «Записи на курсы» с сохранённым фильтром courseId.
+ * Один helper для ссылки в действиях и в блоке учеников — фильтр не теряется.
+ */
+export function courseEnrollmentsPath(courseId: string): string {
+  return `/admin/enrollments?courseId=${encodeURIComponent(courseId)}`;
+}
 
 /** Русские подписи статуса курса — те же ключи, что в строке AdminCourses (T48). */
 const STATUS_LABEL: Record<string, RuKey> = {
@@ -268,6 +277,9 @@ export default function AdminCourseDetail(): JSX.Element {
   const lessonsTotal = data ? data.modules.reduce((n, m) => n + m.lessons.length, 0) : 0;
   const reviewItems = reviews.data?.items ?? [];
   const enrollmentRows = enrollments.data?.items ?? [];
+  const enrollmentsTotal = enrollments.data?.total ?? 0;
+  // coverPath — путь хранения; coverUrl учитывает абсолютный BASE API (T57).
+  const cover = data ? coverUrl(data.course.coverPath) : undefined;
 
   return (
     <div className="wrap">
@@ -313,12 +325,8 @@ export default function AdminCourseDetail(): JSX.Element {
               {/* ---------- Шапка: статус/цена/автор + быстрые ссылки ---------- */}
               <header className="acd-head">
                 <div className="acd-head__main">
-                  {data.course.coverPath && (
-                    <img
-                      className="acd-cover"
-                      src={data.course.coverPath}
-                      alt={t('p7.cover.alt')}
-                    />
+                  {cover && (
+                    <img className="acd-cover" src={cover} alt={t('p7.cover.alt')} />
                   )}
                   <div>
                     <h2 className="acd-head__title">{data.course.title}</h2>
@@ -393,7 +401,7 @@ export default function AdminCourseDetail(): JSX.Element {
                   </Link>
                   <Link
                     className="btn btn-sm"
-                    to={`/admin/enrollments?courseId=${encodeURIComponent(data.course.id)}`}
+                    to={courseEnrollmentsPath(data.course.id)}
                   >
                     {t('p10.courseAdmin.students')}
                   </Link>
@@ -553,7 +561,7 @@ export default function AdminCourseDetail(): JSX.Element {
                   {t('p7.adminCourse.students')}
                 </h3>
                 <p className="acd-block__link muted">
-                  <Link to="/admin/enrollments">{t('adminEnrollments.title')}</Link>
+                  <Link to={courseEnrollmentsPath(id)}>{t('adminEnrollments.title')}</Link>
                 </p>
 
                 {enrollments.isLoading && (
@@ -634,6 +642,15 @@ export default function AdminCourseDetail(): JSX.Element {
                       })}
                     </tbody>
                   </table>
+                )}
+
+                {/* Лимит контракта — 100 строк: честно говорим, что показано
+                    не всё, и уводим на полный список с фильтром courseId. */}
+                {enrollments.data && enrollmentsTotal > ENROLLMENTS_LIMIT && (
+                  <p className="acd-block__link muted">
+                    Первые {ENROLLMENTS_LIMIT} из {enrollmentsTotal}.{' '}
+                    <Link to={courseEnrollmentsPath(id)}>Открыть все записи</Link>
+                  </p>
                 )}
               </section>
 

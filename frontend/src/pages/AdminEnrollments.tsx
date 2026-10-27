@@ -1,13 +1,14 @@
 // T49: раздел «Записи на курсы» супер-админки (/admin/enrollments).
 // Список всех записей (GET /admin/enrollments, T25) с поиском по ученику
-// (debounce ~300 мс), фильтрами курса и статуса, пагинацией; ручной
-// отзыв/возврат доступа к курсу (T16). T59: экспорт всей выборки в CSV
-// (общий компонент CsvExportButton T40) рядом с фильтрами. Стили изолированы
-// в styles/adminEnrollments.css; styles.css и admin.css не изменяются.
+// (debounce ~300 мс), фильтрами курса (courseId хранится в URL) и статуса,
+// пагинацией; ручной отзыв/возврат доступа к курсу (T16). T59: экспорт всей
+// выборки в CSV (общий компонент CsvExportButton T40) рядом с фильтрами.
+// Стили изолированы в styles/adminEnrollments.css; styles.css и admin.css
+// не изменяются.
 import { useEffect, useMemo, useState } from 'react';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { QueryClient } from '@tanstack/react-query';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { ApiError, formatDate } from '../api/client';
 import {
   listAdminEnrollments,
@@ -72,6 +73,25 @@ function isEnrollmentStatus(value: string): value is AdminEnrollmentStatus {
   return (STATUSES as readonly string[]).includes(value);
 }
 
+/** Фильтр курса из URL: ссылка из карточки курса приходит как ?courseId=… */
+export function courseIdFromSearchParams(searchParams: URLSearchParams): string {
+  return searchParams.get('courseId') ?? '';
+}
+
+/**
+ * Новые query-параметры с изменённым только courseId.
+ * Остальные параметры (если появятся) сохраняются; пустое значение удаляет ключ.
+ */
+export function withCourseId(
+  searchParams: URLSearchParams,
+  courseId: string,
+): URLSearchParams {
+  const next = new URLSearchParams(searchParams);
+  if (courseId === '') next.delete('courseId');
+  else next.set('courseId', courseId);
+  return next;
+}
+
 /** Текст ошибки без краха страницы (схема из AdminUsers/AdminCourses). */
 function errorText(error: unknown): string {
   if (error instanceof ApiError) {
@@ -124,10 +144,13 @@ export default function AdminEnrollments(): JSX.Element {
   useSeo(`${t('adminEnrollments.title')} — ${t('cabinet.adminTitle')} — Edu Platform`);
   const qc = useQueryClient();
 
-  // ---- Состояние фильтров и пагинации (локальное, без URL-параметров) ----
+  // ---- Состояние фильтров и пагинации ----
+  // courseId живёт в URL: ссылка из карточки курса (?courseId=…) сразу
+  // фильтрует список, а смена фильтра обновляет адрес (можно поделиться).
+  const [searchParams, setSearchParams] = useSearchParams();
+  const courseId = courseIdFromSearchParams(searchParams);
   const [searchInput, setSearchInput] = useState('');
   const [q, setQ] = useState('');
-  const [courseId, setCourseId] = useState('');
   const [status, setStatus] = useState<AdminEnrollmentStatus | ''>('');
   const [page, setPage] = useState(1);
 
@@ -140,9 +163,25 @@ export default function AdminEnrollments(): JSX.Element {
     return () => window.clearTimeout(timer);
   }, [searchInput]);
 
+  // Любое изменение courseId (select, ссылка, кнопки «назад/вперёд») — на первую
+  // страницу: иначе можно остаться на странице, которой у отфильтрованного
+  // списка уже нет.
+  useEffect(() => {
+    setPage(1);
+  }, [courseId]);
+
+  /** Смена фильтра курса: значение — в URL, остальные query-параметры не трогаем. */
+  function onCourseChange(nextCourseId: string): void {
+    // Страницу сбрасываем сразу, не дожидаясь эффекта: иначе запрос уйдёт
+    // со старым номером страницы и может вернуть пустую выборку.
+    setPage(1);
+    setSearchParams(withCourseId(searchParams, nextCourseId));
+  }
+
   // ---- Справочник курсов для select ----
   // Отдельный запрос (не тянем весь список курсов пачками): первые 100
-  // по контракту limit=100; иначе курс просто не попадёт в фильтр.
+  // по контракту limit=100. Если курсов больше, ниже показываем подсказку —
+  // фильтр не должен молча терять курсы (L10).
   const courses = useQuery({
     queryKey: COURSE_OPTIONS_KEY,
     queryFn: () => listAdminCourses({ limit: COURSE_OPTIONS_LIMIT }),
@@ -160,6 +199,13 @@ export default function AdminEnrollments(): JSX.Element {
     }
     return items;
   }, [courses.data, courseId]);
+
+  // Сколько курсов реально пришло в справочник: по этому числу (а не по
+  // длине options с добавленным выбранным курсом) понимаем, усечён ли список.
+  const courseOptionsLoaded = courses.data?.items.length ?? 0;
+  const courseOptionsTotal = courses.data?.total ?? 0;
+  const courseOptionsTruncated =
+    courseOptionsTotal > courseOptionsLoaded && courseOptionsTotal > COURSE_OPTIONS_LIMIT;
 
   // ---- Список записей ----
   const enrollments = useQuery({
@@ -243,9 +289,10 @@ export default function AdminEnrollments(): JSX.Element {
   function onResetFilters(): void {
     setSearchInput('');
     setQ('');
-    setCourseId('');
     setStatus('');
     setPage(1);
+    // courseId — единственный фильтр в URL; удаляем только его.
+    setSearchParams(withCourseId(searchParams, ''));
   }
 
   // ---- Выгрузка CSV: вся выборка по текущим фильтрам (T59, компонент T40) ----
@@ -359,10 +406,7 @@ export default function AdminEnrollments(): JSX.Element {
                   id="ae-filter-course"
                   className="input ae-select"
                   value={courseId}
-                  onChange={(e) => {
-                    setCourseId(e.target.value);
-                    setPage(1);
-                  }}
+                  onChange={(e) => onCourseChange(e.target.value)}
                 >
                   <option value="">{t('adminEnrollments.all')}</option>
                   {courseOptions.map((course) => (
@@ -416,6 +460,17 @@ export default function AdminEnrollments(): JSX.Element {
               </div>
             </div>
 
+            {/* L10: справочник курсов в select ограничен контрактом (100).
+                Не скрываем это: объясняем, как отфильтровать редкий курс. */}
+            {courses.isSuccess && courseOptionsTruncated && (
+              <p className="muted" role="note">
+                В списке курсов — первые {COURSE_OPTIONS_LIMIT} из {courseOptionsTotal}.
+                Если нужного курса нет, откройте его карточку в разделе{' '}
+                <Link to="/admin/courses">{t('adminCourses.title')}</Link> — ссылка на записи
+                сохранит фильтр.
+              </p>
+            )}
+
             {/* ---------- Итог по фильтру и уведомление об успехе ---------- */}
             {data && (
               <p className="ae-total muted">
@@ -432,6 +487,13 @@ export default function AdminEnrollments(): JSX.Element {
             {enrollments.isLoading && (
               <p className="muted" role="status" aria-live="polite">
                 {t('common.loading')}
+              </p>
+            )}
+            {/* keepPreviousData: при смене фильтра/страницы таблица остаётся,
+                но данные ещё обновляются — сообщаем об этом и помечаем регион. */}
+            {enrollments.isFetching && !enrollments.isLoading && (
+              <p className="muted" role="status" aria-live="polite">
+                Обновление…
               </p>
             )}
 
@@ -459,6 +521,7 @@ export default function AdminEnrollments(): JSX.Element {
                 role="region"
                 aria-label={t('adminEnrollments.title')}
                 tabIndex={0}
+                aria-busy={enrollments.isFetching || undefined}
               >
                 <table className="ae-table">
                   <thead>

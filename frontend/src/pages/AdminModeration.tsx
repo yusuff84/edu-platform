@@ -82,79 +82,95 @@ export default function AdminModeration(): JSX.Element {
 
             {queue.data && queue.data.length > 0 && (
               <ul className="admin-queue list teach-list">
-                {queueItems.map((c) => (
-                  <li key={c.id} className="card admin-queue-card l-item">
-                    <div className="admin-queue-card__head">
-                      <strong>{c.title}</strong>
-                      <span className="muted">{formatDate(c.createdAt)}</span>
-                    </div>
-                    <dl className="admin-meta">
-                      <div>
-                        <dt>{t('admin.queueTeacher')}</dt>
-                        <dd>
-                          {/* teacherEmail приходит после T48: до этого — прежний короткий id. */}
-                          {c.teacherEmail ? c.teacherEmail : <code>{shortId(c.teacherId)}</code>}
-                        </dd>
+                {queueItems.map((c, index) => {
+                  // id для связки input ↔ текст ошибки; индекс стабилен в пределах
+                  // отрисованного списка и не зависит от формата id курса.
+                  const commentId = `admin-moderation-comment-${index}`;
+                  const commentErrorId = `${commentId}-error`;
+                  return (
+                    <li key={c.id} className="card admin-queue-card l-item">
+                      <div className="admin-queue-card__head">
+                        <strong>{c.title}</strong>
+                        <span className="muted">{formatDate(c.createdAt)}</span>
                       </div>
-                      {typeof c.modulesCount === 'number' && (
+                      <dl className="admin-meta">
                         <div>
-                          <dt>{t('admin.queueModules')}</dt>
-                          <dd>{c.modulesCount}</dd>
+                          <dt>{t('admin.queueTeacher')}</dt>
+                          <dd>
+                            {/* teacherEmail приходит после T48: до этого — прежний короткий id. */}
+                            {c.teacherEmail ? c.teacherEmail : <code>{shortId(c.teacherId)}</code>}
+                          </dd>
                         </div>
-                      )}
-                      {typeof c.lessonsCount === 'number' && (
+                        {typeof c.modulesCount === 'number' && (
+                          <div>
+                            <dt>{t('admin.queueModules')}</dt>
+                            <dd>{c.modulesCount}</dd>
+                          </div>
+                        )}
+                        {typeof c.lessonsCount === 'number' && (
+                          <div>
+                            <dt>{t('admin.queueLessons')}</dt>
+                            <dd>{c.lessonsCount}</dd>
+                          </div>
+                        )}
                         <div>
-                          <dt>{t('admin.queueLessons')}</dt>
-                          <dd>{c.lessonsCount}</dd>
+                          <dt>{t('course.price')}</dt>
+                          {/* Это цена курса — для неё «Бесплатно» при 0 уместно (как в каталоге). */}
+                          <dd>{formatPrice(c.priceCents)}</dd>
                         </div>
-                      )}
-                      <div>
-                        <dt>{t('course.price')}</dt>
-                        {/* Это цена курса — для неё «Бесплатно» при 0 уместно (как в каталоге). */}
-                        <dd>{formatPrice(c.priceCents)}</dd>
+                      </dl>
+                      <div className="admin-queue-actions btn-row">
+                        <label className="admin-comment">
+                          <span className="sr-only">{t('admin.comment')}</span>
+                          <input
+                            id={commentId}
+                            className="input"
+                            value={comments[c.id] ?? ''}
+                            onChange={(e) => {
+                              const value = e.target.value;
+                              setComments((prev) => ({ ...prev, [c.id]: value }));
+                              // Пользователь исправляет комментарий — ошибка
+                              // «причина обязательна» больше не актуальна.
+                              if (commentErrors[c.id]) {
+                                setCommentErrors((prev) => ({ ...prev, [c.id]: false }));
+                              }
+                            }}
+                            placeholder={t('admin.comment')}
+                            aria-invalid={commentErrors[c.id] ? true : undefined}
+                            aria-describedby={
+                              commentErrors[c.id] ? commentErrorId : undefined
+                            }
+                          />
+                        </label>
+                        <button
+                          type="button"
+                          className="btn btn-primary"
+                          onClick={() => onModerate(c.id, 'approve')}
+                          disabled={moderateMutation.isPending}
+                        >
+                          {t('admin.approve')}
+                        </button>
+                        <button
+                          type="button"
+                          className="btn admin-btn--danger"
+                          onClick={() => onModerate(c.id, 'reject')}
+                          disabled={moderateMutation.isPending}
+                        >
+                          {t('admin.reject')}
+                        </button>
+                        {/* Ссылка на публичную страницу курса — посмотреть перед решением. */}
+                        <Link className="btn" to={`/courses/${c.slug}`}>
+                          {t('admin.queueOpen')}
+                        </Link>
                       </div>
-                    </dl>
-                    <div className="admin-queue-actions btn-row">
-                      <label className="admin-comment">
-                        <span className="sr-only">{t('admin.comment')}</span>
-                        <input
-                          className="input"
-                          value={comments[c.id] ?? ''}
-                          onChange={(e) =>
-                            setComments((prev) => ({ ...prev, [c.id]: e.target.value }))
-                          }
-                          placeholder={t('admin.comment')}
-                          aria-invalid={commentErrors[c.id] ? true : undefined}
-                        />
-                      </label>
-                      <button
-                        type="button"
-                        className="btn btn-primary"
-                        onClick={() => onModerate(c.id, 'approve')}
-                        disabled={moderateMutation.isPending}
-                      >
-                        {t('admin.approve')}
-                      </button>
-                      <button
-                        type="button"
-                        className="btn admin-btn--danger"
-                        onClick={() => onModerate(c.id, 'reject')}
-                        disabled={moderateMutation.isPending}
-                      >
-                        {t('admin.reject')}
-                      </button>
-                      {/* Ссылка на публичную страницу курса — посмотреть перед решением. */}
-                      <Link className="btn" to={`/courses/${c.slug}`}>
-                        {t('admin.queueOpen')}
-                      </Link>
-                    </div>
-                    {commentErrors[c.id] && (
-                      <p role="alert" className="error">
-                        {t('admin.rejectCommentRequired')}
-                      </p>
-                    )}
-                  </li>
-                ))}
+                      {commentErrors[c.id] && (
+                        <p id={commentErrorId} role="alert" className="error">
+                          {t('admin.rejectCommentRequired')}
+                        </p>
+                      )}
+                    </li>
+                  );
+                })}
               </ul>
             )}
           </section>

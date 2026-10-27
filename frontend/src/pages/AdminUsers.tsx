@@ -179,11 +179,59 @@ function UserDetails({
 }): JSX.Element {
   const qc = useQueryClient();
   const sessionsSectionRef = useRef<HTMLElement | null>(null);
+  const dialogRef = useRef<HTMLDivElement | null>(null);
+  const closeButtonRef = useRef<HTMLButtonElement | null>(null);
+  // Элемент, на который вернём фокус после закрытия карточки.
+  const returnFocusRef = useRef<HTMLElement | null>(null);
 
-  // Esc закрывает окно, пока оно смонтировано.
+  // При открытии фокус — на кнопке «Закрыть» (первый элемент диалога),
+  // при закрытии — обратно на действие в строке пользователя.
+  useEffect(() => {
+    const active = document.activeElement;
+    returnFocusRef.current = active instanceof HTMLElement ? active : null;
+    closeButtonRef.current?.focus();
+    return () => {
+      const back = returnFocusRef.current;
+      if (back && back.isConnected) back.focus();
+      returnFocusRef.current = null;
+    };
+  }, []);
+
+  // Esc закрывает окно, Tab не выпускает фокус за пределы диалога.
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent): void {
-      if (e.key === 'Escape') onClose();
+      if (e.key === 'Escape') {
+        onClose();
+        return;
+      }
+      if (e.key !== 'Tab') return;
+      const dialog = dialogRef.current;
+      if (!dialog) return;
+      const focusable = Array.from(
+        dialog.querySelectorAll<HTMLElement>(
+          'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])',
+        ),
+      ).filter((node) => !node.hidden);
+      if (focusable.length === 0) {
+        e.preventDefault();
+        return;
+      }
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      const active = document.activeElement;
+      // Секция сессий получает фокус программно (tabIndex=-1), поэтому её нет
+      // в списке: Tab/Shift+Tab с неё должны оставаться внутри диалога.
+      const index = active instanceof HTMLElement ? focusable.indexOf(active) : -1;
+      if (index === -1) {
+        e.preventDefault();
+        (e.shiftKey ? last : first).focus();
+      } else if (e.shiftKey && index === 0) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && index === focusable.length - 1) {
+        e.preventDefault();
+        first.focus();
+      }
     }
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
@@ -244,6 +292,7 @@ function UserDetails({
   return (
     <div className="au-modal-overlay" onClick={onClose}>
       <div
+        ref={dialogRef}
         className="au-modal"
         role="dialog"
         aria-modal="true"
@@ -252,7 +301,7 @@ function UserDetails({
       >
         <div className="au-modal-head">
           <h2>{t('adminUsers.detailsTitle')}</h2>
-          <button type="button" className="btn btn-sm" onClick={onClose}>
+          <button ref={closeButtonRef} type="button" className="btn btn-sm" onClick={onClose}>
             {t('common.close')}
           </button>
         </div>
@@ -765,6 +814,13 @@ export default function AdminUsers(): JSX.Element {
                 <span className="sr-only">{t('common.loading')}</span>
               </div>
             )}
+            {/* Фоновое обновление после мутации/инвалидации: таблица остаётся
+                на месте, но пользователь видит, что данные ещё обновляются. */}
+            {users.isFetching && !users.isLoading && (
+              <p className="muted" role="status" aria-live="polite">
+                Обновление…
+              </p>
+            )}
 
             {users.isError && (
               <div className="au-error" role="alert">
@@ -784,6 +840,7 @@ export default function AdminUsers(): JSX.Element {
                 role="region"
                 aria-label={t('adminUsers.title')}
                 tabIndex={0}
+                aria-busy={users.isFetching || undefined}
               >
                 <table className="au-table">
                   <thead>

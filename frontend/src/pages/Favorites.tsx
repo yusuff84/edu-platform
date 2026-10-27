@@ -4,9 +4,10 @@
 // снятие с избранного на этой странице сразу убирает карточку из кэша.
 // Доступ — только вошедшим (RequireAuth в router.tsx).
 
-import { Link } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
-import { myFavorites } from '../api/client';
+import { useEffect } from 'react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { ApiError, myFavorites } from '../api/client';
 import CourseCard from '../components/CourseCard';
 import { t } from '../i18n/t';
 import { useSeo } from '../app/useSeo';
@@ -17,12 +18,24 @@ const SKELETONS = 6;
 
 export default function Favorites(): JSX.Element {
   useSeo('Избранное — Edu Platform');
+  const qc = useQueryClient();
+  const navigate = useNavigate();
+  const location = useLocation();
   const query = useQuery({
     queryKey: ['favorites'],
     queryFn: myFavorites,
     retry: false,
   });
   const items = query.data ?? [];
+  // 401 — сессия истекла. Это не «ошибка сети»: сбрасываем ['me'] и уводим
+  // на вход, сохраняя полный адрес (pathname+search+hash) для возврата.
+  const unauthorized = query.error instanceof ApiError && query.error.status === 401;
+
+  useEffect(() => {
+    if (!unauthorized) return;
+    void qc.invalidateQueries({ queryKey: ['me'] });
+    navigate('/login', { replace: true, state: { from: location } });
+  }, [unauthorized, qc, navigate, location]);
 
   return (
     <div className="wrap">
@@ -48,11 +61,17 @@ export default function Favorites(): JSX.Element {
         {query.isError && (
           <div className="panel">
             <p role="alert" className="error">
-              {t('error.network')}
+              {unauthorized ? t('error.needLogin') : t('error.network')}
             </p>
-            <button type="button" className="btn" onClick={() => void query.refetch()}>
-              {t('common.retry')}
-            </button>
+            {unauthorized ? (
+              <Link className="btn" to="/login" state={{ from: location }}>
+                {t('nav.login')}
+              </Link>
+            ) : (
+              <button type="button" className="btn" onClick={() => void query.refetch()}>
+                {t('common.retry')}
+              </button>
+            )}
           </div>
         )}
 
