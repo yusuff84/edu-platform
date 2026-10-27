@@ -259,7 +259,7 @@ func (s *StripeProvider) HandleWebhook(r *http.Request) (WebhookEvent, error) {
 }
 
 // Refund создаёт возврат через POST /v1/refunds (полный возврат PaymentIntent).
-func (s *StripeProvider) Refund(ctx context.Context, providerPaymentID string) error {
+func (s *StripeProvider) Refund(ctx context.Context, providerPaymentID string, idempotencyKey ...string) error {
 	form := url.Values{}
 	form.Set("payment_intent", providerPaymentID)
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, s.apiBase+"/v1/refunds", strings.NewReader(form.Encode()))
@@ -268,7 +268,11 @@ func (s *StripeProvider) Refund(ctx context.Context, providerPaymentID string) e
 	}
 	httpReq.Header.Set("Authorization", "Bearer "+s.secretKey)
 	httpReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	httpReq.Header.Set("Idempotency-Key", "refund-"+providerPaymentID)
+	key := "refund-" + providerPaymentID
+	if len(idempotencyKey) > 0 && strings.TrimSpace(idempotencyKey[0]) != "" {
+		key = strings.TrimSpace(idempotencyKey[0])
+	}
+	httpReq.Header.Set("Idempotency-Key", key)
 	resp, err := s.client.Do(httpReq)
 	if err != nil {
 		return fmt.Errorf("%w: stripe недоступен: %v", ErrUpstream, err)

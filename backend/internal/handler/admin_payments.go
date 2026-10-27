@@ -1,9 +1,11 @@
 package handler
 
 import (
+	"errors"
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -309,6 +311,43 @@ type refundResponse struct {
 	Payment paymentJournalItem `json:"payment"`
 }
 
+// refundLocks сериализует возвраты по одному платежу ДО вызова провайдера
+// (H4): два одновременных запроса не должны дважды дергать Stripe/YooKassa.
+// Замок на платеж, а не глобальный: возвраты разных платежей независимы.
+var refundLocks = struct {
+	sync.Mutex
+	items map[string]*refundLock
+}{items: make(map[string]*refundLock)}
+
+type refundLock struct {
+	mu   sync.Mutex
+	refs int
+}
+
+// lockPaymentRefund берёт замок платежа; возвращённая функция освобождает
+// его и удаляет запись, когда ждущих не осталось (карта не растёт).
+func lockPaymentRefund(id string) func() {
+	refundLocks.Lock()
+	l := refundLocks.items[id]
+	if l == nil {
+		l = &refundLock{}
+		refundLocks.items[id] = l
+	}
+	l.refs++
+	refundLocks.Unlock()
+
+	l.mu.Lock()
+	return func() {
+		l.mu.Unlock()
+		refundLocks.Lock()
+		l.refs--
+		if l.refs == 0 {
+			delete(refundLocks.items, id)
+		}
+		refundLocks.Unlock()
+	}
+}
+
 // isDurableMockPayment — платёж, созданный MockProvider. Такой платёж
 // возвращается только в Store: реестр mock-провайдера живёт в памяти и после
 // рестарта API пуст. Для бесплатного платежа providerPaymentId имеет префикс
@@ -335,12 +374,18 @@ func (a *App) AdminRefundPayment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id := strings.TrimSpace(chi.URLParam(r, "id"))
+	// H4: сериализуем возврат по платежу до обращения к провайдеру. Второй
+	// параллельный запрос дождётся первого и увидит уже refunded → 409,
+	// не выполняя повторный возврат у Stripe/YooKassa.
+	unlockRefund := lockPaymentRefund(id)
+	defer unlockRefund()
+
 	p, found := a.Store.GetPaymentByID(id)
 	if !found {
 		writeErr(w, http.StatusNotFound, "Платёж не найден")
 		return
 	}
-	if p.Status != repo.PaymentSucceeded {
+	if !canTransition(p.Status, repo.PaymentRefunded) {
 		writeErr(w, http.StatusConflict, "Возврат возможен только для успешного платежа")
 		return
 	}
@@ -349,12 +394,14 @@ func (a *App) AdminRefundPayment(w http.ResponseWriter, r *http.Request) {
 	// провайдера: денег вне платформы нет, а реестр после рестарта API пуст.
 	// Для free-... и реальных провайдеров вызов остаётся обязательным.
 	if !isDurableMockPayment(p) {
-		prov, err := payments.NewProvider(p.Provider)
+		prov, err := payments.NewProvider(p.Provider, a.Config.IsDev())
 		if err != nil {
 			writeErr(w, http.StatusBadGateway, "Не удалось выполнить возврат у провайдера")
 			return
 		}
-		if err := prov.Refund(r.Context(), p.ProviderPaymentID); err != nil {
+		// Ключ refund-<внутренний id> стабилен между ретраями админки; у
+		// YooKassa/Stripe он не даст создать второй возврат по тому же платежу.
+		if err := prov.Refund(r.Context(), p.ProviderPaymentID, "refund-"+p.ID); err != nil {
 			writeErr(w, http.StatusBadGateway, "Не удалось выполнить возврат у провайдера")
 			return
 		}
@@ -370,16 +417,22 @@ func (a *App) AdminRefundPayment(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusNotFound, "Платёж не найден")
 		return
 	}
-	if fresh.Status != repo.PaymentSucceeded {
+	if !canTransition(fresh.Status, repo.PaymentRefunded) {
 		writeErr(w, http.StatusConflict, "Возврат возможен только для успешного платежа")
 		return
 	}
-	a.Store.SetPaymentStatus(fresh.ID, repo.PaymentRefunded)
+	if !a.Store.SetPaymentStatus(fresh.ID, repo.PaymentRefunded) {
+		writeErr(w, http.StatusInternalServerError, "Не удалось сохранить статус платежа")
+		return
+	}
 	// Возврат средств отменяет доступ: запись на курс становится refunded
 	// (та же семантика, что у ветки refunded в PaymentWebhook, enroll.go).
-	// Ошибка намеренно игнорируется: повторный возврат вернёт 409 и не дойдёт
-	// сюда; отсутствие записи (ErrNotFound) — не повод ронять возврат денег.
-	_ = a.Store.SetEnrollmentStatus(fresh.StudentID, fresh.CourseID, repo.EnrollmentRefunded)
+	// ErrNotFound не считается сбоем (записи нет — отзывать нечего);
+	// остальные ошибки записи — 500, чтобы не потерять их молча.
+	if err := a.Store.SetEnrollmentStatus(fresh.StudentID, fresh.CourseID, repo.EnrollmentRefunded); err != nil && !errors.Is(err, repo.ErrNotFound) {
+		writeErr(w, http.StatusInternalServerError, "Не удалось закрыть доступ к курсу")
+		return
+	}
 	// Свежие значения ПОСЛЕ записи: в ответе — актуальный статус refunded
 	// и processedAt (момент возврата; в Postgres снимок нужно перечитать).
 	updated, ok := a.Store.GetPaymentByID(fresh.ID)

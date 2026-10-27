@@ -262,8 +262,10 @@ type StoreAPI interface {
 	// DeactivatePromoCode идемпотентно ставит active=false, запись
 	// сохраняется (история). ErrNotFound — промокода нет.
 	DeactivatePromoCode(id string) error
-	// IncrementPromoCodeUsage атомарно увеличивает usedCount на 1.
-	// false — промокода нет. Вызывается ровно один раз при первом переходе
+	// IncrementPromoCodeUsage атомарно увеличивает usedCount на 1, не
+	// превышая maxUses (0 — без лимита). false — промокода нет ИЛИ лимит
+	// исчерпан (handler различает повторным чтением и не считает лимит
+	// ошибкой записи). Вызывается ровно один раз при первом переходе
 	// платежа в succeeded (идемпотентность обеспечивает handler).
 	IncrementPromoCodeUsage(id string) bool
 

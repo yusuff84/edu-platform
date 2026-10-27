@@ -80,9 +80,26 @@ func Load() *Config {
 	if port == "" {
 		port = "8080"
 	}
+	env := strings.TrimSpace(os.Getenv("APP_ENV"))
+	databaseURL := os.Getenv("DATABASE_URL")
+	dev := (&Config{AppEnv: env, DatabaseURL: databaseURL}).IsDev()
 	provider := strings.ToLower(strings.TrimSpace(os.Getenv("PAYMENTS_PROVIDER")))
 	if provider == "" {
-		provider = "mock"
+		if dev {
+			provider = "mock"
+		} else {
+			// P11: в prod пустой PAYMENTS_PROVIDER не должен молча
+			// превращаться в mock (иначе тестовый платёж может стать
+			// боевым). Безопасный явный дефолт — реальный провайдер:
+			// без ключей checkout вернёт 502, а не создаст mock-платёж.
+			provider = "stripe"
+			log.Printf("ПРЕДУПРЕЖДЕНИЕ: PAYMENTS_PROVIDER не задан в prod-режиме — используем stripe; mock вне dev запрещён. Задайте провайдера явно")
+		}
+	}
+	if provider == "mock" && !dev {
+		// Явный mock в prod не фатален (конфиг может быть общим для стендов),
+		// но handler отклонит mock-платежи: checkout/webhook вернут 502/404.
+		log.Printf("ПРЕДУПРЕЖДЕНИЕ: PAYMENTS_PROVIDER=mock в prod-режиме — mock-платежи отключены; задайте stripe или yookassa")
 	}
 	runner := strings.TrimSpace(os.Getenv("RUNNER_URL"))
 	if runner == "" {
@@ -108,8 +125,6 @@ func Load() *Config {
 	}
 
 	secret := strings.TrimSpace(os.Getenv("SESSION_SECRET"))
-	env := strings.TrimSpace(os.Getenv("APP_ENV"))
-	dev := (&Config{AppEnv: env, DatabaseURL: os.Getenv("DATABASE_URL")}).IsDev()
 	switch {
 	case secret == "" && dev:
 		log.Printf("ПРЕДУПРЕЖДЕНИЕ: SESSION_SECRET не задан — cookie сессии не подписываются (dev-режим). Задайте секрет перед прод-запуском")
@@ -122,7 +137,7 @@ func Load() *Config {
 	}
 
 	cfg := &Config{
-		DatabaseURL:      os.Getenv("DATABASE_URL"),
+		DatabaseURL:      databaseURL,
 		SessionSecret:    secret,
 		AppEnv:           env,
 		PaymentsProvider: provider,

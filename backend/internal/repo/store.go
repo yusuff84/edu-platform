@@ -1557,13 +1557,18 @@ func (s *Store) DeactivatePromoCode(id string) error {
 	return nil
 }
 
-// IncrementPromoCodeUsage атомарно увеличивает usedCount на 1. false —
-// промокода нет. Возврат средств счётчик не уменьшает (контракт T63).
+// IncrementPromoCodeUsage атомарно увеличивает usedCount на 1, не превышая
+// maxUses (0 — без лимита). false — промокода нет ИЛИ лимит уже исчерпан;
+// handler различает эти случаи повторным чтением. Возврат средств счётчик
+// не уменьшает (контракт T63).
 func (s *Store) IncrementPromoCodeUsage(id string) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	pc, ok := s.promoCodes[id]
 	if !ok {
+		return false
+	}
+	if pc.MaxUses > 0 && pc.UsedCount >= pc.MaxUses {
 		return false
 	}
 	pc.UsedCount++

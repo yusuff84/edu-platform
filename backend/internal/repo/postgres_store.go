@@ -1773,8 +1773,10 @@ func (s *PostgresStore) DeactivatePromoCode(id string) error {
 	return nil
 }
 
-// IncrementPromoCodeUsage атомарно увеличивает used_count на 1. false —
-// промокода нет. Возврат средств счётчик не уменьшает (контракт T63).
+// IncrementPromoCodeUsage атомарно увеличивает used_count на 1, не превышая
+// max_uses (0 — без лимита). false — промокода нет ИЛИ лимит уже исчерпан;
+// handler различает эти случаи повторным чтением. Возврат средств счётчик
+// не уменьшает (контракт T63).
 func (s *PostgresStore) IncrementPromoCodeUsage(id string) bool {
 	if _, err := uuid.Parse(strings.TrimSpace(id)); err != nil {
 		return false
@@ -1782,7 +1784,8 @@ func (s *PostgresStore) IncrementPromoCodeUsage(id string) bool {
 	ctx, cancel := s.ctx()
 	defer cancel()
 	tag, err := s.pool.Exec(ctx,
-		`UPDATE promo_codes SET used_count=used_count+1 WHERE id=$1::uuid`, id)
+		`UPDATE promo_codes SET used_count=used_count+1
+		 WHERE id=$1::uuid AND (max_uses=0 OR used_count < max_uses)`, id)
 	if err != nil {
 		log.Printf("postgres IncrementPromoCodeUsage: %v", err)
 		return false

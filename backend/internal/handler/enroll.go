@@ -2,6 +2,7 @@ package handler
 
 import (
 	"errors"
+	"log"
 	"net/http"
 	"strings"
 
@@ -15,6 +16,10 @@ import (
 
 type enrollRequest struct {
 	CourseID string `json:"courseId"`
+	// Provider оставлен для совместимости с фронтендом, но НЕ выбирает
+	// провайдера: источник истины — Config.PaymentsProvider (P11). Иначе
+	// клиент мог бы попросить mock при PAYMENTS_PROVIDER=stripe и получить
+	// тестовый платёж в обход реальной оплаты.
 	Provider string `json:"provider"`
 	// T63: необязательный промокод. Пустая строка (или отсутствие поля) —
 	// обычная покупка без скидки.
@@ -73,10 +78,6 @@ func (a *App) CreateEnrollment(w http.ResponseWriter, r *http.Request) {
 
 	commission := a.Store.GetCommissionPct()
 	fee, teacherAmount := service.Split(amountCents, commission)
-	providerName := strings.ToLower(strings.TrimSpace(req.Provider))
-	if providerName == "" {
-		providerName = a.Config.PaymentsProvider
-	}
 
 	// Бесплатный курс — сразу успех без провайдера.
 	if c.PriceCents == 0 {
@@ -95,7 +96,8 @@ func (a *App) CreateEnrollment(w http.ResponseWriter, r *http.Request) {
 			// поэтому повторная покупка после возврата средств снова приходит
 			// сюда. CreatePayment возвращает (nil, ErrAlreadyExists) — раньше
 			// это была паника на p.ID → 500. Переиспользуем тот же платёж:
-			// ниже он возвращается в succeeded, доступ открывает EnsureEnrollment.
+			// ниже он возвращается в succeeded, доступ открывает
+			// activateFreeEnrollment (явная повторная покупка).
 			p = freePaymentByCourse(a.Store, u.ID, c.ID)
 			if p == nil {
 				writeErr(w, http.StatusInternalServerError, "Не удалось оформить бесплатный курс")
@@ -105,13 +107,41 @@ func (a *App) CreateEnrollment(w http.ResponseWriter, r *http.Request) {
 			writeErr(w, http.StatusInternalServerError, "Не удалось оформить бесплатный курс")
 			return
 		}
-		a.Store.SetPaymentStatus(p.ID, repo.PaymentSucceeded)
-		a.Store.EnsureEnrollment(u.ID, c.ID)
+		// Повторная покупка бесплатного курса после возврата — явное новое
+		// действие ученика. Старый детерминированный платёж переиспользуется,
+		// поэтому статус и доступ выставляются здесь напрямую; вебхук так
+		// делать не может (canTransition запрещает refunded/failed → succeeded).
+		if p.Status != repo.PaymentSucceeded {
+			if !a.Store.SetPaymentStatus(p.ID, repo.PaymentSucceeded) {
+				writeErr(w, http.StatusInternalServerError, "Не удалось оформить бесплатный курс")
+				return
+			}
+		}
+		if !a.activateFreeEnrollment(u.ID, c.ID) {
+			writeErr(w, http.StatusInternalServerError, "Не удалось открыть доступ к курсу")
+			return
+		}
 		writeJSON(w, http.StatusCreated, enrollmentResponse(p, "", true))
 		return
 	}
 
-	prov, err := payments.NewProvider(providerName)
+	// P11: провайдер всегда из конфигурации, клиент не выбирает платёжный
+	// канал. Непустой req.Provider оставлен для совместимости с фронтендом,
+	// но при расхождении с конфигом это ошибка запроса (400), а не повод
+	// молча переключить провайдера. Пустое значение — «как настроено».
+	providerName := strings.ToLower(strings.TrimSpace(a.Config.PaymentsProvider))
+	if providerName == "" && a.Config.IsDev() {
+		// Пустой конфиг в dev означает mock (см. config.Load). Вне dev
+		// оставляем пусто: NewProvider вернёт ErrNotConfigured (502), а не
+		// молча подменит канал на тестовый.
+		providerName = "mock"
+	}
+	if requested := strings.ToLower(strings.TrimSpace(req.Provider)); requested != "" && requested != providerName {
+		writeErr(w, http.StatusBadRequest, "Платёжный провайдер не соответствует настройкам платформы")
+		return
+	}
+
+	prov, err := payments.NewProvider(providerName, a.Config.IsDev())
 	if err != nil {
 		if errors.Is(err, payments.ErrNotConfigured) {
 			// Провайдер существует, но не настроен — это сбой конфигурации, не запроса.
@@ -141,10 +171,92 @@ func (a *App) CreateEnrollment(w http.ResponseWriter, r *http.Request) {
 		PromoCode:         promoCode, DiscountCents: discountCents,
 	})
 	if err != nil {
-		writeErr(w, http.StatusConflict, "Такой платёж уже создан")
+		// P11: 409 — только реальный дубль providerPaymentId. Прочие сбои
+		// записи (БД недоступна и т.п.) — 500, а не «платёж уже создан».
+		// Внешний платёж к этому моменту уже создан, но доступ не открываем
+		// и ошибку не теряем.
+		if errors.Is(err, repo.ErrAlreadyExists) {
+			writeErr(w, http.StatusConflict, "Такой платёж уже создан")
+			return
+		}
+		// M6: внешний платёж уже создан, а записи в БД нет. Автоматический
+		// Refund здесь небезопасен (у Stripe/YooKassa платёж может быть ещё
+		// не оплачен, а ошибка БД — неоднозначной после commit). Фиксируем
+		// providerPaymentId в логе для ручной сверки/компенсации.
+		log.Printf("P11: платёж провайдера %s (%s) создан, но не сохранён в БД: %v; нужна сверка",
+			res.ProviderPaymentID, prov.Name(), err)
+		writeErr(w, http.StatusInternalServerError, "Не удалось сохранить платёж")
 		return
 	}
 	writeJSON(w, http.StatusCreated, enrollmentResponse(p, res.RedirectURL, false))
+}
+
+// canTransition — разрешённые переходы статуса платежа (P11):
+// pending → succeeded|failed; succeeded → refunded. refunded и failed
+// терминальны: повторный succeeded не должен ни реактивировать доступ, ни
+// повторно увеличивать usedCount промокода.
+func canTransition(from, to repo.PaymentStatus) bool {
+	switch from {
+	case repo.PaymentPending:
+		return to == repo.PaymentSucceeded || to == repo.PaymentFailed
+	case repo.PaymentSucceeded:
+		return to == repo.PaymentRefunded
+	default:
+		return false
+	}
+}
+
+// activateEnrollment открывает доступ после успешной оплаты.
+//
+// allowReactivate=true — только для перехода pending → succeeded (новая
+// оплата, в том числе повторная покупка после возврата или отзыва доступа):
+// refunded/revoked-запись можно вернуть в active, потому что ученик явно
+// заплатил снова. allowReactivate=false — для duplicate succeeded: повторная
+// доставка события не должна реактивировать возвращённую или отозванную
+// запись.
+//
+// Отсутствующая запись создаётся через EnsureEnrollment; результат проверяется
+// повторным чтением, потому что Postgres-реализация при сбое записи может
+// вернуть фиктивную структуру.
+func (a *App) activateEnrollment(studentID, courseID string, allowReactivate bool) bool {
+	if e, ok := a.Store.GetEnrollment(studentID, courseID); ok {
+		switch e.Status {
+		case repo.EnrollmentActive:
+			return true
+		case repo.EnrollmentRefunded, repo.EnrollmentRevoked:
+			if !allowReactivate {
+				return true // повторный succeeded не возвращает доступ
+			}
+			return a.Store.SetEnrollmentStatus(studentID, courseID, repo.EnrollmentActive) == nil
+		default:
+			return true
+		}
+	}
+	if e, _ := a.Store.EnsureEnrollment(studentID, courseID); e == nil {
+		return false
+	}
+	got, ok := a.Store.GetEnrollment(studentID, courseID)
+	return ok && got.Status == repo.EnrollmentActive
+}
+
+// activateFreeEnrollment — открытие доступа при повторной покупке бесплатного
+// курса. В отличие от вебхука это явное новое действие ученика, поэтому
+// refunded/revoked-запись можно вернуть в active; ошибка записи — false
+// (handler 500).
+func (a *App) activateFreeEnrollment(studentID, courseID string) bool {
+	if e, ok := a.Store.GetEnrollment(studentID, courseID); ok {
+		switch e.Status {
+		case repo.EnrollmentActive:
+			return true
+		default:
+			return a.Store.SetEnrollmentStatus(studentID, courseID, repo.EnrollmentActive) == nil
+		}
+	}
+	if e, _ := a.Store.EnsureEnrollment(studentID, courseID); e == nil {
+		return false
+	}
+	got, ok := a.Store.GetEnrollment(studentID, courseID)
+	return ok && got.Status == repo.EnrollmentActive
 }
 
 func enrollmentResponse(p *repo.Payment, redirectURL string, active bool) map[string]any {
@@ -174,8 +286,14 @@ func freePaymentByCourse(s repo.StoreAPI, studentID, courseID string) *repo.Paym
 // идемпотентная обработка события. Подпись проверяется ДО разбора тела;
 // повторный webhook по тому же providerPaymentID возвращает duplicate.
 func (a *App) PaymentWebhook(w http.ResponseWriter, r *http.Request) {
-	providerName := chi.URLParam(r, "provider")
-	prov, err := payments.NewProvider(providerName)
+	providerName := strings.TrimSpace(chi.URLParam(r, "provider"))
+	// P11: mock-вебхук — только dev. Вне dev отвечаем 404 так же, как на
+	// неизвестный платёж: маршрут существует, но тестовый провайдер выключен.
+	if strings.EqualFold(providerName, "mock") && !a.Config.IsDev() {
+		writeErr(w, http.StatusNotFound, "Платёж не найден")
+		return
+	}
+	prov, err := payments.NewProvider(providerName, a.Config.IsDev())
 	if err != nil {
 		if errors.Is(err, payments.ErrNotConfigured) {
 			writeErr(w, http.StatusBadGateway, "Платёжный сервис не настроен")
@@ -207,13 +325,36 @@ func (a *App) PaymentWebhook(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusNotFound, "Платёж не найден")
 		return
 	}
+	// P11 (cross-provider): платёж, созданный Stripe/YooKassa, нельзя
+	// подтвердить через mock-вебхук (и наоборот). Иначе клиент мог бы открыть
+	// доступ, послав событие «succeeded» чужому провайдеру.
+	if !strings.EqualFold(p.Provider, prov.Name()) {
+		writeErr(w, http.StatusNotFound, "Платёж не найден")
+		return
+	}
 	switch event.Status {
 	case "succeeded":
 		if p.Status == repo.PaymentSucceeded {
+			// Идемпотентный repair: первый webhook мог применить succeeded,
+			// но не успеть создать запись на курс. EnsureEnrollment создаст
+			// отсутствующую запись; refunded/revoked не реактивируются.
+			if !a.activateEnrollment(p.StudentID, p.CourseID, false) {
+				writeErr(w, http.StatusInternalServerError, "Не удалось открыть доступ к курсу")
+				return
+			}
 			writeJSON(w, http.StatusOK, map[string]any{"status": "duplicate"})
 			return
 		}
-		a.Store.SetPaymentStatus(p.ID, repo.PaymentSucceeded)
+		if !canTransition(p.Status, repo.PaymentSucceeded) {
+			// refunded/failed терминальны: повторный succeeded не возвращает
+			// доступ и не увеличивает usedCount.
+			writeJSON(w, http.StatusOK, map[string]any{"status": "ignored"})
+			return
+		}
+		if !a.Store.SetPaymentStatus(p.ID, repo.PaymentSucceeded) {
+			writeErr(w, http.StatusInternalServerError, "Не удалось сохранить статус платежа")
+			return
+		}
 		// T63: usedCount промокода увеличивается ровно один раз — здесь, при
 		// первом переходе платежа в succeeded. Ветка duplicate выше уже
 		// отсекла повторную доставку события (та же идемпотентность по
@@ -221,33 +362,71 @@ func (a *App) PaymentWebhook(w http.ResponseWriter, r *http.Request) {
 		// средств его не уменьшает (ветка refunded ниже).
 		if p.PromoCode != "" {
 			if promo, ok := a.Store.FindPromoCode(p.CourseID, p.PromoCode); ok {
-				a.Store.IncrementPromoCodeUsage(promo.ID)
+				if !a.Store.IncrementPromoCodeUsage(promo.ID) {
+					// false — либо код исчез (сбой данных), либо лимит уже
+					// исчерпан (гонка с другим платежом/поздний webhook).
+					// Лимит не превышаем: платёж уже succeeded, доступ
+					// открываем, но usedCount не растёт. Остальные причины —
+					// ошибка записи, её нельзя выдавать за 200 processed.
+					current, exists := a.Store.GetPromoCodeByID(promo.ID)
+					if !exists || current.MaxUses <= 0 || current.UsedCount < current.MaxUses {
+						writeErr(w, http.StatusInternalServerError, "Не удалось учесть промокод")
+						return
+					}
+				}
 			}
 		}
-		a.Store.EnsureEnrollment(p.StudentID, p.CourseID)
+		// pending → succeeded: новая оплата. Повторная покупка после возврата
+		// или отзыва доступа законно возвращает запись в active.
+		if !a.activateEnrollment(p.StudentID, p.CourseID, true) {
+			writeErr(w, http.StatusInternalServerError, "Не удалось открыть доступ к курсу")
+			return
+		}
 		writeJSON(w, http.StatusOK, map[string]any{"status": "processed"})
 	case "failed":
 		if p.Status == repo.PaymentFailed {
 			writeJSON(w, http.StatusOK, map[string]any{"status": "duplicate"})
 			return
 		}
-		a.Store.SetPaymentStatus(p.ID, repo.PaymentFailed)
+		if !canTransition(p.Status, repo.PaymentFailed) {
+			// succeeded → failed и refunded → failed не применяем: событие
+			// устарело или пришло не по порядку, доступ отбирать нельзя.
+			writeJSON(w, http.StatusOK, map[string]any{"status": "ignored"})
+			return
+		}
+		if !a.Store.SetPaymentStatus(p.ID, repo.PaymentFailed) {
+			writeErr(w, http.StatusInternalServerError, "Не удалось сохранить статус платежа")
+			return
+		}
 		writeJSON(w, http.StatusOK, map[string]any{"status": "processed"})
 	case "refunded":
 		if p.Status == repo.PaymentRefunded {
+			// Repair: если первый webhook успел перевести платёж в refunded,
+			// но не смог закрыть доступ (500 → retry), повторная доставка
+			// должна довести отзыв доступа, а не просто вернуть duplicate.
+			if err := a.Store.SetEnrollmentStatus(p.StudentID, p.CourseID, repo.EnrollmentRefunded); err != nil && !errors.Is(err, repo.ErrNotFound) {
+				writeErr(w, http.StatusInternalServerError, "Не удалось закрыть доступ к курсу")
+				return
+			}
 			writeJSON(w, http.StatusOK, map[string]any{"status": "duplicate"})
 			return
 		}
-		if p.Status != repo.PaymentSucceeded {
+		if !canTransition(p.Status, repo.PaymentRefunded) {
 			// Возвращать можно только оплаченный платёж.
 			writeJSON(w, http.StatusOK, map[string]any{"status": "ignored"})
 			return
 		}
-		a.Store.SetPaymentStatus(p.ID, repo.PaymentRefunded)
+		if !a.Store.SetPaymentStatus(p.ID, repo.PaymentRefunded) {
+			writeErr(w, http.StatusInternalServerError, "Не удалось сохранить статус платежа")
+			return
+		}
 		// Возврат средств отменяет доступ: запись на курс становится refunded.
-		// Ошибка намеренно игнорируется: платёж уже переведён в refunded,
-		// повторный webhook вернёт duplicate и не дойдёт сюда.
-		_ = a.Store.SetEnrollmentStatus(p.StudentID, p.CourseID, repo.EnrollmentRefunded)
+		// ErrNotFound не считается сбоем (записи нет — отзывать нечего),
+		// остальные ошибки — 500, чтобы провайдер повторил webhook.
+		if err := a.Store.SetEnrollmentStatus(p.StudentID, p.CourseID, repo.EnrollmentRefunded); err != nil && !errors.Is(err, repo.ErrNotFound) {
+			writeErr(w, http.StatusInternalServerError, "Не удалось закрыть доступ к курсу")
+			return
+		}
 		writeJSON(w, http.StatusOK, map[string]any{"status": "processed"})
 	default:
 		writeJSON(w, http.StatusOK, map[string]any{"status": "ignored"})
