@@ -774,3 +774,153 @@
     min-height: 0;
   }
 }
+
+/* Скелетон загрузки кабинета — тот же ритм, что у готовых блоков. */
+.skeleton {
+  display: block;
+  border-radius: 10px;
+  background: linear-gradient(90deg, #f0f1f5 0%, #e5e8ef 50%, #f0f1f5 100%);
+  background-size: 200% 100%;
+  animation: pf-pending 1.4s linear infinite;
+}
+
+.skeleton-kicker {
+  width: 110px;
+  height: 11px;
+  margin-bottom: 14px;
+}
+
+.skeleton-title {
+  width: min(340px, 82%);
+  height: 48px;
+  margin-bottom: 14px;
+}
+
+.skeleton-title--sm {
+  width: min(280px, 72%);
+  height: 28px;
+}
+
+.skeleton-sub {
+  width: min(520px, 92%);
+  height: 14px;
+  margin-top: 10px;
+}
+
+.skeleton-sub--short {
+  width: min(360px, 66%);
+}
+
+.skeleton-pill {
+  width: 132px;
+  height: 38px;
+  border-radius: 999px;
+}
+
+.skeleton-bar {
+  width: 100%;
+  height: 8px;
+  margin-top: 18px;
+}
+
+.skeleton-button {
+  width: 150px;
+  height: 44px;
+  margin-top: 22px;
+  border-radius: 999px;
+}
+
+.skeleton-meta {
+  width: 120px;
+  height: 14px;
+  margin-top: 10px;
+}
+
+.skeleton-heading {
+  width: 190px;
+  height: 26px;
+}
+
+.dashboard-skeleton-copy {
+  display: grid;
+  align-content: center;
+  gap: 12px;
+}
+
+.dashboard-skeleton-copy .skeleton-pill,
+.dashboard-skeleton-copy .skeleton-title,
+.dashboard-skeleton-copy .skeleton-sub {
+  margin-top: 0;
+  margin-bottom: 0;
+}
+
+.dashboard-skeleton-copy .skeleton-bar {
+  margin-top: 6px;
+}
+
+.dashboard-skeleton-copy .skeleton-button {
+  margin-top: 10px;
+}
+
+.dashboard-skeleton-hero .dashboard-skeleton-cover {
+  min-height: 270px;
+}
+
+.dashboard-skeleton-cover {
+  background: linear-gradient(90deg, #eceef3 0%, #e3e7f0 50%, #eceef3 100%);
+  background-size: 200% 100%;
+}
+
+.dashboard-skeleton-icon {
+  width: 44px;
+  height: 44px;
+  flex: none;
+  border-radius: 15px;
+}
+
+.dashboard-skeleton-lines {
+  display: grid;
+  gap: 8px;
+  width: 120px;
+}
+
+.skeleton-stat-value {
+  width: 80px;
+  height: 26px;
+}
+
+.skeleton-stat-label {
+  width: 110px;
+  height: 12px;
+}
+
+.dashboard-skeleton-card .enrolled-body {
+  display: grid;
+  gap: 0;
+  align-content: center;
+}
+
+.dashboard-skeleton-card .skeleton-title,
+.dashboard-skeleton-card .skeleton-bar,
+.dashboard-skeleton-card .skeleton-meta,
+.dashboard-skeleton-card .skeleton-button {
+  margin-top: 0;
+  margin-bottom: 12px;
+}
+
+.dashboard-skeleton-card .skeleton-button {
+  margin-top: 8px;
+  margin-bottom: 0;
+}
+
+@media (max-width: 860px) {
+  .dashboard-skeleton-hero .dashboard-skeleton-cover {
+    min-height: 190px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton {
+    animation: none;
+  }
+}

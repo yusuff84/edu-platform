@@ -38,6 +38,66 @@ function firstName(user?: { displayName?: string; email: string }): string {
   return emailName ? emailName.charAt(0).toLocaleUpperCase('ru') + emailName.slice(1) : '';
 }
 
+/** Скелетон первой загрузки кабинета: сохраняет будущую сетку, не показывая
+ *  выдуманные нули и не «прыгая» layout-ом после ответа API. */
+function DashboardSkeleton(): JSX.Element {
+  return (
+    <div className="wrap">
+      <main className="page dashboard-page" aria-busy="true">
+        <span className="sr-only" role="status">
+          {t('my.loading')}
+        </span>
+        <header className="dashboard-head" aria-hidden="true">
+          <div>
+            <span className="skeleton skeleton-kicker" />
+            <span className="skeleton skeleton-title" />
+            <span className="skeleton skeleton-sub" />
+            <span className="skeleton skeleton-sub skeleton-sub--short" />
+          </div>
+          <span className="skeleton skeleton-pill" />
+        </header>
+        <section className="continue-hero dashboard-skeleton-hero" aria-hidden="true">
+          <div className="continue-copy dashboard-skeleton-copy">
+            <span className="skeleton skeleton-pill" />
+            <span className="skeleton skeleton-title skeleton-title--sm" />
+            <span className="skeleton skeleton-sub" />
+            <span className="skeleton skeleton-sub skeleton-sub--short" />
+            <span className="skeleton skeleton-bar" />
+            <span className="skeleton skeleton-button" />
+          </div>
+          <div className="continue-cover skeleton dashboard-skeleton-cover" />
+        </section>
+        <div className="dashboard-stats" aria-hidden="true">
+          {[0, 1, 2].map((item) => (
+            <div key={item} className="dashboard-stat">
+              <span className="skeleton dashboard-skeleton-icon" />
+              <div className="dashboard-skeleton-lines">
+                <span className="skeleton skeleton-stat-value" />
+                <span className="skeleton skeleton-stat-label" />
+              </div>
+            </div>
+          ))}
+        </div>
+        <div className="dashboard-section-head" aria-hidden="true">
+          <span className="skeleton skeleton-heading" />
+          <span className="skeleton skeleton-meta" />
+        </div>
+        <div className="enrolled-grid enrolled-grid--single" aria-hidden="true">
+          <article className="panel enrolled-card dashboard-skeleton-card">
+            <div className="cover enrolled-cover skeleton dashboard-skeleton-card-cover" />
+            <div className="enrolled-body">
+              <span className="skeleton skeleton-title skeleton-title--sm" />
+              <span className="skeleton skeleton-bar" />
+              <span className="skeleton skeleton-meta" />
+              <span className="skeleton skeleton-button" />
+            </div>
+          </article>
+        </div>
+      </main>
+    </div>
+  );
+}
+
 export default function MyCourses(): JSX.Element {
   useSeo('Мои курсы — Edu Platform');
   const query = useQuery({ queryKey: ['my-courses'], queryFn: myCourses });
@@ -62,15 +122,7 @@ export default function MyCourses(): JSX.Element {
 
   // Загрузка
   if (query.isLoading) {
-    return (
-      <div className="wrap">
-        <main className="page dashboard-page">
-          <div className="panel">
-            <p role="status">{t('my.loading')}</p>
-          </div>
-        </main>
-      </div>
-    );
+    return <DashboardSkeleton />;
   }
 
   // Ошибка сети / сервера — можно повторить без перезагрузки страницы
@@ -78,11 +130,18 @@ export default function MyCourses(): JSX.Element {
     return (
       <div className="wrap">
         <main className="page dashboard-page">
-          <div className="panel">
+          <header className="dashboard-head">
+            <div>
+              <p className="dashboard-kicker">Личный кабинет</p>
+              <h1>{hello}</h1>
+            </div>
+          </header>
+          <div className="empty empty--dashboard">
+            <h2>Не удалось загрузить курсы</h2>
             <p role="alert" className="error">
               {t('error.network')}
             </p>
-            <button type="button" className="btn" onClick={() => void query.refetch()}>
+            <button type="button" className="btn btn-ink" onClick={() => void query.refetch()}>
               {t('common.retry')}
             </button>
           </div>
@@ -133,12 +192,14 @@ export default function MyCourses(): JSX.Element {
   }
 
   // Сводка — по уже загруженным прогрессам; пока ничего не загружено, средний
-  // прогресс показываем как «—», а не выдуманный ноль.
+  // прогресс и число завершённых показываем как «—», а не выдуманный ноль.
   const loaded = progressQueries.flatMap((p) => (p.data ? [p.data] : []));
   const total = items.length;
-  const done = loaded.filter((p) => p.completed).length;
+  const progressPending = progressQueries.some((p) => p.isPending);
+  const progressAllSuccess = progressQueries.every((p) => p.isSuccess);
+  const done = progressAllSuccess ? loaded.filter((p) => p.completed).length : null;
   const avg =
-    loaded.length > 0
+    progressAllSuccess && loaded.length > 0
       ? Math.round(loaded.reduce((sum, p) => sum + p.percent, 0) / loaded.length)
       : null;
 
@@ -251,7 +312,11 @@ export default function MyCourses(): JSX.Element {
           </section>
         )}
 
-        <div className="dashboard-stats">
+        <div
+          className="dashboard-stats"
+          aria-busy={progressPending}
+          aria-live="polite"
+        >
           <div className="dashboard-stat">
             <span className="dashboard-stat-icon" aria-hidden="true">
               <svg viewBox="0 0 24 24" width="21" height="21" fill="none">
@@ -299,7 +364,7 @@ export default function MyCourses(): JSX.Element {
               </svg>
             </span>
             <div>
-              <b>{done}</b>
+              <b>{done === null ? '—' : done}</b>
               <span>Завершено</span>
             </div>
           </div>
