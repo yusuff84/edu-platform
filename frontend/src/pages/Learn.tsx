@@ -80,6 +80,9 @@ export default function Learn(): JSX.Element {
 
   const [verdictState, setVerdictState] = useState<VerdictState | null>(null);
   const [errorState, setErrorState] = useState<ErrorState | null>(null);
+  // На мобильных программа курса — раскрывающийся блок, а не постоянная
+  // карточка над уроком: она отнимала пол-экрана у самого урока.
+  const [programOpen, setProgramOpen] = useState(false);
 
   // Шарим кеш списка «моих курсов» с MyCourses.tsx (ключ в репозитории — 'my-courses').
   const myQuery = useQuery({ queryKey: ['my-courses'], queryFn: myCourses });
@@ -424,7 +427,47 @@ export default function Learn(): JSX.Element {
         )}
 
         <div className="lesson-shell">
-          <nav className="side-nav" aria-label={t('course.program')}>
+          <button
+            type="button"
+            className="program-toggle"
+            aria-expanded={programOpen}
+            aria-controls="course-program"
+            onClick={() => setProgramOpen((open) => !open)}
+          >
+            <span className="program-toggle-text">
+              <span className="program-toggle-kicker">{t('course.program')}</span>
+              <span className="program-toggle-current">{currentLesson.title}</span>
+            </span>
+            <span className="program-toggle-meta">
+              <span>
+                {activeIndex + 1} / {flatLessons.length}
+              </span>
+              <svg
+                className="program-toggle-chevron"
+                width="16"
+                height="16"
+                viewBox="0 0 20 20"
+                fill="none"
+                aria-hidden="true"
+              >
+                <path
+                  d="m5 7.5 5 5 5-5"
+                  stroke="currentColor"
+                  strokeWidth="1.9"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+            </span>
+          </button>
+          <nav
+            id="course-program"
+            className={`side-nav${programOpen ? ' side-nav--open' : ''}`}
+            aria-label={t('course.program')}
+            onClick={(event) => {
+              if ((event.target as HTMLElement).closest('a')) setProgramOpen(false);
+            }}
+          >
             {modules.map((m) => (
               <div key={m.id}>
                 <span className="side-title">{m.title}</span>

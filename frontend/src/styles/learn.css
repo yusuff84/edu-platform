@@ -651,3 +651,92 @@
 .lesson-pane > p {
   margin: 0;
 }
+
+/* Мобильная программа курса: компактный заголовок-переключатель вместо
+   постоянной карточки над уроком. На десктопе сайдбар остаётся как был. */
+.program-toggle {
+  display: none;
+}
+
+@media (max-width: 960px) {
+  .lesson-shell .program-toggle {
+    display: flex;
+    grid-column: 1 / -1;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    width: 100%;
+    padding: 14px 16px;
+    border: 1px solid #e6e9f2;
+    border-radius: 18px;
+    background: #fff;
+    color: var(--fg);
+    box-shadow: var(--shadow-sm);
+    cursor: pointer;
+    text-align: left;
+  }
+
+  .program-toggle-text {
+    display: grid;
+    gap: 2px;
+    min-width: 0;
+  }
+
+  .program-toggle-kicker {
+    color: #5d65d9;
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .program-toggle-current {
+    overflow: hidden;
+    color: var(--fg);
+    font-size: 14px;
+    font-weight: 800;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .program-toggle-meta {
+    display: flex;
+    flex: none;
+    align-items: center;
+    gap: 8px;
+    color: var(--muted);
+    font-size: 12.5px;
+    font-weight: 700;
+  }
+
+  .program-toggle-chevron {
+    transition: transform 0.18s ease;
+  }
+
+  .program-toggle[aria-expanded='true'] .program-toggle-chevron {
+    transform: rotate(180deg);
+  }
+
+  .lesson-shell .side-nav {
+    display: none;
+    position: static;
+  }
+
+  .lesson-shell .side-nav.side-nav--open {
+    display: block;
+    max-height: min(56vh, 520px);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+
+  .program-toggle:focus-visible {
+    outline: 2px solid var(--brand);
+    outline-offset: 2px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .program-toggle-chevron {
+    transition: none;
+  }
+}
