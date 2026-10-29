@@ -12,6 +12,7 @@ import { Link } from 'react-router-dom';
 import { useQueries, useQuery } from '@tanstack/react-query';
 import { ApiError, myCourses } from '../api/client';
 import { courseProgress } from '../api/meExtra';
+import { coverUrl } from '../api/teacherCover';
 import { coverFor } from '../components/CourseCard';
 import { meQueryOptions } from '../components/RouteGuards';
 import { t } from '../i18n/t';
@@ -155,6 +156,7 @@ export default function MyCourses(): JSX.Element {
   });
   const continueItem = continueIndex >= 0 ? items[continueIndex] : null;
   const continueData = continueIndex >= 0 ? progressQueries[continueIndex].data : undefined;
+  const continueCoverSrc = continueItem ? coverUrl(continueItem.course.coverPath) : undefined;
   const continueHref = continueItem
     ? continueData?.nextLessonId
       ? `/learn/${continueItem.course.id}/${continueData.nextLessonId}`
@@ -231,9 +233,17 @@ export default function MyCourses(): JSX.Element {
               aria-hidden="true"
             >
               <span className="tag">Курс</span>
-              <span className="continue-cover-letter">
-                {continueItem.course.title.charAt(0)}
-              </span>
+              {continueCoverSrc ? (
+                <img
+                  className="continue-cover-img"
+                  src={continueCoverSrc}
+                  alt=""
+                />
+              ) : (
+                <span className="continue-cover-letter">
+                  {continueItem.course.title.charAt(0)}
+                </span>
+              )}
               {continueData && (
                 <span className="continue-cover-percent">{continueData.percent}%</span>
               )}
@@ -325,6 +335,7 @@ export default function MyCourses(): JSX.Element {
             // сертификата ещё нет); бейдж ведёт на публичную страницу по номеру.
             const certificateNumber = item.certificateNumber?.trim() ?? '';
             const completed = Boolean(data?.completed);
+            const coverSrc = coverUrl(course.coverPath);
 
             return (
               <article key={course.id} className="panel enrolled-card">
@@ -333,6 +344,13 @@ export default function MyCourses(): JSX.Element {
                   aria-hidden="true"
                 >
                   <span className="tag">Курс</span>
+                  {coverSrc ? (
+                    <img className="enrolled-cover-img" src={coverSrc} alt="" />
+                  ) : (
+                    <span className="enrolled-cover-letter">
+                      {course.title.charAt(0)}
+                    </span>
+                  )}
                   {data && <span className="enrolled-percent">{data.percent}%</span>}
                 </div>
                 <div className="enrolled-body">
