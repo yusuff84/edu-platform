@@ -276,7 +276,7 @@ export function QuizForm({
       ))}
       <button
         type="submit"
-        className="btn btn-primary"
+        className="btn btn-ink"
         disabled={disabled || !allAnswered}
         aria-label={t('lesson.quizSubmit')}
       >
@@ -341,7 +341,7 @@ export function CodeEditor({
         </button>
         <button
           type="submit"
-          className="btn btn-primary"
+          className="btn btn-ink"
           disabled={disabled || !code.trim()}
           aria-label={t('lesson.codeRun')}
         >
@@ -380,7 +380,7 @@ export default function LessonView({ lesson, onComplete, completing }: Props): J
         )}
         <button
           type="button"
-          className="btn btn-primary"
+          className="btn btn-ink"
           onClick={() => void onComplete({})}
           disabled={completing}
           aria-label={`${t('learn.complete')}: ${lesson.title}`}
@@ -450,7 +450,7 @@ export default function LessonView({ lesson, onComplete, completing }: Props): J
       {lesson.bodyMd && <Markdown source={lesson.bodyMd} />}
       <button
         type="button"
-        className="btn btn-primary"
+        className="btn btn-ink"
         onClick={() => void onComplete({})}
         disabled={completing}
         aria-label={`${t('learn.complete')}: ${lesson.title}`}

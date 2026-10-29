@@ -125,7 +125,7 @@
 .ce-preview-pane {
   position: sticky;
   /* Шапка сайта теперь sticky: оставляем тот же отступ, что у buybox. */
-  top: 96px;
+  top: var(--sticky-header-offset);
   border: 1px solid #dfe3ea;
   border-radius: 8px;
   background: #fbfcfe;

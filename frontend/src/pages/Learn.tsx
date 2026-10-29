@@ -406,7 +406,7 @@ export default function Learn(): JSX.Element {
               <p className="cert-finish-title">{t('p8.cert.done')}</p>
               {certificateNumber && (
                 <Link
-                  className="btn btn-primary"
+                  className="btn btn-ink"
                   to={`/certificates/${encodeURIComponent(certificateNumber)}`}
                 >
                   {t('p8.cert.open')}
@@ -634,7 +634,7 @@ export default function Learn(): JSX.Element {
                 {verdict?.passed && passedNextLesson && (
                   <p>
                     <Link
-                      className="btn learn-next-link"
+                      className="btn btn-ink learn-next-link"
                       to={`/learn/${courseId}/${passedNextLesson.id}`}
                     >
                       {t('learn.nextLesson')}: {passedNextLesson.title}
@@ -644,7 +644,7 @@ export default function Learn(): JSX.Element {
                 {!verdict?.passed && flatNext && (
                   <p>
                     <Link
-                      className="btn learn-next-link"
+                      className="btn btn-ink learn-next-link"
                       to={`/learn/${courseId}/${flatNext.id}`}
                     >
                       {t('learn.continue')}: {flatNext.title}

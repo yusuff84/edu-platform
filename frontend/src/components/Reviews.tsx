@@ -355,7 +355,7 @@ export default function Reviews({
                   <div className="reviews-actions">
                     <button
                       type="submit"
-                      className="btn btn-primary btn-sm"
+                      className="btn btn-ink btn-sm"
                       disabled={replyMutation.isPending}
                     >
                       {t('p8.reviews.replySave')}
@@ -430,7 +430,7 @@ export default function Reviews({
             {errors.body && <span className="error err">{errors.body.message}</span>}
           </div>
           <div>
-            <button type="submit" className="btn btn-primary" disabled={mutation.isPending}>
+            <button type="submit" className="btn btn-ink" disabled={mutation.isPending}>
               {t('reviews.submit')}
             </button>
           </div>

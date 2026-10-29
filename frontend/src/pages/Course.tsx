@@ -651,7 +651,7 @@ export default function Course(): JSX.Element {
               </button>
             )}
             {owned && (
-              <Link className="btn btn-primary" to={`/learn/${course.id}`}>
+              <Link className="btn btn-ink" to={`/learn/${course.id}`}>
                 {t('course.openLearn')}
               </Link>
             )}

@@ -171,7 +171,7 @@ export default function Profile(): JSX.Element {
                 )}
                 <button
                   type="submit"
-                  className="btn btn-primary pf-save"
+                  className="btn btn-ink pf-save"
                   disabled={!nameValid || saveMutation.isPending}
                   title={nameError || undefined}
                 >

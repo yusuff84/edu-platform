@@ -588,7 +588,7 @@
 
 @media (min-width: 961px) {
   .learn-head ~ .lesson-shell .side-nav {
-    top: 96px;
+    top: var(--sticky-header-offset);
   }
 }
 

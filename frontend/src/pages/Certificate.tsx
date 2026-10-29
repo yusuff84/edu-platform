@@ -60,7 +60,7 @@ function CertificateNotFound(): JSX.Element {
           <h1>{t('p8.cert.notFound')}</h1>
           <p>{t('p8.cert.notFoundHint')}</p>
           <p>
-            <Link className="btn btn-primary" to="/">
+            <Link className="btn btn-ink" to="/">
               {t('error.goCatalog')}
             </Link>
           </p>
@@ -179,7 +179,7 @@ export default function Certificate(): JSX.Element {
             </div>
           </dl>
           <div className="cert-actions">
-            <button type="button" className="btn btn-primary" onClick={() => void onCopy()}>
+            <button type="button" className="btn btn-ink" onClick={() => void onCopy()}>
               {t('p8.cert.copyLink')}
             </button>
             <Link className="btn" to={`/courses/${cert.courseSlug}`}>
