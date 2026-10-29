@@ -269,3 +269,227 @@
   height: 100%;
   object-fit: cover;
 }
+
+/* ==========================================================================
+   Страница курса — Skillbox-inspired hero и программа
+   --------------------------------------------------------------------------
+   Мягкий пастельный баннер вместо «панели с обложкой», аккуратная нумерация
+   модулей. Buybox, превью, промокоды и отзывы не меняются.
+   ========================================================================== */
+
+.course-page .course-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(220px, 34%);
+  gap: 28px;
+  align-items: stretch;
+  overflow: hidden;
+  padding: 32px;
+  border: 1px solid #e2e8f8;
+  border-radius: 30px;
+  background:
+    radial-gradient(520px 260px at 6% 10%, rgba(108, 124, 255, 0.13), transparent 66%),
+    linear-gradient(122deg, #eef2ff 0%, #f9faff 52%, #effaff 100%);
+  box-shadow: var(--shadow-sm);
+}
+
+.course-hero-copy {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  min-width: 0;
+}
+
+.course-hero-copy .pill-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.course-owned-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 11px;
+  border-radius: 999px;
+  background: #e6f6ed;
+  color: #17643c;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.course-hero-copy h1 {
+  max-width: 18ch;
+  margin: 15px 0 12px;
+  font-size: clamp(31px, 4.3vw, 52px);
+  line-height: 1.03;
+  letter-spacing: -0.045em;
+}
+
+.course-hero-lead {
+  max-width: 60ch;
+  margin: 0 0 18px;
+  color: #5f6472;
+  font-size: 16px;
+  line-height: 1.55;
+}
+
+.course-hero-author {
+  margin: 0 0 12px;
+}
+
+.course-hero-author a {
+  font-weight: 700;
+}
+
+.course-hero-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 16px;
+  color: #5f6472;
+  font-size: 13.5px;
+  font-weight: 600;
+}
+
+.course-hero-art {
+  position: relative;
+  min-height: 280px;
+  overflow: hidden;
+  border-radius: 24px;
+  background: #dce4ff;
+}
+
+.course-hero-img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.course-hero-art::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background: linear-gradient(180deg, transparent 42%, rgba(20, 21, 26, 0.32));
+  pointer-events: none;
+}
+
+.course-hero-letter {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: rgba(255, 255, 255, 0.3);
+  font-size: clamp(100px, 13vw, 170px);
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: -0.08em;
+}
+
+.course-hero-art-label {
+  position: absolute;
+  z-index: 2;
+  right: 18px;
+  bottom: 16px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.86);
+  color: #272b36;
+  font-size: 11.5px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  backdrop-filter: blur(8px);
+}
+
+.course-program-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.course-program-head h2 {
+  margin: 0;
+}
+
+.course-program-head p {
+  margin: 6px 0 0;
+  font-size: 13.5px;
+}
+
+.course-program-list {
+  margin-top: 18px;
+  counter-reset: course-module;
+}
+
+.course-program-list .mod {
+  counter-increment: course-module;
+  border-color: #ebecef;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.course-program-list .mod:hover {
+  border-color: #dfe3ee;
+  box-shadow: 0 5px 18px -12px rgba(20, 21, 26, 0.2);
+}
+
+.course-program-list .mod-head::before {
+  content: counter(course-module, decimal-leading-zero);
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 31px;
+  height: 31px;
+  border-radius: 10px;
+  background: #f2f4fa;
+  color: #626a7c;
+  font-size: 11.5px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+
+.course-program-list .mod-head span {
+  margin-right: auto;
+}
+
+.course-program-list .mod-body {
+  background: #fcfcfe;
+}
+
+.course-program-list .lesson-link:hover {
+  background: #f5f7ff;
+}
+
+@media (max-width: 860px) {
+  .course-page .course-hero {
+    grid-template-columns: 1fr;
+    padding: 26px;
+  }
+
+  .course-hero-art {
+    min-height: 190px;
+    order: -1;
+  }
+
+  .course-hero-copy h1 {
+    max-width: none;
+  }
+}
+
+@media (max-width: 520px) {
+  .course-page .course-hero {
+    padding: 22px 20px;
+    border-radius: 24px;
+  }
+
+  .course-hero-copy h1 {
+    font-size: 32px;
+  }
+
+  .course-hero-lead {
+    font-size: 15px;
+  }
+}

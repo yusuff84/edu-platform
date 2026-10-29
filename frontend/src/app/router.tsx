@@ -103,6 +103,26 @@ function RouteFallback(): JSX.Element {
   );
 }
 
+/** Короткое имя для шапки: displayName → локальная часть email. */
+function shortUserName(user: { displayName?: string; email: string }): string {
+  const displayName = user.displayName?.trim();
+  if (displayName) return displayName.split(/\s+/)[0];
+  const emailName = user.email.split('@')[0] ?? '';
+  return emailName ? emailName.charAt(0).toLocaleUpperCase('ru') + emailName.slice(1) : 'Профиль';
+}
+
+/** Инициалы для круглого аватара в шапке. */
+function userInitials(user: { displayName?: string; email: string }): string {
+  const source = user.displayName?.trim() || user.email.split('@')[0] || '';
+  const letters = source
+    .split(/[\s._-]+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part.charAt(0).toLocaleUpperCase('ru'))
+    .join('');
+  return letters || 'E';
+}
+
 function Layout(): JSX.Element {
   const qc = useQueryClient();
   // Один query ['me'] на всё приложение: Layout и гварды (RouteGuards.tsx)
@@ -186,10 +206,23 @@ function Layout(): JSX.Element {
           <div className="top-actions">
             {user ? (
               <>
-                <span className="user-email">{user.email}</span>{' '}
+                <Link
+                  className="user-chip"
+                  to="/profile"
+                  title={user.email}
+                  aria-label={`Профиль: ${shortUserName(user)}`}
+                >
+                  <span className="user-avatar" aria-hidden="true">
+                    {userInitials(user)}
+                  </span>
+                  <span className="user-chip-text">
+                    <span className="user-chip-name">{shortUserName(user)}</span>
+                    <span className="user-chip-sub">Профиль</span>
+                  </span>
+                </Link>
                 <button
                   type="button"
-                  className="btn btn-ghost btn-sm"
+                  className="btn btn-ghost btn-sm topbar-logout"
                   onClick={() => void onLogout()}
                 >
                   {t('nav.logout')}

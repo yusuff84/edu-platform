@@ -265,3 +265,496 @@
     font-weight: 700;
   }
 }
+
+/* ==========================================================================
+   Кабинет ученика — Skillbox-inspired dashboard
+   --------------------------------------------------------------------------
+   Приветствие, большая карточка «Продолжить», компактная сводка и карточки
+   курсов. Данные и состояния (loading / error / revoked / certificate)
+   остаются прежними — меняется только подача.
+   ========================================================================== */
+
+.dashboard-page {
+  padding-top: 38px;
+  padding-bottom: 56px;
+}
+
+.dashboard-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+  margin-bottom: 30px;
+}
+
+.dashboard-kicker {
+  margin: 0 0 10px;
+  color: #6a6d78;
+  font-size: 11.5px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.dashboard-head h1 {
+  margin: 0;
+  max-width: 19ch;
+  font-size: clamp(32px, 4.2vw, 50px);
+  line-height: 1.02;
+  letter-spacing: -0.045em;
+}
+
+.dashboard-sub {
+  max-width: 58ch;
+  margin: 12px 0 0;
+  color: var(--muted);
+  font-size: 15.5px;
+  line-height: 1.55;
+}
+
+.dashboard-head-actions {
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding-top: 4px;
+}
+
+/* Большая карточка продолжения обучения. */
+.continue-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(260px, 36%);
+  min-height: 270px;
+  margin-bottom: 22px;
+  overflow: hidden;
+  border: 1px solid #e1e7f8;
+  border-radius: 30px;
+  background:
+    radial-gradient(520px 260px at 8% 10%, rgba(108, 124, 255, 0.12), transparent 65%),
+    linear-gradient(120deg, #eef2ff 0%, #f8f9ff 54%, #eef9ff 100%);
+  box-shadow: var(--shadow-sm);
+}
+
+.continue-copy {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 34px 36px;
+}
+
+.continue-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 12px;
+  border: 1px solid rgba(91, 108, 255, 0.16);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.76);
+  color: #4a55c8;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}
+
+.continue-copy h2 {
+  max-width: 20ch;
+  margin: 15px 0 9px;
+  font-size: clamp(25px, 3vw, 36px);
+  line-height: 1.08;
+  letter-spacing: -0.035em;
+}
+
+.continue-copy p {
+  max-width: 54ch;
+  margin: 0;
+  color: #656a79;
+  font-size: 14.5px;
+  line-height: 1.55;
+}
+
+.continue-progress {
+  width: 100%;
+  max-width: 390px;
+  margin: 18px 0 22px;
+}
+
+.continue-progress .progress {
+  height: 8px;
+  background: rgba(255, 255, 255, 0.9);
+}
+
+.continue-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 8px;
+  color: #666a75;
+  font-size: 12.5px;
+  font-weight: 700;
+}
+
+.continue-meta span:last-child {
+  color: #3138a8;
+}
+
+.continue-copy .btn-ink {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.continue-copy .btn-ink svg {
+  transition: transform 0.15s ease;
+}
+
+.continue-copy .btn-ink:hover svg {
+  transform: translateX(3px);
+}
+
+/* Правая часть — градиентная обложка с крупной буквой курса. */
+.continue-cover {
+  position: relative;
+  min-height: 270px;
+  overflow: hidden;
+}
+
+.continue-cover::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(180deg, rgba(20, 21, 26, 0.02), rgba(20, 21, 26, 0.22)),
+    radial-gradient(260px 160px at 78% 18%, rgba(255, 255, 255, 0.45), transparent 70%);
+  pointer-events: none;
+}
+
+.continue-cover .tag {
+  position: absolute;
+  z-index: 2;
+  top: 22px;
+  left: 24px;
+  padding: 6px 11px;
+  border-radius: 999px;
+  background: rgba(20, 21, 26, 0.22);
+  font-size: 12px;
+  font-weight: 800;
+  backdrop-filter: blur(8px);
+}
+
+.continue-cover-letter {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  color: rgba(255, 255, 255, 0.28);
+  font-size: clamp(110px, 15vw, 190px);
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: -0.08em;
+  transform: translateY(8px);
+}
+
+.continue-cover-percent {
+  position: absolute;
+  z-index: 2;
+  right: 20px;
+  bottom: 20px;
+  padding: 7px 12px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.9);
+  color: #272b36;
+  font-size: 12.5px;
+  font-weight: 800;
+  box-shadow: 0 6px 18px rgba(20, 21, 26, 0.12);
+}
+
+/* Компактная сводка. */
+.dashboard-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+  margin-bottom: 34px;
+}
+
+.dashboard-stat {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+  padding: 18px 20px;
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  background: #fff;
+  box-shadow: var(--shadow-sm);
+}
+
+.dashboard-stat-icon {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 15px;
+  background: #eef2ff;
+  color: #4d59d9;
+}
+
+.dashboard-stat-icon--violet {
+  background: #f2edff;
+  color: #7b4dd6;
+}
+
+.dashboard-stat-icon--green {
+  background: #e9f7ef;
+  color: #21784a;
+}
+
+.dashboard-stat b {
+  display: block;
+  font-size: 26px;
+  line-height: 1;
+  letter-spacing: -0.04em;
+}
+
+.dashboard-stat span:not(.dashboard-stat-icon) {
+  display: block;
+  margin-top: 6px;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 12.5px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dashboard-section-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 15px;
+}
+
+.dashboard-section-head h2 {
+  margin: 0;
+  font-size: 24px;
+  letter-spacing: -0.03em;
+}
+
+.dashboard-section-head span {
+  color: var(--muted);
+  font-size: 13.5px;
+  font-weight: 600;
+}
+
+/* Карточки курсов: обложка во всю ширину, ниже — прогресс и действия. */
+.enrolled-card {
+  overflow: hidden;
+  padding: 0;
+}
+
+.enrolled-card .enrolled-cover {
+  height: 152px;
+  border-radius: 0;
+}
+
+.enrolled-card .enrolled-cover::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, transparent 35%, rgba(20, 21, 26, 0.3));
+  pointer-events: none;
+}
+
+.enrolled-card .enrolled-cover .tag {
+  z-index: 1;
+  top: 16px;
+  left: 18px;
+}
+
+.enrolled-percent {
+  position: absolute;
+  z-index: 2;
+  top: 14px;
+  right: 14px;
+  padding: 5px 10px;
+  border-radius: 999px;
+  background: rgba(20, 21, 26, 0.5);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 800;
+  backdrop-filter: blur(8px);
+}
+
+.enrolled-body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  padding: 20px 22px 22px;
+}
+
+.enrolled-body h3 {
+  margin: 0 0 14px;
+  font-size: 18px;
+  line-height: 1.3;
+  letter-spacing: -0.02em;
+}
+
+.enrolled-body .progress {
+  height: 8px;
+}
+
+.enrolled-body .progress-meta {
+  margin-top: 8px;
+  font-size: 12.5px;
+}
+
+.enrolled-body .btn-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* Пустое состояние в кабинете — не пунктирная заглушка, а мягкая карточка. */
+.empty--dashboard {
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  margin-top: 0;
+  padding: 64px 24px;
+  border: 1px solid var(--line);
+  border-radius: 28px;
+  background:
+    radial-gradient(420px 220px at 50% 0%, rgba(91, 108, 255, 0.08), transparent 70%),
+    #fff;
+}
+
+.empty--dashboard .empty-illustration {
+  display: grid;
+  place-items: center;
+  width: 92px;
+  height: 92px;
+  margin-bottom: 4px;
+  border-radius: 30px;
+  background: #f2f4ff;
+  color: #4d59d9;
+}
+
+.empty--dashboard h2 {
+  margin: 0;
+  color: var(--fg);
+  font-size: 25px;
+  letter-spacing: -0.03em;
+}
+
+.empty--dashboard p {
+  max-width: 46ch;
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.55;
+}
+
+.empty--dashboard .btn {
+  margin-top: 10px;
+}
+
+@media (max-width: 860px) {
+  .continue-hero {
+    grid-template-columns: 1fr;
+  }
+
+  .continue-cover {
+    min-height: 190px;
+  }
+
+  .continue-copy {
+    padding: 28px;
+  }
+}
+
+@media (max-width: 760px) {
+  .dashboard-page {
+    padding-top: 26px;
+  }
+
+  .dashboard-head {
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  .dashboard-head h1 {
+    max-width: none;
+    font-size: clamp(30px, 9vw, 42px);
+  }
+
+  .dashboard-stats {
+    grid-template-columns: 1fr;
+  }
+
+  .dashboard-section-head {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 4px;
+  }
+}
+
+@media (max-width: 520px) {
+  .continue-copy {
+    padding: 24px 22px;
+  }
+
+  .continue-cover {
+    min-height: 160px;
+  }
+
+  .continue-cover-letter {
+    font-size: 110px;
+  }
+
+  .enrolled-body {
+    padding: 18px;
+  }
+}
+
+/* Один курс в библиотеке — широкая горизонтальная карточка, а не половина
+   пустой сетки. Несколько курсов остаются обычной двухколоночной сеткой. */
+.enrolled-grid--single {
+  grid-template-columns: 1fr;
+}
+
+.enrolled-grid--single .enrolled-card {
+  flex-direction: row;
+  min-height: 224px;
+}
+
+.enrolled-grid--single .enrolled-cover {
+  width: 34%;
+  min-width: 250px;
+  height: auto;
+  min-height: 224px;
+}
+
+.enrolled-grid--single .enrolled-body {
+  justify-content: center;
+}
+
+.enrolled-grid--single .enrolled-body .btn-row {
+  margin-top: 18px;
+  padding-top: 0;
+}
+
+@media (max-width: 760px) {
+  .enrolled-grid--single .enrolled-card {
+    flex-direction: column;
+    min-height: 0;
+  }
+
+  .enrolled-grid--single .enrolled-cover {
+    width: auto;
+    min-width: 0;
+    height: 152px;
+    min-height: 0;
+  }
+}

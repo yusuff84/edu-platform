@@ -345,7 +345,7 @@ export default function Course(): JSX.Element {
 
   return (
     <div className="wrap">
-      <main className="page">
+      <main className="page course-page">
         <div className="crumbs">
           <Link to="/">{t('catalog.title')}</Link> / {course.title}
         </div>
@@ -371,47 +371,81 @@ export default function Course(): JSX.Element {
 
         <div className="two">
           <div style={{ display: 'grid', gap: 22, alignContent: 'start' }}>
-            <section className="panel">
-              <div className="pill-row">
-                <span className="pill">Курс</span>
+            <section className="course-hero">
+              <div className="course-hero-copy">
+                <div className="pill-row">
+                  <span className="pill">Курс</span>
+                  {owned && <span className="course-owned-badge">Вы записаны</span>}
+                </div>
+                <h1>{course.title}</h1>
+                <p className="course-hero-lead">{course.description}</p>
+                {/* T82: публичный профиль автора курса (teacherId есть в Course). */}
+                <p className="meta course-hero-author">
+                  <span className="muted">{t('course.teacher')}:</span>{' '}
+                  <Link to={`/teachers/${course.teacherId}`}>
+                    {t('p9.teacher.openProfile')}
+                  </Link>
+                </p>
+                <div className="meta course-hero-meta">
+                  <span className="rating">★ {(course.avgRating ?? 0).toFixed(1)}</span>
+                  <span>({course.ratingsCount ?? 0})</span>
+                  <span>
+                    {lessonsCount}{' '}
+                    {pluralRu(
+                      lessonsCount,
+                      t('plural.lesson.one'),
+                      t('plural.lesson.few'),
+                      t('plural.lesson.many'),
+                    )}
+                  </span>
+                  <span>
+                    {modulesCount}{' '}
+                    {pluralRu(
+                      modulesCount,
+                      t('plural.module.one'),
+                      t('plural.module.few'),
+                      t('plural.module.many'),
+                    )}
+                  </span>
+                </div>
               </div>
-              {coverSrc && (
-                <img className="cover-hero" src={coverSrc} alt={t('p7.cover.alt')} />
-              )}
-              <h1 style={{ marginTop: 12 }}>{course.title}</h1>
-              <p className="muted">{course.description}</p>
-              {/* T82: публичный профиль автора курса (teacherId есть в Course). */}
-              <p className="meta">
-                <Link to={`/teachers/${course.teacherId}`}>{t('p9.teacher.openProfile')}</Link>
-              </p>
-              <div className="meta">
-                <span className="rating">★ {(course.avgRating ?? 0).toFixed(1)}</span>
-                <span>({course.ratingsCount ?? 0})</span>
-                <span>
-                  {lessonsCount}{' '}
-                  {pluralRu(
-                    lessonsCount,
-                    t('plural.lesson.one'),
-                    t('plural.lesson.few'),
-                    t('plural.lesson.many'),
-                  )}
-                </span>
-                <span>
-                  {modulesCount}{' '}
-                  {pluralRu(
-                    modulesCount,
-                    t('plural.module.one'),
-                    t('plural.module.few'),
-                    t('plural.module.many'),
-                  )}
-                </span>
+              <div
+                className={`course-hero-art ${coverSrc ? '' : `cover ${coverFor(course.slug)}`}`}
+                aria-hidden="true"
+              >
+                {coverSrc ? (
+                  <img className="course-hero-img" src={coverSrc} alt="" />
+                ) : (
+                  <span className="course-hero-letter">{course.title.charAt(0)}</span>
+                )}
+                <span className="course-hero-art-label">Edu Platform</span>
               </div>
             </section>
 
-            <section className="panel">
-              <h2>{t('course.program')}</h2>
+            <section className="panel course-program">
+              <div className="course-program-head">
+                <div>
+                  <h2>{t('course.program')}</h2>
+                  <p className="muted">
+                    {modulesCount}{' '}
+                    {pluralRu(
+                      modulesCount,
+                      t('plural.module.one'),
+                      t('plural.module.few'),
+                      t('plural.module.many'),
+                    )}{' '}
+                    · {lessonsCount}{' '}
+                    {pluralRu(
+                      lessonsCount,
+                      t('plural.lesson.one'),
+                      t('plural.lesson.few'),
+                      t('plural.lesson.many'),
+                    )}
+                  </p>
+                </div>
+              </div>
               {modules.length === 0 && <p className="muted">{t('learn.noLessons')}</p>}
-              <div style={{ marginTop: 12 }}>
+              <div className="course-program-list">
                 {modules.map((m, i) => {
                   const open = isOpen(m.id, i);
                   return (
