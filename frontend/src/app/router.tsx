@@ -1,4 +1,4 @@
-import { Suspense, lazy, useCallback, useEffect } from 'react';
+import { Suspense, lazy, useCallback, useEffect, useRef, useState } from 'react';
 import { Link, NavLink, Navigate, Outlet, createBrowserRouter, useLocation } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { getPublicSettings, logout } from '../api/client';
@@ -125,6 +125,11 @@ function userInitials(user: { displayName?: string; email: string }): string {
 
 function Layout(): JSX.Element {
   const qc = useQueryClient();
+  const location = useLocation();
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const mobileNavRef = useRef<HTMLElement>(null);
+  const burgerRef = useRef<HTMLButtonElement>(null);
+  const wasMobileNavOpen = useRef(false);
   // Один query ['me'] на всё приложение: Layout и гварды (RouteGuards.tsx)
   // используют общие meQueryOptions — без второго запроса и «моргания».
   const meQuery = useQuery(meQueryOptions);
@@ -140,9 +145,46 @@ function Layout(): JSX.Element {
     staleTime: 60_000,
   });
 
+  // Мобильное меню — часть шапки: закрываем его при переходе на другой
+  // маршрут и по Escape, чтобы оно не оставалось поверх новой страницы.
+  useEffect(() => {
+    setMobileNavOpen(false);
+  }, [location.pathname, location.search, location.hash]);
+
+  useEffect(() => {
+    if (!mobileNavOpen) return undefined;
+    const onKeyDown = (event: KeyboardEvent): void => {
+      if (event.key === 'Escape') setMobileNavOpen(false);
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [mobileNavOpen]);
+
+  // При открытии уводим фокус в первый пункт меню, при закрытии — возвращаем
+  // на burger. Так клавиатурный сценарий не теряется за полноэкранным scrim.
+  useEffect(() => {
+    if (mobileNavOpen) {
+      mobileNavRef.current?.querySelector<HTMLElement>('a')?.focus();
+    } else if (wasMobileNavOpen.current) {
+      burgerRef.current?.focus();
+    }
+    wasMobileNavOpen.current = mobileNavOpen;
+  }, [mobileNavOpen]);
+
+  // Пока открыт drawer, фон не прокручивается под ним.
+  useEffect(() => {
+    if (!mobileNavOpen) return undefined;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [mobileNavOpen]);
+
   // T18: обработчик стабилен между рендерами (qc из контекста не меняется) —
   // кнопка не пересоздаёт onClick при каждом обновлении ['me'] и навигации.
   const onLogout = useCallback(async (): Promise<void> => {
+    setMobileNavOpen(false);
     await logout();
     // resetQueries сбрасывает кэш ['me'] и перезапрашивает: после выхода
     // пользователь гарантированно исчезает из шапки и гвардов (401 → логин).
@@ -168,7 +210,15 @@ function Layout(): JSX.Element {
           </Link>
           {/* P11: aria-label описывает всю навигацию, а не только «Каталог».
               Литерал: отдельного ключа в ru.json нет (словарём владеет T02). */}
-          <nav className="nav" aria-label="Основная навигация">
+          <nav
+            ref={mobileNavRef}
+            id="primary-nav"
+            className={`nav${mobileNavOpen ? ' nav--open' : ''}`}
+            aria-label="Основная навигация"
+            onClick={(event) => {
+              if ((event.target as HTMLElement).closest('a')) setMobileNavOpen(false);
+            }}
+          >
             <NavLink to="/" end className={({ isActive }) => (isActive ? 'active' : '')}>
               {t('nav.catalog')}
             </NavLink>
@@ -202,6 +252,22 @@ function Layout(): JSX.Element {
                 {t('nav.admin')}
               </NavLink>
             )}
+            <div className="nav-mobile-auth">
+              {user ? (
+                <button
+                  type="button"
+                  className="nav-mobile-logout"
+                  onClick={() => void onLogout()}
+                >
+                  {t('nav.logout')}
+                </button>
+              ) : (
+                <>
+                  <Link to="/login">{t('nav.login')}</Link>
+                  <Link to="/register">Начать учиться</Link>
+                </>
+              )}
+            </div>
           </nav>
           <div className="top-actions">
             {user ? (
@@ -230,17 +296,40 @@ function Layout(): JSX.Element {
               </>
             ) : (
               <>
-                <Link className="btn btn-ghost btn-sm" to="/login">
+                <Link className="btn btn-ghost btn-sm topbar-auth" to="/login">
                   {t('nav.login')}
                 </Link>
-                <Link className="btn btn-primary btn-sm" to="/register">
+                <Link className="btn btn-primary btn-sm topbar-auth" to="/register">
                   Начать учиться
                 </Link>
               </>
             )}
+            <button
+              ref={burgerRef}
+              type="button"
+              className="topbar-burger"
+              aria-expanded={mobileNavOpen}
+              aria-controls="primary-nav"
+              aria-label={mobileNavOpen ? 'Закрыть меню' : 'Открыть меню'}
+              onClick={() => setMobileNavOpen((open) => !open)}
+            >
+              <span className="topbar-burger-lines" aria-hidden="true">
+                <span />
+                <span />
+                <span />
+              </span>
+            </button>
           </div>
         </div>
       </header>
+      {mobileNavOpen && (
+        <button
+          type="button"
+          className="nav-scrim"
+          aria-label="Закрыть меню"
+          onClick={() => setMobileNavOpen(false)}
+        />
+      )}
       <div id="content">
         {/* Граница ошибок поддерева: крах страницы не убивает шапку.
             Внутри — Suspense для ленивых маршрутов (T18): ошибка динамического
