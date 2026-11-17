@@ -465,7 +465,7 @@ export default function Catalog(): JSX.Element {
               </div>
             </div>
 
-            <div className="catalog-filters__group">
+            <div className="catalog-filters__group catalog-filters__group--rating">
               <span className="catalog-filters__label" id="catalog-rating-label">
                 {t('p8.catalog.rating')}
               </span>
@@ -533,7 +533,7 @@ export default function Catalog(): JSX.Element {
         <div className="count-line" ref={cardsRef}>
           <h2>{t('catalog.title')}</h2>
           <span aria-live="polite">
-            {t('p8.catalog.found')}: {total}
+            {t('p8.catalog.found')}: {data ? total : '—'}
           </span>
         </div>
 
@@ -542,7 +542,16 @@ export default function Catalog(): JSX.Element {
             <p role="status">{t('catalog.loading')}</p>
             <div className="catalog-skeletons" aria-hidden="true">
               {Array.from({ length: SKELETONS }, (_, i) => (
-                <div key={i} className="catalog-skeleton" />
+                <div key={i} className="catalog-skeleton">
+                  <div className="catalog-skeleton__cover" />
+                  <div className="catalog-skeleton__body">
+                    <span className="catalog-skeleton__badge" />
+                    <span className="catalog-skeleton__line" />
+                    <span className="catalog-skeleton__line catalog-skeleton__line--short" />
+                    <span className="catalog-skeleton__line catalog-skeleton__line--meta" />
+                    <span className="catalog-skeleton__line catalog-skeleton__line--price" />
+                  </div>
+                </div>
               ))}
             </div>
           </>
