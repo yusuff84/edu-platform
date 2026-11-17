@@ -17,7 +17,7 @@
 // (форма отзыва на странице курса /courses/{slug}). Панель показывается над
 // блоком урока и не скрывает навигацию по урокам.
 
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, NavLink, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
@@ -167,6 +167,19 @@ export default function Learn(): JSX.Element {
   // не запишет вердикт/ошибку «чужому» уроку.
   const activeLessonIdRef = useRef<string | undefined>(activeLesson?.id);
   activeLessonIdRef.current = activeLesson?.id;
+
+  // После перехода по программе/стрелкам курсор не остаётся на ссылке,
+  // а переносится на заголовок нового урока — скринридер сразу читает контент.
+  const lessonTitleRef = useRef<HTMLHeadingElement>(null);
+  const previousLessonIdRef = useRef<string | undefined>(activeLesson?.id);
+  useEffect(() => {
+    const id = activeLesson?.id;
+    if (!id) return;
+    if (previousLessonIdRef.current && previousLessonIdRef.current !== id) {
+      lessonTitleRef.current?.focus();
+    }
+    previousLessonIdRef.current = id;
+  }, [activeLesson?.id]);
 
   // Линейный «следующий» для кнопки продолжения, если сервер не дал nextLesson.
   const activeIndex = activeLesson ? flatLessons.indexOf(activeLesson) : -1;
@@ -596,6 +609,7 @@ export default function Learn(): JSX.Element {
                 <LessonView
                   key={`lesson-${currentLesson.id}`}
                   lesson={currentLesson}
+                  titleRef={lessonTitleRef}
                   // Спиннер только у того урока, чей запрос действительно летит:
                   // pending-мутация другого урока не блокирует текущий.
                   completing={

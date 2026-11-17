@@ -59,7 +59,7 @@ test('router: направления в футере ведут в катало�
 });
 
 test('router: у основной навигации осмысленный aria-label', () => {
-  assert.match(ROUTER_SOURCE, /<nav className="nav" aria-label="Основная навигация">/);
+  assert.match(ROUTER_SOURCE, /<nav\b[^>]*aria-label="Основная навигация"[^>]*>/);
 });
 
 // ---------- router: guard админ-ссылок в футере ----------

@@ -151,13 +151,71 @@ function Layout(): JSX.Element {
     setMobileNavOpen(false);
   }, [location.pathname, location.search, location.hash]);
 
+  // Мобильное меню — модальный drawer: удерживаем Tab внутри меню и burger,
+  // а фон делаем inert, чтобы клавиатура и скринридер не уходили на страницу.
   useEffect(() => {
     if (!mobileNavOpen) return undefined;
-    const onKeyDown = (event: KeyboardEvent): void => {
-      if (event.key === 'Escape') setMobileNavOpen(false);
+    const nav = mobileNavRef.current;
+    const burger = burgerRef.current;
+    if (!nav) return undefined;
+
+    const focusable = (): HTMLElement[] => {
+      const items = Array.from(
+        nav.querySelectorAll<HTMLElement>(
+          'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+        ),
+      ).filter((el) => el.getClientRects().length > 0);
+      if (burger && !burger.disabled && burger.getClientRects().length > 0) {
+        items.push(burger);
+      }
+      return items;
     };
+
+    const onKeyDown = (event: KeyboardEvent): void => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        setMobileNavOpen(false);
+        return;
+      }
+      if (event.key !== 'Tab') return;
+      const items = focusable();
+      if (items.length === 0) return;
+      const index = items.findIndex((el) => el === document.activeElement);
+      const nextIndex =
+        index === -1
+          ? event.shiftKey
+            ? items.length - 1
+            : 0
+          : (index + (event.shiftKey ? -1 : 1) + items.length) % items.length;
+      event.preventDefault();
+      items[nextIndex]?.focus();
+    };
+
+    // Если фокус оказался вне drawer (например, клик по фоновой ссылке),
+    // возвращаем его в меню; клик по scrim при этом всё равно закроет меню.
+    const onFocusIn = (event: FocusEvent): void => {
+      const target = event.target as Node | null;
+      if (!target || nav.contains(target) || burger?.contains(target)) return;
+      focusable()[0]?.focus();
+    };
+
+    const inertTargets = [
+      document.getElementById('content'),
+      document.querySelector<HTMLElement>('.footer'),
+    ].filter((el): el is HTMLElement => Boolean(el));
+    inertTargets.forEach((el) => {
+      el.inert = true;
+    });
+
     document.addEventListener('keydown', onKeyDown);
-    return () => document.removeEventListener('keydown', onKeyDown);
+    document.addEventListener('focusin', onFocusIn);
+    return () => {
+      document.removeEventListener('keydown', onKeyDown);
+      document.removeEventListener('focusin', onFocusIn);
+      inertTargets.forEach((el) => {
+        el.inert = false;
+      });
+    };
   }, [mobileNavOpen]);
 
   // При открытии уводим фокус в первый пункт меню, при закрытии — возвращаем

@@ -9,7 +9,7 @@
 // Оформление — Skillbox-style (panel/pill/btn из styles.css).
 
 import { useId, useState } from 'react';
-import type { ReactNode } from 'react';
+import type { ReactNode, Ref } from 'react';
 import Editor from 'react-simple-code-editor';
 import type { CompleteLessonInput, Lesson } from '../api/client';
 import { formatDate } from '../api/client';
@@ -23,6 +23,8 @@ interface Props {
   onComplete: (payload: CompleteLessonInput) => void | Promise<void>;
   /** Идёт отправка/проверка на сервере (кнопки заблокированы). */
   completing: boolean;
+  /** Заголовок урока: после перехода Learn.tsx ставит на него фокус. */
+  titleRef?: Ref<HTMLHeadingElement>;
 }
 
 // ---------- Безопасный markdown-рендер ----------
@@ -354,14 +356,21 @@ export function CodeEditor({
 
 // ---------- Урок ----------
 
-export default function LessonView({ lesson, onComplete, completing }: Props): JSX.Element {
+export default function LessonView({
+  lesson,
+  onComplete,
+  completing,
+  titleRef,
+}: Props): JSX.Element {
   if (lesson.kind === 'live') {
     const startsAt = lesson.startsAt;
     const inFuture = startsAt ? new Date(startsAt).getTime() > Date.now() : false;
     return (
       <section className="panel">
         <span className="pill live">{t('lesson.live')}</span>
-        <h3 style={{ marginTop: '10px' }}>{lesson.title}</h3>
+        <h3 ref={titleRef} tabIndex={-1} style={{ marginTop: '10px' }}>
+          {lesson.title}
+        </h3>
         {lesson.bodyMd && <Markdown source={lesson.bodyMd} />}
         {startsAt ? (
           <p>
@@ -395,7 +404,9 @@ export default function LessonView({ lesson, onComplete, completing }: Props): J
     const questions = lesson.quiz?.questions ?? [];
     return (
       <section className="panel">
-        <h3>{lesson.title}</h3>
+        <h3 ref={titleRef} tabIndex={-1}>
+          {lesson.title}
+        </h3>
         <p className="muted">{t('lesson.quiz')}</p>
         {lesson.bodyMd && <Markdown source={lesson.bodyMd} />}
         {questions.length === 0 ? (
@@ -416,7 +427,9 @@ export default function LessonView({ lesson, onComplete, completing }: Props): J
   if (lesson.kind === 'code') {
     return (
       <section className="panel">
-        <h3>{lesson.title}</h3>
+        <h3 ref={titleRef} tabIndex={-1}>
+          {lesson.title}
+        </h3>
         <p className="muted">{t('lesson.code')}</p>
         {/* Условие задачи — bodyMd; шаблон — codeTask.template (обязательно показываем). */}
         {lesson.bodyMd && (
@@ -443,7 +456,9 @@ export default function LessonView({ lesson, onComplete, completing }: Props): J
   // video_text по умолчанию
   return (
     <section className="panel">
-      <h3>{lesson.title}</h3>
+      <h3 ref={titleRef} tabIndex={-1}>
+        {lesson.title}
+      </h3>
       {lesson.videoUrl && (
         <video className="lesson-video" src={lesson.videoUrl} controls style={{ maxWidth: '100%' }} />
       )}

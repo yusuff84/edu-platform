@@ -80,15 +80,6 @@
   margin-top: 4px;
 }
 
-/* Заголовок «Мои курсы» + ссылка «Избранное» (MyCourses.tsx). */
-.cab-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 14px;
-}
-
 /* ---------- Скелетоны загрузки: та же сетка, что у карточек ---------- */
 
 .fav-skeletons {

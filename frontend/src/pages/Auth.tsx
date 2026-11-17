@@ -133,9 +133,15 @@ export function Login(): JSX.Element {
                   className="input"
                   type="email"
                   autoComplete="email"
+                  aria-invalid={errors.email ? true : undefined}
+                  aria-describedby={errors.email ? 'login-email-error' : undefined}
                   {...rf('email')}
                 />
-                {errors.email && <span className="err">{errors.email.message}</span>}
+                {errors.email && (
+                  <span id="login-email-error" className="err" role="alert">
+                    {errors.email.message}
+                  </span>
+                )}
               </div>
               <div className="field">
                 <label htmlFor="login-password">{t('auth.password')}</label>
@@ -144,9 +150,15 @@ export function Login(): JSX.Element {
                   className="input"
                   type="password"
                   autoComplete="current-password"
+                  aria-invalid={errors.password ? true : undefined}
+                  aria-describedby={errors.password ? 'login-password-error' : undefined}
                   {...rf('password')}
                 />
-                {errors.password && <span className="err">{errors.password.message}</span>}
+                {errors.password && (
+                  <span id="login-password-error" className="err" role="alert">
+                    {errors.password.message}
+                  </span>
+                )}
               </div>
               <div>
                 <button className="btn btn-primary" type="submit" disabled={mutation.isPending}>
@@ -261,9 +273,15 @@ export function Register(): JSX.Element {
                   className="input"
                   type="email"
                   autoComplete="email"
+                  aria-invalid={errors.email ? true : undefined}
+                  aria-describedby={errors.email ? 'register-email-error' : undefined}
                   {...rf('email')}
                 />
-                {errors.email && <span className="err">{errors.email.message}</span>}
+                {errors.email && (
+                  <span id="register-email-error" className="err" role="alert">
+                    {errors.email.message}
+                  </span>
+                )}
               </div>
               <div className="field">
                 <label htmlFor="register-password">{t('auth.password')}</label>
@@ -273,10 +291,17 @@ export function Register(): JSX.Element {
                   type="password"
                   autoComplete="new-password"
                   {...rf('password')}
-                  aria-describedby="pw-hint"
+                  aria-invalid={errors.password ? true : undefined}
+                  aria-describedby={
+                    errors.password ? 'pw-hint register-password-error' : 'pw-hint'
+                  }
                 />
                 <small id="pw-hint">{t('auth.passwordHint')}</small>
-                {errors.password && <span className="err">{errors.password.message}</span>}
+                {errors.password && (
+                  <span id="register-password-error" className="err" role="alert">
+                    {errors.password.message}
+                  </span>
+                )}
               </div>
               <div className="field">
                 <label htmlFor="register-invite">{t('auth.inviteToken')}</label>
