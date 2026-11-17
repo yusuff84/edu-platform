@@ -206,7 +206,7 @@ function Layout(): JSX.Element {
       <header className="topbar">
         <div className="wrap topbar-in">
           <Link className="logo" to="/">
-            <span className="logo-mark">E</span>Edu&nbsp;Platform
+            <span className="logo-mark">S</span>skillex.space
           </Link>
           {/* P11: aria-label описывает всю навигацию, а не только «Каталог».
               Литерал: отдельного ключа в ru.json нет (словарём владеет T02). */}
@@ -344,7 +344,7 @@ function Layout(): JSX.Element {
         <div className="wrap footer-in">
           <div>
             <Link className="logo" to="/">
-              <span className="logo-mark">E</span>Edu&nbsp;Platform
+              <span className="logo-mark">S</span>skillex.space
             </Link>
             <p>
               <small>
