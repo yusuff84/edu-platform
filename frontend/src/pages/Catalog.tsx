@@ -100,6 +100,23 @@ function categoryLabel(slug: string): string {
   return key ? t(key) : slug;
 }
 
+/** Не навязываем длинную прокрутку тем, кто просил reduce motion. */
+function prefersReducedMotion(): boolean {
+  return window.matchMedia?.('(prefers-reduced-motion: reduce)').matches === true;
+}
+
+/** Прокрутить к результатам и перевести на них фокус (клавиатура/скринридер). */
+function scrollToResults(
+  cards: HTMLDivElement | null,
+  title: HTMLHeadingElement | null,
+): void {
+  cards?.scrollIntoView({
+    behavior: prefersReducedMotion() ? 'auto' : 'smooth',
+    block: 'start',
+  });
+  title?.focus({ preventScroll: true });
+}
+
 export default function Catalog(): JSX.Element {
   // Каталог — точка входа: возвращаем базовые title/description после карточек.
   useSeo();
@@ -119,6 +136,8 @@ export default function Catalog(): JSX.Element {
   const [q, setQ] = useState(urlQ);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const cardsRef = useRef<HTMLDivElement>(null);
+  const resultsTitleRef = useRef<HTMLHeadingElement>(null);
+  const previousPageRef = useRef(page);
 
   // Изменение URL извне (кнопка «назад», внешняя ссылка) → текст в поле.
   useEffect(() => {
@@ -213,7 +232,10 @@ export default function Catalog(): JSX.Element {
     const id = location.hash.slice(1);
     if (!id) return;
     const timer = window.setTimeout(() => {
-      document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      document.getElementById(id)?.scrollIntoView({
+        behavior: prefersReducedMotion() ? 'auto' : 'smooth',
+        block: 'start',
+      });
     }, 0);
     return () => window.clearTimeout(timer);
   }, [location.hash]);
@@ -284,8 +306,16 @@ export default function Catalog(): JSX.Element {
   }
 
   function scrollToCards(): void {
-    cardsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    scrollToResults(cardsRef.current, resultsTitleRef.current);
   }
+
+  // Пагинация и сброс страницы при смене фильтра: после рендера новой
+  // страницы возвращаем фокус на заголовок результатов, а не теряем его.
+  useEffect(() => {
+    if (previousPageRef.current === page) return;
+    previousPageRef.current = page;
+    scrollToResults(cardsRef.current, resultsTitleRef.current);
+  }, [page]);
 
   return (
     <main className="page catalog-page">
@@ -330,7 +360,9 @@ export default function Catalog(): JSX.Element {
               href="#lead"
               onClick={(e) => {
                 e.preventDefault();
-                document.getElementById('lead')?.scrollIntoView({ behavior: 'smooth' });
+                document.getElementById('lead')?.scrollIntoView({
+                  behavior: prefersReducedMotion() ? 'auto' : 'smooth',
+                });
               }}
             >
               Помогите выбрать
@@ -465,7 +497,7 @@ export default function Catalog(): JSX.Element {
               </div>
             </div>
 
-            <div className="catalog-filters__group">
+            <div className="catalog-filters__group catalog-filters__group--rating">
               <span className="catalog-filters__label" id="catalog-rating-label">
                 {t('p8.catalog.rating')}
               </span>
@@ -531,9 +563,11 @@ export default function Catalog(): JSX.Element {
         </section>
 
         <div className="count-line" ref={cardsRef}>
-          <h2>{t('catalog.title')}</h2>
+          <h2 ref={resultsTitleRef} tabIndex={-1}>
+            {t('catalog.title')}
+          </h2>
           <span aria-live="polite">
-            {t('p8.catalog.found')}: {total}
+            {t('p8.catalog.found')}: {data ? total : '—'}
           </span>
         </div>
 
@@ -542,7 +576,16 @@ export default function Catalog(): JSX.Element {
             <p role="status">{t('catalog.loading')}</p>
             <div className="catalog-skeletons" aria-hidden="true">
               {Array.from({ length: SKELETONS }, (_, i) => (
-                <div key={i} className="catalog-skeleton" />
+                <div key={i} className="catalog-skeleton">
+                  <div className="catalog-skeleton__cover" />
+                  <div className="catalog-skeleton__body">
+                    <span className="catalog-skeleton__badge" />
+                    <span className="catalog-skeleton__line" />
+                    <span className="catalog-skeleton__line catalog-skeleton__line--short" />
+                    <span className="catalog-skeleton__line catalog-skeleton__line--meta" />
+                    <span className="catalog-skeleton__line catalog-skeleton__line--price" />
+                  </div>
+                </div>
               ))}
             </div>
           </>

@@ -12,7 +12,9 @@
   display: grid;
   grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, auto);
   gap: 16px 22px;
-  align-items: end;
+  /* Подписи всех групп начинаются с одной линии; иначе цена, рейтинг и
+     сортировка «пляшут» из-за разной высоты чипов. */
+  align-items: start;
 }
 
 .catalog-filters__group {
@@ -40,6 +42,18 @@
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+}
+
+/* Рейтинг — ровная сетка 2×2: четыре чипа в узкой колонке иначе
+   складываются в некрасивые 3+1. */
+.catalog-filters__group--rating .catalog-chips {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.catalog-filters__group--rating .catalog-chip {
+  width: 100%;
+  justify-content: center;
 }
 
 .catalog-page .catalog-chip {
@@ -97,8 +111,10 @@
 
 .catalog-filters__actions {
   display: flex;
-  align-items: flex-end;
+  align-items: flex-start;
   justify-content: flex-end;
+  /* Кнопка ниже невидимой подписи, на одной линии с контролами группы. */
+  padding-top: 28px;
 }
 
 .catalog-page .catalog-filters__actions .btn {
@@ -152,6 +168,10 @@
 @media (max-width: 620px) {
   .catalog-filters__grid {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .catalog-filters__actions {
+    padding-top: 0;
   }
 
   .catalog-page .catalog-filters {

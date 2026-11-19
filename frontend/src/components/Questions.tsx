@@ -406,7 +406,7 @@ export default function Questions({
               </span>
               <button
                 type="submit"
-                className="btn btn-primary"
+                className="btn btn-ink"
                 disabled={askMutation.isPending}
               >
                 {t('p9.qa.send')}
@@ -508,7 +508,7 @@ export default function Questions({
                       <div className="qa-actions">
                         <button
                           type="submit"
-                          className="btn btn-primary btn-sm"
+                          className="btn btn-ink btn-sm"
                           disabled={editQuestionMutation.isPending}
                         >
                           {t('p9.qa.save')}
@@ -627,7 +627,7 @@ export default function Questions({
                                 <div className="qa-actions">
                                   <button
                                     type="submit"
-                                    className="btn btn-primary btn-sm"
+                                    className="btn btn-ink btn-sm"
                                     disabled={editAnswerMutation.isPending}
                                   >
                                     {t('p9.qa.save')}
@@ -706,7 +706,7 @@ export default function Questions({
                       <div className="qa-actions">
                         <button
                           type="submit"
-                          className="btn btn-primary btn-sm"
+                          className="btn btn-ink btn-sm"
                           disabled={answerMutation.isPending}
                         >
                           {t('p9.qa.answer')}

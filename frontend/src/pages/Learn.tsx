@@ -17,7 +17,7 @@
 // (форма отзыва на странице курса /courses/{slug}). Панель показывается над
 // блоком урока и не скрывает навигацию по урокам.
 
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, NavLink, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
@@ -80,6 +80,9 @@ export default function Learn(): JSX.Element {
 
   const [verdictState, setVerdictState] = useState<VerdictState | null>(null);
   const [errorState, setErrorState] = useState<ErrorState | null>(null);
+  // На мобильных программа курса — раскрывающийся блок, а не постоянная
+  // карточка над уроком: она отнимала пол-экрана у самого урока.
+  const [programOpen, setProgramOpen] = useState(false);
 
   // Шарим кеш списка «моих курсов» с MyCourses.tsx (ключ в репозитории — 'my-courses').
   const myQuery = useQuery({ queryKey: ['my-courses'], queryFn: myCourses });
@@ -165,12 +168,26 @@ export default function Learn(): JSX.Element {
   const activeLessonIdRef = useRef<string | undefined>(activeLesson?.id);
   activeLessonIdRef.current = activeLesson?.id;
 
+  // После перехода по программе/стрелкам курсор не остаётся на ссылке,
+  // а переносится на заголовок нового урока — скринридер сразу читает контент.
+  const lessonTitleRef = useRef<HTMLHeadingElement>(null);
+  const previousLessonIdRef = useRef<string | undefined>(activeLesson?.id);
+  useEffect(() => {
+    const id = activeLesson?.id;
+    if (!id) return;
+    if (previousLessonIdRef.current && previousLessonIdRef.current !== id) {
+      lessonTitleRef.current?.focus();
+    }
+    previousLessonIdRef.current = id;
+  }, [activeLesson?.id]);
+
   // Линейный «следующий» для кнопки продолжения, если сервер не дал nextLesson.
   const activeIndex = activeLesson ? flatLessons.indexOf(activeLesson) : -1;
   const flatNext =
     activeIndex >= 0 && activeIndex + 1 < flatLessons.length
       ? flatLessons[activeIndex + 1]
       : undefined;
+  const flatPrev = activeIndex > 0 ? flatLessons[activeIndex - 1] : undefined;
 
   const mutation = useMutation({
     // P11: урок берём из переменных, а не из текущего activeLesson —
@@ -349,36 +366,47 @@ export default function Learn(): JSX.Element {
     <div className="wrap">
       <main className="page">
         <div className="crumbs">
-          <Link to="/">{t('nav.catalog')}</Link> / <span>{title}</span>
+          <Link to="/me">{t('nav.myCourses')}</Link> / <span>{title}</span>
         </div>
-        <h1>{title}</h1>
-        <div className="learn-progress">
-          <span className="muted">
-            {t('learn.progress')}: {progress ? `${percent}%` : '—'}
-          </span>
-          {progress ? (
-            <div
-              className="progress"
-              role="progressbar"
-              aria-valuemin={0}
-              aria-valuemax={100}
-              aria-valuenow={percent}
-              aria-label={`${t('learn.progress')}: ${percent}%`}
-            >
-              <div className="progress-bar" style={{ width: `${percent}%` }} />
+        <header className="learn-head">
+          <div className="learn-head-row">
+            <div>
+              <p className="learn-eyebrow">{t('learn.title')}</p>
+              <h1>{title}</h1>
+              <p className="learn-head-sub">
+                {currentLesson.moduleTitle} · Урок {activeIndex + 1} из {flatLessons.length}
+              </p>
             </div>
-          ) : (
-            /* Пока прогресс не загружен (или недоступен) — нейтральная полоса
-               без процентов: выдуманный «0 %» не показываем. */
-            <div
-              className={progressQuery.isError ? 'progress' : 'progress pf-progress-pending'}
-              role="progressbar"
-              aria-busy={!progressQuery.isError}
-              aria-valuetext={progressQuery.isError ? '—' : t('common.loading')}
-              aria-label={t('learn.progress')}
-            />
-          )}
-        </div>
+            <div className="learn-percent" aria-hidden={!progress}>
+              <b>{progress ? `${percent}%` : '—'}</b>
+              <span>{t('learn.progress')}</span>
+            </div>
+          </div>
+          <div className="learn-progress">
+            {progress ? (
+              <div
+                className="progress"
+                role="progressbar"
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-valuenow={percent}
+                aria-label={`${t('learn.progress')}: ${percent}%`}
+              >
+                <div className="progress-bar" style={{ width: `${percent}%` }} />
+              </div>
+            ) : (
+              /* Пока прогресс не загружен (или недоступен) — нейтральная полоса
+                 без процентов: выдуманный «0 %» не показываем. */
+              <div
+                className={progressQuery.isError ? 'progress' : 'progress pf-progress-pending'}
+                role="progressbar"
+                aria-busy={!progressQuery.isError}
+                aria-valuetext={progressQuery.isError ? '—' : t('common.loading')}
+                aria-label={t('learn.progress')}
+              />
+            )}
+          </div>
+        </header>
 
         {/* T39: панель финиша курса — над блоком урока, навигацию не прячет. */}
         {progress?.percent === 100 && (
@@ -391,7 +419,7 @@ export default function Learn(): JSX.Element {
               <p className="cert-finish-title">{t('p8.cert.done')}</p>
               {certificateNumber && (
                 <Link
-                  className="btn btn-primary"
+                  className="btn btn-ink"
                   to={`/certificates/${encodeURIComponent(certificateNumber)}`}
                 >
                   {t('p8.cert.open')}
@@ -412,7 +440,47 @@ export default function Learn(): JSX.Element {
         )}
 
         <div className="lesson-shell">
-          <nav className="side-nav" aria-label={t('course.program')}>
+          <button
+            type="button"
+            className="program-toggle"
+            aria-expanded={programOpen}
+            aria-controls="course-program"
+            onClick={() => setProgramOpen((open) => !open)}
+          >
+            <span className="program-toggle-text">
+              <span className="program-toggle-kicker">{t('course.program')}</span>
+              <span className="program-toggle-current">{currentLesson.title}</span>
+            </span>
+            <span className="program-toggle-meta">
+              <span>
+                {activeIndex + 1} / {flatLessons.length}
+              </span>
+              <svg
+                className="program-toggle-chevron"
+                width="16"
+                height="16"
+                viewBox="0 0 20 20"
+                fill="none"
+                aria-hidden="true"
+              >
+                <path
+                  d="m5 7.5 5 5 5-5"
+                  stroke="currentColor"
+                  strokeWidth="1.9"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+            </span>
+          </button>
+          <nav
+            id="course-program"
+            className={`side-nav${programOpen ? ' side-nav--open' : ''}`}
+            aria-label={t('course.program')}
+            onClick={(event) => {
+              if ((event.target as HTMLElement).closest('a')) setProgramOpen(false);
+            }}
+          >
             {modules.map((m) => (
               <div key={m.id}>
                 <span className="side-title">{m.title}</span>
@@ -457,6 +525,76 @@ export default function Learn(): JSX.Element {
           </nav>
           <div className="lesson-pane">
             {!activeLesson && <p>{t('learn.selectLesson')}</p>}
+            {!showLessonNotFound && activeLesson && (
+              <div className="lesson-toolbar">
+                <div className="lesson-toolbar-meta">
+                  <span className="pill">{t(`kind.${currentLesson.kind}`)}</span>
+                  <span className="lesson-toolbar-module">{currentLesson.moduleTitle}</span>
+                </div>
+                <div className="lesson-arrows">
+                  {flatPrev ? (
+                    <Link
+                      className="lesson-arrow"
+                      to={`/learn/${courseId}/${flatPrev.id}`}
+                      aria-label="Предыдущий урок"
+                      title="Предыдущий урок"
+                    >
+                      <svg width="18" height="18" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                        <path
+                          d="M12.5 4.5 7 10l5.5 5.5"
+                          stroke="currentColor"
+                          strokeWidth="1.9"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        />
+                      </svg>
+                    </Link>
+                  ) : (
+                    <span className="lesson-arrow is-disabled" aria-hidden="true">
+                      <svg width="18" height="18" viewBox="0 0 20 20" fill="none">
+                        <path
+                          d="M12.5 4.5 7 10l5.5 5.5"
+                          stroke="currentColor"
+                          strokeWidth="1.9"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        />
+                      </svg>
+                    </span>
+                  )}
+                  {flatNext ? (
+                    <Link
+                      className="lesson-arrow"
+                      to={`/learn/${courseId}/${flatNext.id}`}
+                      aria-label="Следующий урок"
+                      title="Следующий урок"
+                    >
+                      <svg width="18" height="18" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                        <path
+                          d="M7.5 4.5 13 10l-5.5 5.5"
+                          stroke="currentColor"
+                          strokeWidth="1.9"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        />
+                      </svg>
+                    </Link>
+                  ) : (
+                    <span className="lesson-arrow is-disabled" aria-hidden="true">
+                      <svg width="18" height="18" viewBox="0 0 20 20" fill="none">
+                        <path
+                          d="M7.5 4.5 13 10l-5.5 5.5"
+                          stroke="currentColor"
+                          strokeWidth="1.9"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        />
+                      </svg>
+                    </span>
+                  )}
+                </div>
+              </div>
+            )}
             {showLessonNotFound ? (
               <div role="alert" className="learn-notice">
                 <p className="error">{t('learn.lessonNotFound')}</p>
@@ -469,8 +607,9 @@ export default function Learn(): JSX.Element {
             ) : (
               <>
                 <LessonView
-                  key={currentLesson.id}
+                  key={`lesson-${currentLesson.id}`}
                   lesson={currentLesson}
+                  titleRef={lessonTitleRef}
                   // Спиннер только у того урока, чей запрос действительно летит:
                   // pending-мутация другого урока не блокирует текущий.
                   completing={
@@ -509,7 +648,7 @@ export default function Learn(): JSX.Element {
                 {verdict?.passed && passedNextLesson && (
                   <p>
                     <Link
-                      className="btn learn-next-link"
+                      className="btn btn-ink learn-next-link"
                       to={`/learn/${courseId}/${passedNextLesson.id}`}
                     >
                       {t('learn.nextLesson')}: {passedNextLesson.title}
@@ -519,7 +658,7 @@ export default function Learn(): JSX.Element {
                 {!verdict?.passed && flatNext && (
                   <p>
                     <Link
-                      className="btn learn-next-link"
+                      className="btn btn-ink learn-next-link"
                       to={`/learn/${courseId}/${flatNext.id}`}
                     >
                       {t('learn.continue')}: {flatNext.title}
@@ -529,7 +668,7 @@ export default function Learn(): JSX.Element {
 
                 {/* T72: Q&A под уроком, после навигации «Отметить пройденным». */}
                 <Questions
-                  key={currentLesson.id}
+                  key={`questions-${currentLesson.id}`}
                   courseId={courseId}
                   lessonId={currentLesson.id}
                   enrolled={Boolean(meCourse)}

@@ -355,7 +355,7 @@ export default function Reviews({
                   <div className="reviews-actions">
                     <button
                       type="submit"
-                      className="btn btn-primary btn-sm"
+                      className="btn btn-ink btn-sm"
                       disabled={replyMutation.isPending}
                     >
                       {t('p8.reviews.replySave')}
@@ -409,7 +409,10 @@ export default function Reviews({
           className="review-form form-grid"
           onSubmit={handleSubmit((v) => mutation.mutate(v))}
         >
-          <fieldset className="rating-group">
+          <fieldset
+            className="rating-group"
+            aria-describedby={errors.rating ? 'review-rating-error' : undefined}
+          >
             <legend>{t('reviews.yourRating')}</legend>
             {[1, 2, 3, 4, 5].map((n) => (
               <label key={n} className="radio">
@@ -422,15 +425,31 @@ export default function Reviews({
                 {n} ★
               </label>
             ))}
-            {errors.rating && <span className="error err">{errors.rating.message}</span>}
+            {errors.rating && (
+              <span id="review-rating-error" className="error err" role="alert">
+                {errors.rating.message}
+              </span>
+            )}
           </fieldset>
           <div className="field">
             <label htmlFor="review-text">{t('reviews.yourText')}</label>
-            <textarea id="review-text" className="input" {...register('body')} rows={4} cols={50} />
-            {errors.body && <span className="error err">{errors.body.message}</span>}
+            <textarea
+              id="review-text"
+              className="input"
+              {...register('body')}
+              rows={4}
+              cols={50}
+              aria-invalid={errors.body ? true : undefined}
+              aria-describedby={errors.body ? 'review-body-error' : undefined}
+            />
+            {errors.body && (
+              <span id="review-body-error" className="error err" role="alert">
+                {errors.body.message}
+              </span>
+            )}
           </div>
           <div>
-            <button type="submit" className="btn btn-primary" disabled={mutation.isPending}>
+            <button type="submit" className="btn btn-ink" disabled={mutation.isPending}>
               {t('reviews.submit')}
             </button>
           </div>

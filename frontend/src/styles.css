@@ -27,6 +27,8 @@
   --r-lg: 24px;
   --r-md: 18px;
   --r-sm: 14px;
+  /* Высота липкой шапки + воздух: единый отступ для sticky-панелей. */
+  --sticky-header-offset: 96px;
   --shadow-sm: 0 1px 2px rgba(20, 20, 20, 0.05);
   --shadow: 0 2px 6px rgba(20, 20, 20, 0.06), 0 16px 40px -12px rgba(20, 20, 20, 0.14);
   --shadow-pop: 0 8px 24px -6px rgba(20, 20, 20, 0.18);
@@ -338,29 +340,8 @@ a.sr-only:focus-visible {
   align-items: center;
 }
 
-/* T60: email — «чип»: длинный адрес не ломает шапку на 1280–1440,
-   обрезается многоточием (максимум зависит от ширины окна). */
-.user-email {
-  display: inline-flex;
-  align-items: center;
-  color: #fff;
-  font-size: 13.5px;
-  font-weight: 700;
-  /* P11: тёмная подложка сохраняет белый текст читаемым (AA). */
-  background: rgba(0, 0, 0, 0.18);
-  border: 1px solid rgba(255, 255, 255, 0.38);
-  border-radius: 999px;
-  padding: 8px 14px;
-  max-width: clamp(140px, 18vw, 260px);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  flex: none;
-}
-
 /* Кнопки/чип в шапке не сжимаются и не переносят подпись. */
-.topbar .btn,
-.topbar .user-email {
+.topbar .btn {
   flex: none;
   white-space: nowrap;
 }
@@ -1016,10 +997,10 @@ textarea.input {
   line-height: 1.55;
 }
 
-/* Плейсхолдеры во всех полях одинаковые. */
+/* Плейсхолдеры во всех полях одинаковые; цвет не ниже 4.5:1 на белом. */
 .input::placeholder,
 textarea.input::placeholder {
-  color: var(--faint);
+  color: var(--muted);
   font-weight: 500;
 }
 
@@ -1204,7 +1185,8 @@ textarea.input:focus {
 
 .buybox {
   position: sticky;
-  top: 20px;
+  /* Не уезжает под липкую шапку; отступ общий с другими sticky-панелями. */
+  top: var(--sticky-header-offset);
   display: grid;
   gap: 14px;
 }
@@ -1266,37 +1248,6 @@ textarea.input:focus {
 }
 
 /* ---------- cabinet ---------- */
-/* T18: класс .adm-stats удалён — не использовался ни в одной *.tsx
-   (проверено grep'ом по всему frontend/src). */
-.cab-stats {
-  display: grid;
-  gap: 12px;
-  margin: 16px 0 20px;
-  grid-template-columns: repeat(3, 1fr);
-}
-
-.cab-stats > div {
-  background: #fff;
-  border: 1px solid var(--line);
-  border-radius: 18px;
-  padding: 14px 18px;
-}
-
-.cab-stats b {
-  font-size: 22px;
-  display: block;
-  letter-spacing: -0.02em;
-}
-
-.cab-stats span {
-  color: var(--muted);
-  font-size: 13px;
-  font-weight: 700;
-}
-
-/* T18: блок .tabs (4 правила) удалён — класс tabs не используется в разметке
-   (SUPPORT_TABS в marketing.tsx — это константа, а не класс; tab-переключатели
-   каталога и marketing используют .seg). */
 
 .enrolled-grid {
   display: grid;
@@ -2324,7 +2275,7 @@ tr:last-child td {
   display: grid;
   grid-template-columns: 1.4fr 1fr 1fr 1fr;
   gap: 24px;
-  padding: 44px 0 40px;
+  padding: 44px 28px 40px;
   /* T60: колонки выровнены по верхнему краю независимо от числа ссылок. */
   align-items: start;
 }
@@ -2448,9 +2399,6 @@ tr:last-child td {
   .contact-grid {
     grid-template-columns: 1fr;
   }
-  .cab-stats {
-    grid-template-columns: 1fr 1fr;
-  }
 }
 
 /* T60: очень узкие экраны (360–560px): компактный промо-баннер, шапка
@@ -2477,13 +2425,429 @@ tr:last-child td {
   .top-actions {
     gap: 8px;
   }
-  .user-email {
-    max-width: 150px;
-    padding: 7px 10px;
-    font-size: 12.5px;
-  }
   .footer-in {
-    padding: 36px 0 32px;
+    padding: 36px 28px 32px;
     gap: 20px;
+  }
+}
+
+/* ==========================================================================
+   Skillbox-inspired refresh
+   --------------------------------------------------------------------------
+   Светлая «воздушная» оболочка, мягкие поверхности, аккуратные pill-кнопки
+   и спокойная навигация. Функциональные классы и старые селекторы сохранены:
+   слой идёт после базовых правил и меняет только оформление.
+   ========================================================================== */
+
+:root {
+  --bg: #f6f7fa;
+  --surface: #ffffff;
+  --fg: #14151a;
+  --muted: #686b75;
+  --faint: #a7a9b2;
+  --line: #e8e9ef;
+  --line-soft: #f1f2f6;
+  --soft-blue: #eef2ff;
+  --soft-blue-strong: #dfe6ff;
+  --progress-start: #5b6cff;
+  --progress-end: #9a7bff;
+  --shadow-sm: 0 1px 2px rgba(20, 21, 26, 0.04);
+  --shadow: 0 10px 30px -12px rgba(20, 21, 26, 0.18), 0 2px 6px rgba(20, 21, 26, 0.04);
+}
+
+html {
+  scroll-padding-top: 92px;
+}
+
+body {
+  background: var(--bg);
+  color: var(--fg);
+}
+
+/* Шапка: белая, с мягкой линией и «плавающими» pill-пунктами. */
+.topbar {
+  position: sticky;
+  top: 0;
+  /* Ниже слоёв модальных окон (40–100), иначе шапка перекрывает диалоги. */
+  z-index: 30;
+  background: rgba(255, 255, 255, 0.94);
+  border-bottom: 1px solid #eceef3;
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+}
+
+.topbar-in {
+  min-height: 76px;
+  gap: 18px;
+}
+
+.topbar .logo {
+  color: var(--fg);
+}
+
+.topbar .logo-mark {
+  background: var(--fg);
+  color: #fff;
+  border-radius: 12px;
+}
+
+.topbar .nav {
+  margin-left: 8px;
+}
+
+.topbar .nav a {
+  color: #6f727c;
+  font-size: 14px;
+  padding: 10px 15px;
+}
+
+.topbar .nav a.active,
+.topbar .nav a:hover {
+  background: #f2f3f7;
+  color: #111219;
+}
+
+.topbar :focus-visible {
+  outline-color: var(--brand);
+}
+
+.topbar .btn-ghost {
+  background: transparent;
+  border-color: #e4e5ea;
+  color: #191a1f;
+}
+
+.topbar .btn-ghost:hover {
+  background: #f5f6f9;
+  border-color: #d7d9e1;
+  color: #111219;
+}
+
+.topbar .btn-ghost:active:not(:disabled) {
+  background: #eceef3;
+}
+
+.top-actions {
+  gap: 8px;
+}
+
+.user-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding: 5px 10px 5px 5px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  color: var(--fg);
+  text-decoration: none;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.user-chip:hover {
+  background: #f5f6f9;
+  border-color: #eceef3;
+}
+
+.user-avatar {
+  width: 34px;
+  height: 34px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #4e5cf6, #9a7bff);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+
+.user-chip-text {
+  display: grid;
+  min-width: 0;
+  line-height: 1.15;
+}
+
+.user-chip-name {
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13.5px;
+  font-weight: 800;
+}
+
+.user-chip-sub {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.topbar-logout {
+  margin-left: 2px;
+}
+
+/* Кнопки: тёмная pill для основного действия в обучении и мягкая — рядом. */
+.btn-ink {
+  background: #14151a;
+  border-color: #14151a;
+  color: #fff;
+  box-shadow: 0 10px 22px -10px rgba(20, 21, 26, 0.45);
+}
+
+.btn-ink:hover {
+  background: #000;
+  border-color: #000;
+  color: #fff;
+}
+
+.btn-ink:active:not(:disabled) {
+  background: #000;
+  border-color: #000;
+}
+
+.btn-soft {
+  background: #f3f4f8;
+  border-color: #eceef3;
+  color: var(--fg);
+}
+
+.btn-soft:hover {
+  background: #e9ebf2;
+  border-color: #e0e3ec;
+  color: var(--fg);
+}
+
+/* Прогресс обучения — спокойный сине-фиолетовый градиент. */
+.progress {
+  height: 9px;
+  background: #eceef4;
+}
+
+.progress i,
+.progress-bar {
+  background: linear-gradient(90deg, var(--progress-start), var(--progress-end));
+}
+
+/* Поверхности становятся мягче и «чище». */
+.panel {
+  border-color: var(--line);
+  border-radius: 24px;
+  box-shadow: var(--shadow-sm);
+}
+
+@media (max-width: 560px) {
+  .topbar-in {
+    min-height: 64px;
+    gap: 12px;
+    row-gap: 4px;
+  }
+
+  .user-chip-text {
+    display: none;
+  }
+
+  .user-chip {
+    padding: 3px;
+  }
+
+  .topbar-logout {
+    padding-left: 14px;
+    padding-right: 14px;
+  }
+
+  /* На узком экране футер читается одной колонкой, а не сжатыми
+     двумя колонками, где бренд и контакты упираются в край. */
+  .footer-in {
+    grid-template-columns: 1fr;
+    gap: 26px;
+    padding: 32px 16px 28px;
+  }
+}
+
+/* Мобильная навигация: на узких экранах пункты меню складываются в
+   аккуратную выпадающую панель, а не исчезают совсем. */
+.nav-mobile-auth {
+  display: none;
+}
+
+.topbar-burger {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  flex: none;
+  padding: 0;
+  border: 1px solid #e4e5ea;
+  border-radius: 50%;
+  background: #fff;
+  color: #191a1f;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+
+.topbar-burger:hover {
+  background: #f5f6f9;
+  border-color: #d7d9e1;
+}
+
+.topbar-burger:active {
+  background: #eceef3;
+}
+
+.topbar-burger-lines {
+  position: relative;
+  display: block;
+  width: 18px;
+  height: 14px;
+}
+
+.topbar-burger-lines span {
+  position: absolute;
+  left: 0;
+  width: 100%;
+  height: 2px;
+  border-radius: 999px;
+  background: currentColor;
+  transition: top 0.18s ease, transform 0.18s ease, opacity 0.18s ease;
+}
+
+.topbar-burger-lines span:nth-child(1) {
+  top: 0;
+}
+
+.topbar-burger-lines span:nth-child(2) {
+  top: 6px;
+}
+
+.topbar-burger-lines span:nth-child(3) {
+  top: 12px;
+}
+
+.topbar-burger[aria-expanded='true'] .topbar-burger-lines span:nth-child(1) {
+  top: 6px;
+  transform: rotate(45deg);
+}
+
+.topbar-burger[aria-expanded='true'] .topbar-burger-lines span:nth-child(2) {
+  opacity: 0;
+}
+
+.topbar-burger[aria-expanded='true'] .topbar-burger-lines span:nth-child(3) {
+  top: 6px;
+  transform: rotate(-45deg);
+}
+
+.nav-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 25;
+  padding: 0;
+  border: 0;
+  background: rgba(20, 21, 26, 0.34);
+  cursor: default;
+  -webkit-backdrop-filter: blur(2px);
+  backdrop-filter: blur(2px);
+}
+
+.nav-scrim:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: -4px;
+}
+
+@media (max-width: 960px) {
+  .topbar-burger {
+    display: inline-flex;
+  }
+
+  .topbar-auth,
+  .topbar-logout,
+  .user-chip-text {
+    display: none;
+  }
+
+  .topbar .nav {
+    display: none;
+    position: absolute;
+    top: calc(100% + 8px);
+    left: 16px;
+    right: 16px;
+    z-index: 40;
+    flex-direction: column;
+    flex-wrap: nowrap;
+    gap: 2px;
+    margin: 0;
+    padding: 10px;
+    max-height: calc(100vh - 96px);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    background: #fff;
+    border: 1px solid #eceef3;
+    border-radius: 22px;
+    box-shadow: 0 24px 60px -24px rgba(20, 21, 26, 0.45);
+  }
+
+  .topbar .nav.nav--open {
+    display: flex;
+  }
+
+  .topbar .nav a {
+    display: block;
+    padding: 13px 14px;
+    border-radius: 14px;
+    font-size: 15px;
+  }
+
+  .topbar .nav-mobile-auth {
+    display: grid;
+    gap: 8px;
+    margin-top: 6px;
+    padding-top: 10px;
+    border-top: 1px solid #eceef3;
+  }
+
+  .topbar .nav-mobile-auth a {
+    padding: 12px 14px;
+    background: #f5f6f9;
+    color: #191a1f;
+    font-weight: 800;
+    text-align: center;
+    border-radius: 999px;
+  }
+
+  .topbar .nav-mobile-auth a:hover {
+    background: #eceef3;
+    color: #111219;
+  }
+
+  .topbar .nav-mobile-logout {
+    width: 100%;
+    padding: 12px 14px;
+    border: 1px solid #e4e5ea;
+    border-radius: 999px;
+    background: #fff;
+    color: #191a1f;
+    font: inherit;
+    font-weight: 800;
+    cursor: pointer;
+  }
+
+  .topbar .nav-mobile-logout:hover {
+    background: #f5f6f9;
+    border-color: #d7d9e1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .topbar {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+
+  .topbar-burger,
+  .topbar-burger-lines span {
+    transition: none;
   }
 }

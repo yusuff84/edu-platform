@@ -44,12 +44,13 @@ export function coverFor(key: string): string {
 /** Звёзды рейтинга: дробное значение округляется, 0 → «пока без оценок». */
 export function Stars({ value }: { value: number }): JSX.Element {
   const filled = Math.max(0, Math.min(5, Math.round(value)));
+  const ratingText = value > 0 ? value.toFixed(1) : t('catalog.ratingNo');
   return (
-    <span role="img" aria-label={`${t('a11y.ratingLabel')}: ${value.toFixed(1)}`}>
+    <span role="img" aria-label={`${t('a11y.ratingLabel')}: ${ratingText}`}>
       {'★'.repeat(filled)}
       {'☆'.repeat(5 - filled)}
       {' '}
-      <span>{value > 0 ? value.toFixed(1) : t('catalog.ratingNo')}</span>
+      <span>{ratingText}</span>
     </span>
   );
 }
@@ -128,6 +129,8 @@ export default function CourseCard({ course }: { course: CourseItem }): JSX.Elem
     course.description.length > 140
       ? `${course.description.slice(0, 140)}…`
       : course.description;
+  const favoriteLabel = t(favorite ? 'p9.fav.remove' : 'p9.fav.add');
+  const favoriteHint = user ? '' : `. ${t('p9.fav.loginHint')}`;
   const meta = [
     course.avgRating > 0
       ? `★ ${course.avgRating.toFixed(1).replace('.', ',')}`
@@ -143,7 +146,7 @@ export default function CourseCard({ course }: { course: CourseItem }): JSX.Elem
       <button
         type="button"
         className={`fav-btn${favorite ? ' is-active' : ''}`}
-        aria-label={t(favorite ? 'p9.fav.remove' : 'p9.fav.add')}
+        aria-label={`${favoriteLabel}: ${course.title}${favoriteHint}`}
         aria-pressed={favorite}
         title={user ? undefined : t('p9.fav.loginHint')}
         disabled={toggleFavorite.isPending}

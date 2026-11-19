@@ -1,4 +1,4 @@
-import { Suspense, lazy, useCallback, useEffect } from 'react';
+import { Suspense, lazy, useCallback, useEffect, useRef, useState } from 'react';
 import { Link, NavLink, Navigate, Outlet, createBrowserRouter, useLocation } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { getPublicSettings, logout } from '../api/client';
@@ -103,8 +103,33 @@ function RouteFallback(): JSX.Element {
   );
 }
 
+/** Короткое имя для шапки: displayName → локальная часть email. */
+function shortUserName(user: { displayName?: string; email: string }): string {
+  const displayName = user.displayName?.trim();
+  if (displayName) return displayName.split(/\s+/)[0];
+  const emailName = user.email.split('@')[0] ?? '';
+  return emailName ? emailName.charAt(0).toLocaleUpperCase('ru') + emailName.slice(1) : 'Профиль';
+}
+
+/** Инициалы для круглого аватара в шапке. */
+function userInitials(user: { displayName?: string; email: string }): string {
+  const source = user.displayName?.trim() || user.email.split('@')[0] || '';
+  const letters = source
+    .split(/[\s._-]+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part.charAt(0).toLocaleUpperCase('ru'))
+    .join('');
+  return letters || 'E';
+}
+
 function Layout(): JSX.Element {
   const qc = useQueryClient();
+  const location = useLocation();
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const mobileNavRef = useRef<HTMLElement>(null);
+  const burgerRef = useRef<HTMLButtonElement>(null);
+  const wasMobileNavOpen = useRef(false);
   // Один query ['me'] на всё приложение: Layout и гварды (RouteGuards.tsx)
   // используют общие meQueryOptions — без второго запроса и «моргания».
   const meQuery = useQuery(meQueryOptions);
@@ -120,9 +145,104 @@ function Layout(): JSX.Element {
     staleTime: 60_000,
   });
 
+  // Мобильное меню — часть шапки: закрываем его при переходе на другой
+  // маршрут и по Escape, чтобы оно не оставалось поверх новой страницы.
+  useEffect(() => {
+    setMobileNavOpen(false);
+  }, [location.pathname, location.search, location.hash]);
+
+  // Мобильное меню — модальный drawer: удерживаем Tab внутри меню и burger,
+  // а фон делаем inert, чтобы клавиатура и скринридер не уходили на страницу.
+  useEffect(() => {
+    if (!mobileNavOpen) return undefined;
+    const nav = mobileNavRef.current;
+    const burger = burgerRef.current;
+    if (!nav) return undefined;
+
+    const focusable = (): HTMLElement[] => {
+      const items = Array.from(
+        nav.querySelectorAll<HTMLElement>(
+          'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+        ),
+      ).filter((el) => el.getClientRects().length > 0);
+      if (burger && !burger.disabled && burger.getClientRects().length > 0) {
+        items.push(burger);
+      }
+      return items;
+    };
+
+    const onKeyDown = (event: KeyboardEvent): void => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        setMobileNavOpen(false);
+        return;
+      }
+      if (event.key !== 'Tab') return;
+      const items = focusable();
+      if (items.length === 0) return;
+      const index = items.findIndex((el) => el === document.activeElement);
+      const nextIndex =
+        index === -1
+          ? event.shiftKey
+            ? items.length - 1
+            : 0
+          : (index + (event.shiftKey ? -1 : 1) + items.length) % items.length;
+      event.preventDefault();
+      items[nextIndex]?.focus();
+    };
+
+    // Если фокус оказался вне drawer (например, клик по фоновой ссылке),
+    // возвращаем его в меню; клик по scrim при этом всё равно закроет меню.
+    const onFocusIn = (event: FocusEvent): void => {
+      const target = event.target as Node | null;
+      if (!target || nav.contains(target) || burger?.contains(target)) return;
+      focusable()[0]?.focus();
+    };
+
+    const inertTargets = [
+      document.getElementById('content'),
+      document.querySelector<HTMLElement>('.footer'),
+    ].filter((el): el is HTMLElement => Boolean(el));
+    inertTargets.forEach((el) => {
+      el.inert = true;
+    });
+
+    document.addEventListener('keydown', onKeyDown);
+    document.addEventListener('focusin', onFocusIn);
+    return () => {
+      document.removeEventListener('keydown', onKeyDown);
+      document.removeEventListener('focusin', onFocusIn);
+      inertTargets.forEach((el) => {
+        el.inert = false;
+      });
+    };
+  }, [mobileNavOpen]);
+
+  // При открытии уводим фокус в первый пункт меню, при закрытии — возвращаем
+  // на burger. Так клавиатурный сценарий не теряется за полноэкранным scrim.
+  useEffect(() => {
+    if (mobileNavOpen) {
+      mobileNavRef.current?.querySelector<HTMLElement>('a')?.focus();
+    } else if (wasMobileNavOpen.current) {
+      burgerRef.current?.focus();
+    }
+    wasMobileNavOpen.current = mobileNavOpen;
+  }, [mobileNavOpen]);
+
+  // Пока открыт drawer, фон не прокручивается под ним.
+  useEffect(() => {
+    if (!mobileNavOpen) return undefined;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [mobileNavOpen]);
+
   // T18: обработчик стабилен между рендерами (qc из контекста не меняется) —
   // кнопка не пересоздаёт onClick при каждом обновлении ['me'] и навигации.
   const onLogout = useCallback(async (): Promise<void> => {
+    setMobileNavOpen(false);
     await logout();
     // resetQueries сбрасывает кэш ['me'] и перезапрашивает: после выхода
     // пользователь гарантированно исчезает из шапки и гвардов (401 → логин).
@@ -144,11 +264,19 @@ function Layout(): JSX.Element {
       <header className="topbar">
         <div className="wrap topbar-in">
           <Link className="logo" to="/">
-            <span className="logo-mark">E</span>Edu&nbsp;Platform
+            <span className="logo-mark">S</span>skillex.space
           </Link>
           {/* P11: aria-label описывает всю навигацию, а не только «Каталог».
               Литерал: отдельного ключа в ru.json нет (словарём владеет T02). */}
-          <nav className="nav" aria-label="Основная навигация">
+          <nav
+            ref={mobileNavRef}
+            id="primary-nav"
+            className={`nav${mobileNavOpen ? ' nav--open' : ''}`}
+            aria-label="Основная навигация"
+            onClick={(event) => {
+              if ((event.target as HTMLElement).closest('a')) setMobileNavOpen(false);
+            }}
+          >
             <NavLink to="/" end className={({ isActive }) => (isActive ? 'active' : '')}>
               {t('nav.catalog')}
             </NavLink>
@@ -182,14 +310,43 @@ function Layout(): JSX.Element {
                 {t('nav.admin')}
               </NavLink>
             )}
+            <div className="nav-mobile-auth">
+              {user ? (
+                <button
+                  type="button"
+                  className="nav-mobile-logout"
+                  onClick={() => void onLogout()}
+                >
+                  {t('nav.logout')}
+                </button>
+              ) : (
+                <>
+                  <Link to="/login">{t('nav.login')}</Link>
+                  <Link to="/register">Начать учиться</Link>
+                </>
+              )}
+            </div>
           </nav>
           <div className="top-actions">
             {user ? (
               <>
-                <span className="user-email">{user.email}</span>{' '}
+                <Link
+                  className="user-chip"
+                  to="/profile"
+                  title={user.email}
+                  aria-label={`Профиль: ${shortUserName(user)}`}
+                >
+                  <span className="user-avatar" aria-hidden="true">
+                    {userInitials(user)}
+                  </span>
+                  <span className="user-chip-text">
+                    <span className="user-chip-name">{shortUserName(user)}</span>
+                    <span className="user-chip-sub">Профиль</span>
+                  </span>
+                </Link>
                 <button
                   type="button"
-                  className="btn btn-ghost btn-sm"
+                  className="btn btn-ghost btn-sm topbar-logout"
                   onClick={() => void onLogout()}
                 >
                   {t('nav.logout')}
@@ -197,17 +354,40 @@ function Layout(): JSX.Element {
               </>
             ) : (
               <>
-                <Link className="btn btn-ghost btn-sm" to="/login">
+                <Link className="btn btn-ghost btn-sm topbar-auth" to="/login">
                   {t('nav.login')}
                 </Link>
-                <Link className="btn btn-primary btn-sm" to="/register">
+                <Link className="btn btn-primary btn-sm topbar-auth" to="/register">
                   Начать учиться
                 </Link>
               </>
             )}
+            <button
+              ref={burgerRef}
+              type="button"
+              className="topbar-burger"
+              aria-expanded={mobileNavOpen}
+              aria-controls="primary-nav"
+              aria-label={mobileNavOpen ? 'Закрыть меню' : 'Открыть меню'}
+              onClick={() => setMobileNavOpen((open) => !open)}
+            >
+              <span className="topbar-burger-lines" aria-hidden="true">
+                <span />
+                <span />
+                <span />
+              </span>
+            </button>
           </div>
         </div>
       </header>
+      {mobileNavOpen && (
+        <button
+          type="button"
+          className="nav-scrim"
+          aria-label="Закрыть меню"
+          onClick={() => setMobileNavOpen(false)}
+        />
+      )}
       <div id="content">
         {/* Граница ошибок поддерева: крах страницы не убивает шапку.
             Внутри — Suspense для ленивых маршрутов (T18): ошибка динамического
@@ -222,7 +402,7 @@ function Layout(): JSX.Element {
         <div className="wrap footer-in">
           <div>
             <Link className="logo" to="/">
-              <span className="logo-mark">E</span>Edu&nbsp;Platform
+              <span className="logo-mark">S</span>skillex.space
             </Link>
             <p>
               <small>
