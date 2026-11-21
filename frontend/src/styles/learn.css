@@ -773,3 +773,31 @@
     margin: 14px 0;
   }
 }
+
+/* Кадр из видео в карточке урока (scripts/generate-video-posters.sh):
+   растянут на всю карточку, кнопка ▶ и галочка «пройдено» — поверх. */
+.study-overview-visual .video-poster {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.study-overview-visual:has(.video-poster)::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0) 40%, rgba(0, 0, 0, 0.28));
+}
+
+.study-overview-visual-symbol,
+.study-overview-done {
+  z-index: 1;
+}
+
+.study-overview-visual:has(.video-poster) .study-overview-visual-symbol {
+  background: rgba(20, 20, 20, 0.45) !important;
+  -webkit-backdrop-filter: blur(4px);
+  backdrop-filter: blur(4px);
+}

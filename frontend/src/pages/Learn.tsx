@@ -30,6 +30,7 @@ import {
 import type { CompleteLessonInput, CompleteResult, Lesson } from '../api/client';
 import { courseProgress } from '../api/meExtra';
 import LessonView from '../components/LessonView';
+import { VideoPoster } from '../components/VideoPoster';
 import Questions from '../components/Questions';
 import { t } from '../i18n/t';
 import { useSeo } from '../app/useSeo';
@@ -368,6 +369,7 @@ export default function Learn(): JSX.Element {
                       return (
                         <Link key={lesson.id} className="study-overview-lesson" to={`/learn/${courseId}/${lesson.id}`}>
                           <span className={`study-overview-visual ${lesson.videoUrl ? 'has-video' : ''}`} aria-hidden="true">
+                            <VideoPoster videoUrl={lesson.videoUrl} />
                             <span className="study-overview-visual-symbol">{lesson.videoUrl ? '▶' : lesson.kind === 'quiz' ? '?' : '≡'}</span>
                             {done && <span className="study-overview-done">✓</span>}
                           </span>

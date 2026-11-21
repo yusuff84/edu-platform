@@ -22,6 +22,7 @@ import SimilarCourses from '../components/SimilarCourses';
 import { t } from '../i18n/t';
 import { pluralRu } from '../i18n/plural';
 import { DEFAULT_DESCRIPTION, useSeo } from '../app/useSeo';
+import { videoPosterUrl } from '../app/media';
 import '../styles/catalog.css';
 import '../styles/preview.css';
 import '../styles/promo.css';
@@ -702,6 +703,7 @@ export default function Course(): JSX.Element {
                   {previewQuery.data.lesson.videoUrl && (
                     <video
                       className="preview-video"
+                      poster={videoPosterUrl(previewQuery.data.lesson.videoUrl) ?? undefined}
                       controls
                       playsInline
                       preload="metadata"

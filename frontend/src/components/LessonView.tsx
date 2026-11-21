@@ -13,6 +13,7 @@ import type { CompleteLessonInput, Lesson } from '../api/client';
 import { formatDate } from '../api/client';
 import { t } from '../i18n/t';
 import '../styles/learn.css';
+import { videoPosterUrl } from '../app/media';
 
 interface Props {
   lesson: Lesson;
@@ -482,6 +483,7 @@ export default function LessonView({ lesson, onComplete, completing, done }: Pro
         <video
           className="lesson-video"
           src={lesson.videoUrl}
+          poster={videoPosterUrl(lesson.videoUrl) ?? undefined}
           controls
           playsInline
           preload="metadata"
