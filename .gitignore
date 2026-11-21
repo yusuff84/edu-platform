@@ -28,3 +28,6 @@ frontend/playwright-report/
 
 # saved third-party reference page (not our code)
 Skillbox*
+
+# Prebuilt production artifacts remain on the server; do not publish binaries.
+/artifacts/
