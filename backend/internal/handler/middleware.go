@@ -250,6 +250,8 @@ func NewRouter(app *App) http.Handler {
 		app.RegisterLeadsRoutes(r)
 		// Расширенная админка: пользователи, прогресс, сертификаты, курсы, тексты сайта (handler/admin_ops.go).
 		app.RegisterAdminOpsRoutes(r)
+		// MCP-сервер для нейросетей: POST /mcp по токену администратора + управление токенами (handler/mcp.go).
+		app.RegisterMCPRoutes(r)
 	})
 	return r
 }
@@ -708,6 +710,13 @@ func (a *App) csrfProtect(next http.Handler) http.Handler {
 		// подпись проверяет T09. Проверяем по пути запроса — RoutePattern
 		// в chi-middleware ещё не заполнен.
 		if strings.Contains(r.URL.Path, "/payments/webhook/") {
+			next.ServeHTTP(w, r)
+			return
+		}
+		// MCP-эндпоинт авторизуется только токеном в заголовке Authorization
+		// (cookie-сессии там не принимаются), поэтому CSRF к нему неприменим:
+		// MCP-клиенты нейросетей шлют запросы без Origin.
+		if strings.HasSuffix(r.URL.Path, "/api/v1/mcp") {
 			next.ServeHTTP(w, r)
 			return
 		}

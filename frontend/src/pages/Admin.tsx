@@ -22,6 +22,7 @@ import {
 import { listInvites, refundPayment, revokeInvite } from '../api/adminActions';
 import { AdminLeads } from '../components/AdminLeads';
 import { AdminSiteSettings } from '../components/AdminSiteSettings';
+import { AdminMcp } from '../components/AdminMcp';
 import type { AdminInviteRow, AdminInviteStatus } from '../api/adminActions';
 import type {
   Course,
@@ -612,6 +613,7 @@ export default function Admin(): JSX.Element {
 
       <nav className="admin-nav" aria-label={t('cabinet.adminTitle')}>
         <a href="#leads">Заявки</a>
+        <a href="#mcp">MCP для нейросети</a>
         <a href="#queue">{t('admin.reviewQueue')}</a>
         <a href="#journal">{t('admin.journal')}</a>
         <a href="#settings">{t('admin.settingsTitle')}</a>
@@ -630,6 +632,9 @@ export default function Admin(): JSX.Element {
 
       {/* ---------- 0. Заявки с главной («Поможем подобрать курс») ---------- */}
       <AdminLeads />
+
+      {/* ---------- MCP: управление курсами через нейросеть ---------- */}
+      <AdminMcp />
 
       {/* ---------- 1. Очередь модерации ---------- */}
       <section id="queue" className="admin-section panel">

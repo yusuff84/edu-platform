@@ -1212,3 +1212,54 @@ video {
   width: 150px;
   height: 125px;
 }
+
+/* ---------- MCP в админке ---------- */
+.admin-mcp h3 {
+  margin: 18px 0 8px;
+  font-size: 16px;
+}
+
+.mcp-token {
+  margin-top: 12px;
+  padding: 14px;
+  border-radius: 14px;
+  background: #fff8e1;
+  border: 1px solid #f5d27a;
+}
+
+.mcp-token p {
+  margin: 0 0 8px;
+}
+
+.mcp-code {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: #141414;
+  color: #e9e9ef;
+  margin-bottom: 10px;
+}
+
+.mcp-code code,
+.mcp-code pre {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  font-family: ui-monospace, 'Cascadia Code', Consolas, monospace;
+  font-size: 12.5px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  color: inherit;
+  background: none;
+}
+
+.mcp-code .btn {
+  flex: none;
+}
+
+.admin-mcp .aua-course.is-revoked {
+  opacity: 0.55;
+}

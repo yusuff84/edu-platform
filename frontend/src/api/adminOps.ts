@@ -92,3 +92,26 @@ export function adminGetSiteSettings() {
 export function adminPutSiteSettings(settings: SiteSettings) {
   return apiFetch<{ settings: SiteSettings }>('/admin/site-settings', json('PUT', { settings }));
 }
+
+export type McpToken = {
+  id: string;
+  userEmail: string;
+  name: string;
+  prefix: string;
+  createdAt: string;
+  lastUsedAt: string | null;
+  revokedAt: string | null;
+};
+
+export function adminListMcpTokens() {
+  return apiFetch<{ items: McpToken[] }>('/admin/mcp-tokens');
+}
+
+/** Токен возвращается один раз — дальше в списке виден только префикс. */
+export function adminCreateMcpToken(name: string) {
+  return apiFetch<{ token: string; item: McpToken }>('/admin/mcp-tokens', json('POST', { name }));
+}
+
+export function adminRevokeMcpToken(id: string) {
+  return apiFetch<void>(`/admin/mcp-tokens/${encodeURIComponent(id)}`, json('DELETE'));
+}

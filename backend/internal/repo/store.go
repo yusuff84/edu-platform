@@ -64,6 +64,8 @@ type Store struct {
 	leads []*Lead
 	// Редактируемые тексты сайта (admin_ops.go).
 	siteSettings map[string]string
+	// Токены MCP-доступа (api_tokens.go).
+	apiTokens []*APIToken
 
 	// lastCreatedAt — источник монотонного времени создания в in-memory
 	// режиме: см. nextCreatedAt.

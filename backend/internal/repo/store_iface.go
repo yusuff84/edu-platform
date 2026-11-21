@@ -352,6 +352,14 @@ type StoreAPI interface {
 	GetSiteSettings() map[string]string
 	SetSiteSettings(kv map[string]string) error
 
+	// --- Токены MCP-доступа (019_api_tokens.sql) ---
+
+	CreateAPIToken(userID, name, hash, prefix string) (*APIToken, error)
+	GetAPITokenByHash(hash string) (*APIToken, bool)
+	ListAPITokens() []*APIToken
+	RevokeAPIToken(id string) bool
+	TouchAPIToken(id string)
+
 	// ---- T77: аналитика учителя ----
 
 	// TeacherOverview — сводка преподавателя одним вызовом: курсы по
