@@ -37,14 +37,12 @@ header nav a[aria-current='page'] {
 /* Ссылки «на главную» внутри центрированных экранов — как текстовые ссылки
    в остальном каркасе (см. .page a:not(.btn) в styles.css). */
 .shell-center p a {
-  color: var(--brand-dark);
-  text-decoration: underline;
-  text-underline-offset: 2px;
+  color: inherit;
   font-weight: 600;
 }
 
 .shell-center p a:hover {
-  color: var(--brand);
+  color: inherit;
 }
 
 /* Действия экранов (кнопки ошибки/gоварда). В разметке здесь <button> и

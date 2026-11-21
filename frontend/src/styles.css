@@ -131,25 +131,24 @@ h3 {
   color: var(--muted);
 }
 
-/* Links without a component-specific style inherit the site's palette rather
-   than the browser's default blue/purple (including visited links). */
+/* Text links follow the surrounding text rather than browser blue or
+   brand red; no link is underlined, including visited and hover states.
+   Keep the existing visible keyboard focus outline. */
 a:where(:link, :visited) {
   color: inherit;
-  text-decoration-color: currentColor;
+  text-decoration: none !important;
 }
 
 .page p a:not(.btn),
 .page li a:not(.btn),
 .empty a:not(.btn) {
-  color: var(--brand-dark);
-  text-decoration: underline;
-  text-underline-offset: 2px;
+  color: inherit;
 }
 
 .page p a:not(.btn):hover,
 .page li a:not(.btn):hover,
 .empty a:not(.btn):hover {
-  color: var(--brand);
+  color: inherit;
 }
 
 .error {
