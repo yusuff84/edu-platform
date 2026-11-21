@@ -358,3 +358,63 @@ main.ae-admin {
     overflow: visible;
   }
 }
+
+/* ---------- Ручная выдача доступа к курсу ---------- */
+.ae-grant {
+  margin-bottom: 1rem;
+}
+
+.ae-grant h2 {
+  margin-bottom: 4px;
+}
+
+.ae-grant-hint {
+  margin: 0 0 12px;
+  font-size: 14px;
+}
+
+.ae-grant-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.75rem;
+}
+
+.ae-grant-email {
+  flex: 1 1 14rem;
+}
+
+.ae-grant-course {
+  flex: 1 1 16rem;
+}
+
+.ae-grant-course .input {
+  width: 100%;
+}
+
+.ae-grant-ok {
+  margin: 12px 0 0;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: #e4f5ea;
+  color: #14663a;
+  font-weight: 700;
+}
+
+@media (max-width: 720px) {
+  .ae-grant-form {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .ae-grant-form .btn {
+    width: 100%;
+  }
+}
+
+@media (max-width: 720px) {
+  /* В колонке flex-basis (14–16rem) превращался в высоту поля. */
+  .ae-grant-form > * {
+    flex: none;
+  }
+}

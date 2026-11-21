@@ -20,6 +20,7 @@ import type {
   AdminEnrollmentStatus,
 } from '../api/adminEnrollments';
 import { listAdminCourses } from '../api/adminConsole';
+import { AdminGrantAccess } from '../components/AdminGrantAccess';
 import { t } from '../i18n/t';
 import type { RuKey } from '../i18n/t';
 // T59: общий компонент выгрузки CSV (T40) — используется как есть,
@@ -336,6 +337,12 @@ export default function AdminEnrollments(): JSX.Element {
             <Link to="/admin">{t('cabinet.adminTitle')}</Link>
           </p>
           <h1>{t('adminEnrollments.title')}</h1>
+
+          {/* Ручная выдача доступа (в т.ч. к платному курсу) без оплаты. */}
+          <AdminGrantAccess
+            courses={courses.data?.items ?? []}
+            onGranted={() => void qc.invalidateQueries({ queryKey: LIST_KEY })}
+          />
 
           <section className="panel">
             {/* ---------- Фильтры ---------- */}

@@ -85,3 +85,28 @@ export function unrevokeEnrollment(
     { method: 'POST' },
   );
 }
+
+/** Ответ ручной выдачи доступа POST /admin/enrollments/grant. */
+export type GrantEnrollmentResponse = {
+  studentId: string;
+  email: string;
+  courseId: string;
+  courseTitle: string;
+  status: 'active';
+  /** Запись создана сейчас (раньше доступа не было). */
+  created: boolean;
+  /** Доступ уже был активен — ничего не изменилось. */
+  wasActive: boolean;
+};
+
+/**
+ * POST /admin/enrollments/grant — открыть пользователю доступ к курсу без
+ * оплаты (в т.ч. к платному; отозванный доступ восстанавливается).
+ * 404 — пользователь не зарегистрирован или курса нет; 400 — черновик.
+ */
+export function grantEnrollment(email: string, courseId: string): Promise<GrantEnrollmentResponse> {
+  return apiFetch<GrantEnrollmentResponse>('/admin/enrollments/grant', {
+    method: 'POST',
+    body: JSON.stringify({ email: email.trim(), courseId }),
+  });
+}
