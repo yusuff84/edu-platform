@@ -13,6 +13,8 @@ import { useQueries, useQuery } from '@tanstack/react-query';
 import { ApiError, myCourses, me } from '../api/client';
 import { courseProgress } from '../api/meExtra';
 import { coverFor } from '../components/CourseCard';
+import { ContinueTile } from '../components/ContinueTile';
+import { coverUrl } from '../api/teacherCover';
 import { t } from '../i18n/t';
 import { useSeo } from '../app/useSeo';
 import '../styles/profile.css';
@@ -115,17 +117,16 @@ export default function MyCourses(): JSX.Element {
           <div className="learning-dashboard-continue">
             <h2>Продолжить обучение</h2>
             <div className="learning-dashboard-tiles">
-              {items.map((item, i) => ({ item, progress: progressQueries[i] })).filter(({ progress }) => !(progress.error instanceof ApiError && progress.error.status === 403)).slice(0, 3).map(({ item, progress }) => {
-                const next = progress.data?.nextLessonId;
-                const href = next ? `/learn/${item.course.id}/${next}` : `/learn/${item.course.id}`;
-                return (
-                  <Link className="learning-dashboard-tile" key={item.course.id} to={href}>
-                    <span className={`learning-dashboard-tile-art ${coverFor(item.course.slug || item.course.id)}`} aria-hidden="true">▶</span>
-                    <span className="learning-dashboard-tile-name">{item.course.title}</span>
-                    <strong>{progress.data ? `${progress.data.percent}% пройдено` : t('common.loading')}</strong>
-                  </Link>
-                );
-              })}
+              {items.map((item, i) => ({ item, progress: progressQueries[i] })).filter(({ progress }) => !(progress.error instanceof ApiError && progress.error.status === 403)).slice(0, 3).map(({ item, progress }) => (
+                <ContinueTile
+                  key={item.course.id}
+                  courseId={item.course.id}
+                  courseSlug={item.course.slug}
+                  courseTitle={item.course.title}
+                  nextLessonId={progress.data?.nextLessonId}
+                  percent={progress.data?.percent}
+                />
+              ))}
             </div>
           </div>
         </section>
@@ -176,12 +177,16 @@ export default function MyCourses(): JSX.Element {
 
             return (
               <div key={course.id} className="panel learning-dashboard-course">
-                <div
-                  className={`cover ${coverFor(course.slug || course.id)} enrolled-cover`}
-                  aria-hidden="true"
-                >
-                  <span className="tag">Курс</span>
-                </div>
+                {/* Обложка курса — его «лого»; без обложки — фирменный градиент. */}
+                <Link to={href} className="ldc-cover" aria-hidden="true" tabIndex={-1}>
+                  {coverUrl(course.coverPath) ? (
+                    <img src={coverUrl(course.coverPath)} alt="" loading="lazy" />
+                  ) : (
+                    <span className={`cover ${coverFor(course.slug || course.id)}`} />
+                  )}
+                  <span className="ldc-tag">Курс</span>
+                </Link>
+                <div className="ldc-body">
                 <span className="learning-dashboard-course-label">Курс</span>
                 <h3>
                   <Link to={href}>{course.title}</Link>
@@ -250,6 +255,7 @@ export default function MyCourses(): JSX.Element {
                       {t('common.retry')}
                     </button>
                   )}
+                </div>
                 </div>
               </div>
             );

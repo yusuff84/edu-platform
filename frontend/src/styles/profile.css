@@ -445,3 +445,264 @@
     flex: 1;
   }
 }
+
+/* «Продолжить обучение»: урок, на котором остановились — кадр видео или иконка практикума/конспекта. */
+.continue-tile {
+  display: grid;
+  gap: 12px;
+  padding: 12px;
+  border-radius: 20px;
+  background: #fff;
+  border: 1px solid var(--line);
+  color: var(--fg);
+  min-width: 0;
+  transition: transform 0.18s, box-shadow 0.18s;
+}
+
+.continue-tile:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow);
+}
+
+.continue-tile-art {
+  position: relative;
+  display: grid;
+  place-items: center;
+  aspect-ratio: 16 / 9;
+  border-radius: 14px;
+  overflow: hidden;
+  background: #eeedff;
+  color: var(--accent, #4635ff);
+}
+
+.continue-tile-art .lesson-kind-icon {
+  width: 56px;
+  height: 56px;
+}
+
+.continue-tile-art.has-video {
+  background: #10131a;
+  color: #fff;
+}
+
+.continue-tile-poster {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.continue-tile-play {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  padding-left: 4px;
+  border-radius: 50%;
+  background: rgba(20, 20, 20, 0.5);
+  -webkit-backdrop-filter: blur(4px);
+  backdrop-filter: blur(4px);
+  color: #fff;
+  font-size: 22px;
+}
+
+.continue-tile-kind {
+  position: absolute;
+  left: 10px;
+  top: 10px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: #fff;
+  color: var(--fg);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.continue-tile-body {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.continue-tile-course {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.continue-tile-lesson {
+  font-size: 15.5px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.continue-tile-progress {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 4px;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.continue-tile-bar {
+  flex: 1;
+  height: 6px;
+  border-radius: 999px;
+  background: #ececf0;
+  overflow: hidden;
+}
+
+.continue-tile-bar i {
+  display: block;
+  height: 100%;
+  background: var(--accent, #4635ff);
+}
+
+@media (max-width: 620px) {
+  .continue-tile {
+    grid-template-columns: 120px minmax(0, 1fr);
+    align-items: center;
+  }
+
+  .continue-tile-art .lesson-kind-icon {
+    width: 36px;
+    height: 36px;
+  }
+
+  .continue-tile-play {
+    width: 36px;
+    height: 36px;
+    font-size: 15px;
+  }
+
+  .continue-tile-kind {
+    left: 6px;
+    top: 6px;
+    padding: 2px 7px;
+    font-size: 10.5px;
+  }
+}
+
+/* ---------- Карточка курса в «Ваших курсах»: обложка-лого + описание ---------- */
+.learning-dashboard-course {
+  display: grid;
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+  gap: 0;
+  padding: 0;
+  min-height: 0;
+  overflow: hidden;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 24px;
+  box-shadow: var(--shadow-sm);
+}
+
+.ldc-cover {
+  position: relative;
+  display: block;
+  min-height: 220px;
+  background: #10131a;
+}
+
+.ldc-cover img,
+.ldc-cover .cover {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 0;
+}
+
+.ldc-tag {
+  position: absolute;
+  left: 14px;
+  top: 14px;
+  padding: 5px 12px;
+  border-radius: 999px;
+  background: #fff;
+  color: var(--fg);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.ldc-body {
+  display: flex;
+  flex-direction: column;
+  padding: 24px 26px;
+  min-width: 0;
+}
+
+.learning-dashboard-course .learning-dashboard-course-label {
+  display: none; /* метка «Курс» уже на обложке */
+}
+
+.learning-dashboard-course h3 {
+  margin: 0 0 18px;
+  color: var(--fg);
+}
+
+.learning-dashboard-course h3 a {
+  color: inherit;
+}
+
+.learning-dashboard-course .progress {
+  height: 8px;
+  background: #ececf0;
+}
+
+.learning-dashboard-course .progress-bar {
+  background: var(--accent, #4635ff);
+}
+
+.learning-dashboard-course .progress-meta {
+  color: var(--muted);
+  font-size: 13.5px;
+}
+
+.learning-dashboard-course .btn-row {
+  margin-top: auto;
+  padding-top: 20px;
+}
+
+@media (max-width: 620px) {
+  .learning-dashboard-course {
+    grid-template-columns: 1fr;
+  }
+
+  .ldc-cover {
+    min-height: 0;
+    aspect-ratio: 16 / 8;
+  }
+
+  .ldc-body {
+    padding: 18px;
+  }
+}
+
+/* Перебиваем .enrolled-grid > .panel (колонка) и даём карточкам всю ширину. */
+.learning-dashboard .enrolled-grid {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.enrolled-grid > .panel.learning-dashboard-course {
+  display: grid;
+  grid-template-columns: minmax(240px, 0.8fr) minmax(0, 1.2fr);
+}
+
+@media (max-width: 620px) {
+  .enrolled-grid > .panel.learning-dashboard-course {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 620px) {
+  /* Метка типа шага на маленькой плитке — не поверх иконки. */
+  .continue-tile-kind {
+    display: none;
+  }
+}
