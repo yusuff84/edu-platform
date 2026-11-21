@@ -3,7 +3,7 @@
 // переходах страница уточняет их под свой контент.
 import { useEffect } from 'react';
 
-export const DEFAULT_TITLE = 'Edu Platform — IT-курсы для начинающих';
+export const DEFAULT_TITLE = 'skillex.space — IT-курсы для начинающих';
 export const DEFAULT_DESCRIPTION =
   'Маркетплейс IT-курсов для начинающих: Python, веб, данные и дизайн. Практика, живые разборы, квизы и кодовые задачи. Оплата в рублях, возврат в течение 7 дней.';
 

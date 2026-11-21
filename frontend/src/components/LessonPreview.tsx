@@ -10,7 +10,6 @@
 // они не показываются.
 
 import { Markdown } from './LessonView';
-import CodeBlock from './CodeBlock';
 import { formatDate } from '../api/client';
 import type { LessonKind } from '../api/client';
 import { t } from '../i18n/t';
@@ -29,9 +28,6 @@ export type LessonPreviewData = {
       text: string;
       options: string[];
       correct: number;
-      /** FR-010: множественный выбор — правильные варианты в correctIndexes. */
-      multi?: boolean;
-      correctIndexes?: number[];
       explanation?: string;
     }>;
   };
@@ -91,9 +87,7 @@ function QuizPreview({
           </p>
           <ul className="ce-quiz-options">
             {q.options.map((opt, oi) => {
-              const isCorrect = q.multi
-                ? (q.correctIndexes ?? []).includes(oi)
-                : oi === q.correct;
+              const isCorrect = oi === q.correct;
               return (
                 <li
                   key={oi}
@@ -137,7 +131,9 @@ function CodePreview({
       {task.template && task.template.trim() && (
         <div className="ce-template">
           <h4>{t('lesson.codeTemplate')}</h4>
-          <CodeBlock code={task.template} language={task.language} />
+          <pre>
+            <code>{task.template}</code>
+          </pre>
         </div>
       )}
       {tests.length > 0 && (

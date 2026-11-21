@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"golang.org/x/crypto/bcrypt"
 
@@ -24,14 +25,15 @@ type registerRequest struct {
 // userResponse — единый формат пользователя для контракта API (Task/00-api-contract.md).
 // DisplayName — всегда строка (пустая, если не задана), чтобы фронт получал "", а не null.
 type userResponse struct {
-	ID          string    `json:"id"`
-	Email       string    `json:"email"`
-	Role        repo.Role `json:"role"`
-	DisplayName string    `json:"displayName"`
+	ID            string    `json:"id"`
+	Email         string    `json:"email"`
+	Role          repo.Role `json:"role"`
+	DisplayName   string    `json:"displayName"`
+	EmailVerified bool      `json:"emailVerified"`
 }
 
 func userResponseOf(u *repo.User) userResponse {
-	return userResponse{ID: u.ID, Email: u.Email, Role: u.Role, DisplayName: u.DisplayName}
+	return userResponse{ID: u.ID, Email: u.Email, Role: u.Role, DisplayName: u.DisplayName, EmailVerified: u.EmailVerifiedAt != nil}
 }
 
 // blockedUserMessage — единый русский текст отказа заблокированному
@@ -56,8 +58,8 @@ func (a *App) Register(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "Некорректный email")
 		return
 	}
-	if len(req.Password) < 8 {
-		writeErr(w, http.StatusBadRequest, "Пароль должен содержать минимум 8 символов")
+	if utf8.RuneCountInString(req.Password) < 8 || len(req.Password) > 72 {
+		writeErr(w, http.StatusBadRequest, "Используйте пароль не короче 8 символов. Слишком длинный пароль сократите.")
 		return
 	}
 
@@ -94,7 +96,13 @@ func (a *App) Register(w http.ResponseWriter, r *http.Request) {
 	if invite != nil {
 		a.Store.AcceptInvite(invite)
 	}
-	a.startSession(w, r, u.ID)
+	if !a.startSession(w, r, u) {
+		return
+	}
+	if a.Mailer != nil {
+		// Registration remains usable if delivery fails; the profile can resend.
+		_ = a.sendAccountEmail(r.Context(), u, repo.EmailVerification)
+	}
 	writeJSON(w, http.StatusCreated, userResponseOf(u))
 }
 
@@ -125,7 +133,9 @@ func (a *App) Login(w http.ResponseWriter, r *http.Request) {
 		writeBlockedUser(w)
 		return
 	}
-	a.startSession(w, r, u.ID)
+	if !a.startSession(w, r, u) {
+		return
+	}
 	writeJSON(w, http.StatusOK, userResponseOf(u))
 }
 

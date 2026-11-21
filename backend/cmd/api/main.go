@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -16,17 +17,31 @@ import (
 	"edu-platform/backend/internal/handler"
 	"edu-platform/backend/internal/mailer"
 	"edu-platform/backend/internal/migrate"
+	"edu-platform/backend/internal/payments"
 	"edu-platform/backend/internal/repo"
 )
 
 func main() {
 	cfg := config.Load()
 
-	store, closeDB := openStore(cfg)
+	store, closeDB, err := openStore(cfg)
+	if err != nil {
+		log.Fatalf("хранилище не инициализировано: %v", err)
+	}
 	if closeDB != nil {
 		defer closeDB()
 	}
-	seedAdmin(store, cfg)
+	if err := seedAdmin(store, cfg); err != nil {
+		log.Fatalf("bootstrap-учётки не созданы: %v", err)
+	}
+
+	// В production проверяем ключи выбранного провайдера при старте, а не
+	// отдаём 502 на первую покупку. В dev mock/stripe без ключей допустимы.
+	if !cfg.IsDev() && cfg.PaymentsProvider != "disabled" {
+		if _, err := payments.NewProvider(cfg.PaymentsProvider); err != nil {
+			log.Fatalf("платёжный провайдер %q не настроен: %v", cfg.PaymentsProvider, err)
+		}
+	}
 
 	smtpSender, err := mailer.NewSMTP(mailer.Config{
 		Addr:     cfg.SMTPAddr,
@@ -36,6 +51,9 @@ func main() {
 		TLSMode:  cfg.SMTPTLS,
 	})
 	if err != nil {
+		if !cfg.IsDev() && strings.TrimSpace(cfg.SMTPAddr) != "" {
+			log.Fatalf("SMTP настроен некорректно: %v", err)
+		}
 		log.Printf("ПРЕДУПРЕЖДЕНИЕ: SMTP отключён: %v", err)
 	} else if smtpSender != nil {
 		log.Printf("SMTP включён: приглашения уходят на email")
@@ -50,50 +68,30 @@ func main() {
 	app := &handler.App{Store: store, Config: cfg, Mailer: mailerSender}
 	addr := ":" + cfg.Port
 	log.Printf("edu-platform api слушает %s (провайдер оплаты: %s)", addr, cfg.PaymentsProvider)
-	if err := http.ListenAndServe(addr, handler.NewRouter(app)); err != nil {
+	server := &http.Server{
+		Addr: addr, Handler: handler.NewRouter(app),
+		ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 15 * time.Second,
+		WriteTimeout: 60 * time.Second, IdleTimeout: 60 * time.Second,
+		MaxHeaderBytes: 16 * 1024,
+	}
+	if err := server.ListenAndServe(); err != nil {
 		log.Fatalf("api остановлен: %v", err)
 	}
 }
 
-// openStore выбирает хранилище: Postgres при достижимой DATABASE_URL.
-// В dev-режиме при недоступной БД разрешён откат в in-memory с demo-сидом.
-// В production любой сбой — критическая ошибка: log.Fatalf завершает процесс,
-// контейнер перезапускается, но API не начинает молча работать на пустой
-// памяти (иначе данные «теряются», а demo-сид подменяет реальную БД).
-// Возвращает store и опциональный close для пула (nil для in-memory).
-func openStore(cfg *config.Config) (repo.StoreAPI, func()) {
-	store, closeDB, err := openStoreChecked(cfg)
-	if err != nil {
-		log.Fatalf("КРИТИЧЕСКАЯ ОШИБКА старта: %v", err)
-	}
-	return store, closeDB
-}
-
-// openStoreChecked — реализация openStore с возвратом ошибки вместо
-// log.Fatalf: решение «fallback или падать» покрывается тестами без
-// реального Postgres. В dev ошибки БД логируются и приводят к in-memory
-// с demo-сидом, в production возвращается ошибка (openStore завершает
-// процесс через log.Fatalf).
-func openStoreChecked(cfg *config.Config) (repo.StoreAPI, func(), error) {
-	newMem := func() (repo.StoreAPI, func(), error) {
-		s := repo.NewStore()
-		if err := s.SetCommissionPct(cfg.CommissionPct); err != nil {
-			log.Printf("ПРЕДУПРЕЖДЕНИЕ: не удалось задать комиссию в памяти: %v", err)
-		}
-		seedDemo(s)
-		return s, nil, nil
-	}
-	fallback := func(reason string) (repo.StoreAPI, func(), error) {
-		if !cfg.IsDev() {
-			return nil, nil, fmt.Errorf("%s; в production (APP_ENV=%q) откат в in-memory и demo-сид запрещены — задайте рабочий DATABASE_URL (контейнер будет перезапущен)", reason, cfg.AppEnv)
-		}
-		log.Printf("ПРЕДУПРЕЖДЕНИЕ: %s — работаем в in-memory режиме без БД (данные сбросятся при перезапуске)", reason)
-		return newMem()
-	}
-
+// openStore выбирает хранилище. В production ошибки DATABASE_URL/Postgres,
+// миграций или сида фатальны: молчаливый in-memory fallback означал бы потерю
+// данных. В dev при пустом или недоступном DATABASE_URL разрешён in-memory
+// режим с демо-данными.
+func openStore(cfg *config.Config) (repo.StoreAPI, func(), error) {
 	dsn := strings.TrimSpace(cfg.DatabaseURL)
 	if dsn == "" {
-		return fallback("DATABASE_URL не задан")
+		if !cfg.IsDev() {
+			return nil, nil, fmt.Errorf("DATABASE_URL не задан: production требует Postgres")
+		}
+		log.Printf("ПРЕДУПРЕЖДЕНИЕ: DATABASE_URL не задан — dev-режим, in-memory без сохранения данных")
+		store, closeFn := newMemoryStore(cfg)
+		return store, closeFn, nil
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
@@ -101,26 +99,29 @@ func openStoreChecked(cfg *config.Config) (repo.StoreAPI, func(), error) {
 
 	pool, err := repo.ConnectPool(ctx, dsn)
 	if err != nil {
-		return fallback(fmt.Sprintf("не удалось создать пул Postgres: %v", err))
+		return fallbackToMemory(cfg, fmt.Errorf("не удалось создать пул Postgres: %w", err))
 	}
 	if err := pool.Ping(ctx); err != nil {
 		pool.Close()
-		return fallback(fmt.Sprintf("Postgres по DATABASE_URL недоступен: %v", err))
+		return fallbackToMemory(cfg, fmt.Errorf("Postgres по DATABASE_URL недоступен: %w", err))
 	}
 
 	dir, err := findMigrationsDir()
 	if err != nil {
 		pool.Close()
-		return fallback(err.Error())
+		return fallbackToMemory(cfg, err)
 	}
 	if err := migrate.ApplyMigrations(ctx, pool, dir); err != nil {
 		pool.Close()
-		return fallback(fmt.Sprintf("не удалось применить миграции: %v", err))
+		return fallbackToMemory(cfg, fmt.Errorf("не удалось применить миграции: %w", err))
 	}
-	// Сид идемпотентен (ON CONFLICT DO NOTHING): применяется только если courses пуста.
-	if err := migrate.SeedIfEmpty(ctx, pool, filepath.Join(dir, "002_seed.sql")); err != nil {
-		pool.Close()
-		return fallback(fmt.Sprintf("не удалось применить сид: %v", err))
+	// Демо-учётки и курс — только dev. В production сид не применяется вовсе;
+	// ApplyMigrations к тому же всегда пропускает файлы с seed в имени.
+	if cfg.IsDev() {
+		if err := migrate.SeedIfEmpty(ctx, pool, filepath.Join(dir, migrate.SeedFileName)); err != nil {
+			pool.Close()
+			return fallbackToMemory(cfg, fmt.Errorf("не удалось применить демо-сид: %w", err))
+		}
 	}
 
 	// Комиссия: при доступной БД — из app_settings (ключ commission_pct), fallback — env.
@@ -128,6 +129,29 @@ func openStoreChecked(cfg *config.Config) (repo.StoreAPI, func(), error) {
 	pg := repo.NewPostgresStore(pool, effective)
 	log.Printf("Postgres подключён: миграции применены, хранилище — pgxpool, комиссия=%d%%", effective)
 	return pg, func() { pool.Close() }, nil
+}
+
+// fallbackToMemory — единственная точка деградации до in-memory. В production
+// возвращает исходную ошибку (main превращает её в log.Fatalf), в dev —
+// предупреждает и отдаёт демо-хранилище.
+func fallbackToMemory(cfg *config.Config, cause error) (repo.StoreAPI, func(), error) {
+	if !cfg.IsDev() {
+		return nil, nil, cause
+	}
+	log.Printf("ПРЕДУПРЕЖДЕНИЕ: %v — dev-режим, работаем в in-memory без БД", cause)
+	store, closeFn := newMemoryStore(cfg)
+	return store, closeFn, nil
+}
+
+// newMemoryStore создаёт dev-хранилище с демо-курсом. Вызывается только после
+// проверки cfg.IsDev(): в production in-memory не используется.
+func newMemoryStore(cfg *config.Config) (repo.StoreAPI, func()) {
+	s := repo.NewStore()
+	if err := s.SetCommissionPct(cfg.CommissionPct); err != nil {
+		log.Printf("ПРЕДУПРЕЖДЕНИЕ: не удалось задать комиссию в памяти: %v", err)
+	}
+	seedDemo(s)
+	return s, nil
 }
 
 func findMigrationsDir() (string, error) {
@@ -150,9 +174,7 @@ func findMigrationsDir() (string, error) {
 
 // seedDemo наполняет in-memory хранилище демо-курсом для локальной проверки
 // сценариев quickstart (каталог, покупка, прохождение). Вызывается только
-// из openStoreChecked для dev-режима без БД (в production fallback запрещён);
-// при рестарте память пуста, сид идемпотентен по slug. В Postgres демо-учитель
-// demo-teacher@local не создаётся.
+// для dev-режима без БД; при рестарте память пуста, сид идемпотентен по slug.
 func seedDemo(s *repo.Store) {
 	if s.SlugTaken("python-s-nulya") {
 		return
@@ -210,97 +232,101 @@ func seedDemo(s *repo.Store) {
 	log.Printf("демо-сид: курс «Python с нуля» (учитель demo-teacher@local / teach1234)")
 }
 
-// seedAdmin создаёт учётные записи только по явно заданным env.
-// Пароли существующих пользователей при старте НЕ меняются: рестарт API —
-// не операция сброса доступа. Демо-учитель demo-teacher@local/teach1234
-// создаётся только в in-memory сиде seedDemo и в Postgres не попадает.
-//
-// ВАЖНО: раньше функция всегда создавала/сбрасывала teacher@local с паролем
-// teacher1, даже без TEACHER_* (критический риск C3). Теперь:
-//   - учитель — только если заданы И TEACHER_EMAIL, И TEACHER_PASSWORD;
-//   - админ — только если заданы И ADMIN_EMAIL, И ADMIN_PASSWORD;
-//   - существующая учётка не получает новый пароль и новую роль.
-func seedAdmin(store repo.StoreAPI, cfg *config.Config) {
-	adminEmail := strings.TrimSpace(cfg.AdminEmail)
-	adminPassword := cfg.AdminPassword
-	switch {
-	case adminEmail != "" && adminPassword != "":
-		ensureAccount(store, adminEmail, adminPassword, repo.RoleAdmin, "админ")
-	case adminEmail != "" || adminPassword != "":
-		log.Printf("ПРЕДУПРЕЖДЕНИЕ: сид админа пропущен — нужны одновременно ADMIN_EMAIL и ADMIN_PASSWORD")
+// seedAdmin создаёт bootstrap-учётки только при явных ADMIN_* / TEACHER_*.
+// Дефолтных логинов (teacher@local/teacher1 и т.п.) больше нет: без переменных
+// окружения не создаётся ни одна учётная запись. В production это гарантирует
+// отсутствие известных паролей «из коробки».
+func seedAdmin(store repo.StoreAPI, cfg *config.Config) error {
+	if err := seedConfiguredAccount(store, cfg.AdminEmail, cfg.AdminPassword, repo.RoleAdmin, "админ"); err != nil {
+		return err
 	}
-
-	// TEACHER_* читаем напрямую: в config.Config этих полей нет (config.go —
-	// зона P11-1), а дефолтных учёток с известным паролем в коде быть не должно.
-	teacherEmail := strings.TrimSpace(os.Getenv("TEACHER_EMAIL"))
-	teacherPassword := os.Getenv("TEACHER_PASSWORD")
-	switch {
-	case teacherEmail != "" && teacherPassword != "":
-		ensureAccount(store, teacherEmail, teacherPassword, repo.RoleTeacher, "преподаватель")
-	case teacherEmail != "" || teacherPassword != "":
-		log.Printf("ПРЕДУПРЕЖДЕНИЕ: сид преподавателя пропущен — нужны одновременно TEACHER_EMAIL и TEACHER_PASSWORD")
-	}
+	return seedConfiguredAccount(store, cfg.TeacherEmail, cfg.TeacherPassword, repo.RoleTeacher, "преподаватель")
 }
 
-// Точные placeholder-хеши из миграции 002_seed.sql. Это не настоящие
-// bcrypt-хеши: после 50 символов «A»/«B» в строке стоит открытый пароль,
-// поэтому bcrypt.Cost на них падает, а вход невозможен. Чиним только эти
-// два конкретных значения, чтобы не сбросить реальный пароль пользователя
-// (C3): любое другое значение, включая похожие подделки, не трогаем.
-const (
-	seedAdminPlaceholderHash   = "$2a$10$AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAadmin1234"
-	seedTeacherPlaceholderHash = "$2a$10$BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBteacher1"
-)
-
-// isSeedPlaceholderHash сообщает, что хеш — точная заглушка из 002_seed.sql.
-func isSeedPlaceholderHash(hash string) bool {
-	return hash == seedAdminPlaceholderHash || hash == seedTeacherPlaceholderHash
-}
-
-// ensureAccount создаёт учётку, только если её ещё нет. Существующим
-// пользователям пароль и роль при старте не меняются — это исключает
-// неявный сброс доступа (C3) и повышение роли уже зарегистрированного
-// пользователя. Исключение — точные placeholder-хеши из 002_seed.sql:
-// они не являются bcrypt и без замены оставляют свежую БД без входа.
-// label — имя роли по-русски для логов.
-func ensureAccount(store repo.StoreAPI, email, password string, role repo.Role, label string) {
+// seedConfiguredAccount требует обе переменные — email и пароль. Если задана
+// только одна, это ошибка конфигурации: молчаливый пропуск bootstrap-учётки
+// оставил бы production без администратора.
+func seedConfiguredAccount(store repo.StoreAPI, email, password string, role repo.Role, label string) error {
 	email = strings.TrimSpace(email)
+	if email == "" && password == "" {
+		return nil
+	}
 	if email == "" || password == "" {
-		return
+		return fmt.Errorf("%s: задайте и email, и пароль", label)
+	}
+	if err := ensureAccount(store, email, password, role, label); err != nil {
+		return fmt.Errorf("%s %s: %w", label, email, err)
+	}
+	return nil
+}
+
+// bcryptHashLen — длина канонического bcrypt-хеша ($2a$10$ + 53 символа).
+// bcrypt.Cost проверяет только префикс/стоимость и принимает мусорные хвосты
+// вроде заглушки старой 002_seed.sql, поэтому длину проверяем отдельно.
+const bcryptHashLen = 60
+
+// ensureAccount создаёт учётку, если её нет. Пароль существующего
+// пользователя НЕ перезаписывается, если его хеш валиден, — иначе рестарт API
+// молча менял бы пароль. Исключение — невалидный bcrypt-хеш (например,
+// заглушка из старой 002_seed.sql): с ним вход невозможен, поэтому он чинится
+// явно заданным паролем.
+//
+// Роль меняется только при подтверждённом пароле (совпал с env или хеш был
+// невалиден и перезаписан). Иначе публичная регистрация могла бы заранее
+// занять ADMIN_EMAIL, а следующий рестарт повысил бы атакующего до админа.
+func ensureAccount(store repo.StoreAPI, email, password string, role repo.Role, label string) error {
+	user, exists := store.GetUserByEmail(email)
+	if !exists {
+		hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+		if err != nil {
+			return fmt.Errorf("захешировать пароль: %w", err)
+		}
+		if _, err := store.CreateUser(email, string(hash), role); err != nil {
+			return fmt.Errorf("создать пользователя: %w", err)
+		}
+		log.Printf("создан %s %s", label, email)
+		return nil
 	}
 
-	if user, exists := store.GetUserByEmail(email); exists {
-		// Заменяем только известную заглушку миграции на пароль из env.
-		// Реальный bcrypt-хеш (и любой незнакомый битый хеш) не трогаем.
-		if isSeedPlaceholderHash(user.PasswordHash) {
-			hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
-			if err != nil {
-				log.Printf("не удалось захешировать пароль %s: %v", email, err)
-				return
-			}
-			if !store.SetUserPasswordHash(user.ID, string(hash)) {
-				log.Printf("не удалось заменить seed-заглушку пароля для %s", email)
-				return
-			}
-			log.Printf("%s %s: seed-заглушка пароля заменена паролем из env", label, email)
-			return
+	cmpErr := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(password))
+	// bcrypt.Cost — надёжная проверка формата хеша (в отличие от длины:
+	// существуют легитимные 59-символьные $2$ хеши).
+	_, costErr := bcrypt.Cost([]byte(user.PasswordHash))
+	hashValid := costErr == nil && len(user.PasswordHash) == bcryptHashLen
+	passwordConfirmed := false
+	switch {
+	case cmpErr == nil:
+		passwordConfirmed = true
+		log.Printf("%s %s уже существует — пароль не изменён", label, email)
+	case !hashValid:
+		hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+		if err != nil {
+			return fmt.Errorf("захешировать пароль для невалидного хеша: %w", err)
 		}
-		if _, err := bcrypt.Cost([]byte(user.PasswordHash)); err != nil {
-			log.Printf("ПРЕДУПРЕЖДЕНИЕ: %s %s уже существует с невалидным bcrypt-хешем; пароль при старте не сбрасывается — задайте его вручную", label, email)
-		} else {
-			log.Printf("%s %s уже существует — пароль и роль при старте не меняются", label, email)
+		if !store.SetUserPasswordHash(user.ID, string(hash)) {
+			return errors.New("не удалось исправить пароль: пользователь не найден")
 		}
-		return
+		passwordConfirmed = true
+		log.Printf("исправлен невалидный хеш пароля: %s %s", label, email)
+	case errors.Is(cmpErr, bcrypt.ErrMismatchedHashAndPassword):
+		// Валидный пароль другого владельца не трогаем; роль ниже менять
+		// нельзя, иначе это повышение чужой учётки.
+		log.Printf("%s %s уже существует — пароль не изменён (пароль из env не совпадает)", label, email)
+	case errors.Is(cmpErr, bcrypt.ErrPasswordTooLong):
+		log.Printf("ПРЕДУПРЕЖДЕНИЕ: %s %s: пароль из env длиннее лимита bcrypt — пароль не изменён", label, email)
+	default:
+		return fmt.Errorf("проверить пароль: %w", cmpErr)
 	}
 
-	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
-	if err != nil {
-		log.Printf("не удалось захешировать пароль %s: %v", email, err)
-		return
+	if user.Role != role {
+		if !passwordConfirmed {
+			return fmt.Errorf("роль %s→%s не изменена: пароль существующей учётки не совпадает с env", user.Role, role)
+		}
+		oldRole := user.Role
+		if !store.SetUserRole(user.ID, role) {
+			return errors.New("не удалось изменить роль: пользователь не найден")
+		}
+		log.Printf("исправлена роль: %s %s → %s", email, oldRole, role)
 	}
-	if _, err := store.CreateUser(email, string(hash), role); err != nil {
-		log.Printf("не удалось создать %s: %v", email, err)
-		return
-	}
-	log.Printf("создан %s %s", label, email)
+	return nil
 }

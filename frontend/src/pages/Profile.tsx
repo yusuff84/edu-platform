@@ -11,6 +11,7 @@ import { t } from '../i18n/t';
 import { useSeo } from '../app/useSeo';
 import type { RuKey } from '../i18n/t';
 import '../styles/profile.css';
+import AccountSecurityPanel from '../components/AccountSecurityPanel';
 
 /** Размер страницы истории платежей (контракт T23: page/limit). */
 const PAYMENTS_LIMIT = 20;
@@ -42,7 +43,7 @@ function errorText(e: unknown): string {
 }
 
 export default function Profile(): JSX.Element {
-  useSeo('Профиль — Edu Platform');
+  useSeo('Профиль — skillex.space');
   const qc = useQueryClient();
 
   // ---------- Профиль ----------
@@ -60,9 +61,6 @@ export default function Profile(): JSX.Element {
   const name = nameDraft ?? profileQuery.data?.displayName ?? '';
   const trimmedName = name.trim();
   const nameValid = trimmedName.length >= NAME_MIN && trimmedName.length <= NAME_MAX;
-  // Причина недоступности кнопки «Сохранить»: пустое/слишком короткое/длинное
-  // имя. Показываем её явно, а не только держим кнопку disabled.
-  const nameError = nameValid ? '' : 'Имя должно быть от 2 до 60 символов';
 
   const saveMutation = useMutation({
     mutationFn: (displayName: string) => updateProfile(displayName),
@@ -147,20 +145,10 @@ export default function Profile(): JSX.Element {
                     setSaveMsg(null);
                   }}
                   placeholder={t('profile.namePlaceholder')}
-                  aria-invalid={nameError ? true : undefined}
-                  aria-describedby={
-                    nameError ? 'pf-name-hint pf-name-error' : 'pf-name-hint'
-                  }
+                  aria-invalid={nameValid ? undefined : true}
                   autoComplete="nickname"
                 />
-                <p id="pf-name-hint" className="pf-hint muted">
-                  {t('profile.nameHint')}
-                </p>
-                {nameError && (
-                  <p id="pf-name-error" role="alert" className="error">
-                    {nameError}
-                  </p>
-                )}
+                <p className="pf-hint muted">{t('profile.nameHint')}</p>
                 {saveMsg && (
                   <p
                     role={saveMsg.ok ? 'status' : 'alert'}
@@ -173,7 +161,6 @@ export default function Profile(): JSX.Element {
                   type="submit"
                   className="btn btn-primary pf-save"
                   disabled={!nameValid || saveMutation.isPending}
-                  title={nameError || undefined}
                 >
                   {saveMutation.isPending ? t('common.loading') : t('profile.save')}
                 </button>
@@ -182,6 +169,7 @@ export default function Profile(): JSX.Element {
           )}
         </section>
 
+        <AccountSecurityPanel />
         {/* ---------- История платежей ---------- */}
         <section className="panel pf-payments" aria-label={t('profile.payments')}>
           <h2>{t('profile.payments')}</h2>

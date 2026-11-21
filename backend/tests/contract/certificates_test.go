@@ -178,15 +178,19 @@ func TestCertificateOnlyAfterAllLessonsAndIdempotent(t *testing.T) {
 	teacherCookies, courseID, _ := seedPublishedCourse(t, app, router, 0)
 
 	// Второй урок — video_text: сертификат должен ждать его завершения.
+	// Курс уже published, поэтому контент добавляем фикстурой, которая
+	// временно возвращает курс в draft: иначе requireDraft даст 409.
 	mods := app.Store.ListModulesByCourse(courseID)
-	rec := doRequest(t, router, http.MethodPost, "/api/v1/teacher/courses/"+courseID+"/lessons", map[string]any{
-		"moduleId": mods[0].ID, "title": "Второй урок", "kind": "video_text", "bodyMd": "текст",
-	}, teacherCookies)
-	if rec.Code != http.StatusCreated {
-		t.Fatalf("create second lesson: status=%d body=%s", rec.Code, rec.Body.String())
-	}
 	var second map[string]any
-	decodeBody(t, rec, &second)
+	withDraftCourse(t, app, courseID, func() {
+		rec := doRequest(t, router, http.MethodPost, "/api/v1/teacher/courses/"+courseID+"/lessons", map[string]any{
+			"moduleId": mods[0].ID, "title": "Второй урок", "kind": "video_text", "bodyMd": "текст",
+		}, teacherCookies)
+		if rec.Code != http.StatusCreated {
+			t.Fatalf("create second lesson: status=%d body=%s", rec.Code, rec.Body.String())
+		}
+		decodeBody(t, rec, &second)
+	})
 
 	studentCookies, _ := registerUser(t, router, "last@example.com", "password123", "")
 	enrollFree(t, router, courseID, studentCookies)
@@ -196,7 +200,7 @@ func TestCertificateOnlyAfterAllLessonsAndIdempotent(t *testing.T) {
 	}
 
 	// Первый (quiz) — прогресс 50%, сертификата ещё нет.
-	rec = doRequest(t, router, http.MethodPost,
+	rec := doRequest(t, router, http.MethodPost,
 		"/api/v1/me/courses/"+courseID+"/lessons/"+lessons[0].ID+"/complete",
 		map[string]any{"quizAnswers": map[string]int{"q1": 0}}, studentCookies)
 	if rec.Code != http.StatusOK {

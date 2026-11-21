@@ -1,13 +1,21 @@
--- 002_seed: админ, преподаватель, демо-курс "Python с нуля".
--- Пароли: bcrypt-заглушки (заменить реальными хешами перед продом).
+-- 002_seed: демо-курс "Python с нуля" для ЛОКАЛЬНОЙ РАЗРАБОТКИ.
+-- ВАЖНО: migrate.ApplyMigrations пропускает файлы с seed в имени; cmd/api
+-- вызывает SeedIfEmpty только при cfg.IsDev(). В production этот файл не
+-- применяется, поэтому демо-учёток и курса там не будет.
+-- Учётные данные ниже известны и допустимы только в dev; admin@local здесь
+-- намеренно отсутствует.
 
+-- Демо-преподаватель с настоящим bcrypt-хешем пароля teach1234 (pgcrypto).
+-- id отличается от старого teacher@local (2222...), чтобы сид не конфликтовал
+-- по первичному ключу с БД, где старая демо-учётка уже существует.
 INSERT INTO users (id, email, password_hash, role, display_name) VALUES
-  ('11111111-1111-1111-1111-111111111111', 'admin@local', '$2a$10$AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAadmin1234', 'admin', 'Admin'),
-  ('22222222-2222-2222-2222-222222222222', 'teacher@local', '$2a$10$BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBteacher1', 'teacher', 'Teacher')
+  ('88888888-8888-8888-8888-888888888888', 'demo-teacher@local', crypt('teach1234', gen_salt('bf', 10)), 'teacher', 'Demo Teacher')
 ON CONFLICT (email) DO NOTHING;
 
 INSERT INTO courses (id, teacher_id, slug, title, description, price_cents, currency, status) VALUES
-  ('33333333-3333-3333-3333-333333333333', '22222222-2222-2222-2222-222222222222', 'python-s-nulya', 'Python с нуля', 'Базовый курс Python: синтаксис, функции, практика в песочнице.', 4900, 'RUB', 'published')
+  -- 490000 копеек = 4 900 ₽: сид применяется ПОСЛЕ 005_price_fix.sql, поэтому
+  -- цена должна быть актуальной сразу (005 исправляет только старые БД).
+  ('33333333-3333-3333-3333-333333333333', '88888888-8888-8888-8888-888888888888', 'python-s-nulya', 'Python с нуля', 'Базовый курс Python: синтаксис, функции, практика в песочнице.', 490000, 'RUB', 'published')
 ON CONFLICT (slug) DO NOTHING;
 
 INSERT INTO modules (id, course_id, title, position) VALUES

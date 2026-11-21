@@ -1,0 +1,8 @@
+.account-recovery { max-width: 620px; margin: 32px auto; }
+.account-recovery .form-grid { margin: 24px 0; }
+.account-security { margin: 24px 0; overflow-wrap: anywhere; }
+.account-session-list { list-style: none; margin: 20px 0 0; padding: 0; }
+.account-session { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 18px 0; border-top: 1px solid #ddd; }
+.account-session p { margin: 6px 0; }
+.account-session .pill { margin-left: 10px; }
+@media (max-width: 640px) { .account-session { align-items: flex-start; flex-direction: column; } .account-recovery { margin: 16px auto; } }

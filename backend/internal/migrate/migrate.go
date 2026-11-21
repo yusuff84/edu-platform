@@ -1,13 +1,13 @@
 // Package migrate — простой runner SQL-миграций для Postgres.
 //
-// Читает *.sql файлы из каталога migrations по порядку имён и выполняет
-// каждый файл целиком через pgxpool. Без внешних зависимостей (golang-migrate
-// не используется ради простоты MVP). Файлы идемпотентны (IF NOT EXISTS /
-// ON CONFLICT DO NOTHING), поэтому повторный запуск безопасен.
+// Применяет новые схемные файлы по порядку имён, записывает их контрольные
+// суммы и сериализует старты PostgreSQL advisory lock. Схема и журнал
+// миграций изменяются одной транзакцией; изменённый применённый файл — ошибка.
 package migrate
 
 import (
 	"context"
+	"crypto/sha256"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -18,11 +18,67 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// ApplyMigrations выполняет все *.sql файлы из dir по возрастанию имён.
+// SeedFileName — демо-сид. ApplyMigrations его не применяет (файлы с seed в
+// имени всегда пропускаются); в dev cmd/api вызывает SeedIfEmpty отдельно,
+// в production демо-данные не создаются.
+const SeedFileName = "002_seed.sql"
+
+// ApplyMigrations выполняет только ещё не применённые схемные файлы.
+// Демо-сиды и историческая правка цены демо-курса в production не выполняются.
 func ApplyMigrations(ctx context.Context, pool *pgxpool.Pool, dir string) error {
+	files, err := migrationFiles(dir)
+	if err != nil {
+		return err
+	}
+	tx, err := pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(753251624773)`); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(ctx, `CREATE TABLE IF NOT EXISTS schema_migrations (
+		name text PRIMARY KEY, checksum text NOT NULL, applied_at timestamptz NOT NULL DEFAULT now())`); err != nil {
+		return err
+	}
+	for _, f := range files {
+		sql, err := os.ReadFile(f)
+		if err != nil {
+			return err
+		}
+		// Normalize Git's platform-specific line endings before checksumming.
+		checksum := fmt.Sprintf("%x", sha256.Sum256([]byte(strings.ReplaceAll(string(sql), "\r\n", "\n"))))
+		name := filepath.Base(f)
+		var existing string
+		if err := tx.QueryRow(ctx, `SELECT COALESCE((SELECT checksum FROM schema_migrations WHERE name=$1),'')`, name).Scan(&existing); err != nil {
+			return err
+		}
+		if existing != "" {
+			if existing != checksum {
+				return fmt.Errorf("миграция %s изменена после применения; создайте новую миграцию", name)
+			}
+			continue
+		}
+		if strings.TrimSpace(string(sql)) != "" {
+			if _, err := tx.Exec(ctx, string(sql)); err != nil {
+				return fmt.Errorf("применение миграции %s: %w", name, err)
+			}
+		}
+		if _, err := tx.Exec(ctx, `INSERT INTO schema_migrations(name,checksum) VALUES($1,$2)`, name, checksum); err != nil {
+			return err
+		}
+	}
+	return tx.Commit(ctx)
+}
+
+// migrationFiles возвращает отсортированные пути схемных миграций, отбрасывая
+// seed-файлы и не-SQL файлы. Вынесено из ApplyMigrations для unit-тестов без
+// живого Postgres.
+func migrationFiles(dir string) ([]string, error) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
-		return fmt.Errorf("чтение каталога миграций %s: %w", dir, err)
+		return nil, fmt.Errorf("чтение каталога миграций %s: %w", dir, err)
 	}
 	var files []string
 	for _, e := range entries {
@@ -33,18 +89,23 @@ func ApplyMigrations(ctx context.Context, pool *pgxpool.Pool, dir string) error 
 		if !strings.HasSuffix(strings.ToLower(name), ".sql") {
 			continue
 		}
+		if isSeedFile(name) {
+			continue
+		}
 		files = append(files, filepath.Join(dir, name))
 	}
 	sort.Strings(files)
 	if len(files) == 0 {
-		return fmt.Errorf("в каталоге %s нет *.sql миграций", dir)
+		return nil, fmt.Errorf("в каталоге %s нет схемных *.sql миграций", dir)
 	}
-	for _, f := range files {
-		if err := applyFile(ctx, pool, f); err != nil {
-			return err
-		}
-	}
-	return nil
+	return files, nil
+}
+
+// isSeedFile сообщает, является ли SQL-файл демо-сидом (в имени есть "seed",
+// регистр не важен).
+func isSeedFile(name string) bool {
+	base := strings.ToLower(filepath.Base(name))
+	return strings.Contains(base, "seed") || base == "005_price_fix.sql"
 }
 
 func applyFile(ctx context.Context, pool *pgxpool.Pool, path string) error {
@@ -62,6 +123,7 @@ func applyFile(ctx context.Context, pool *pgxpool.Pool, path string) error {
 }
 
 // SeedIfEmpty применяет seedFile, только если таблица courses пуста.
+// Вызывается cmd/api ТОЛЬКО в dev-режиме: в production демо-данные запрещены.
 // Файл должен быть идемпотентным (ON CONFLICT DO NOTHING).
 // Если таблица отсутствует (миграции не применены) — возвращает ошибку.
 func SeedIfEmpty(ctx context.Context, pool *pgxpool.Pool, seedFile string) error {

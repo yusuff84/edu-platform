@@ -20,12 +20,12 @@ FROM golang:1.24-bookworm AS build
 WORKDIR /src
 
 # Интерпретаторы — только для тестов на этом этапе.
-RUN apt-get update && apt-get install -y --no-install-recommends python3 nodejs \
+RUN apt-get -o Acquire::Retries=3 update && apt-get -o Acquire::Retries=3 install -y --no-install-recommends python3 nodejs \
   && rm -rf /var/lib/apt/lists/*
 
 # go.mod без зависимостей: копируем раньше исходников — слой кэшируется.
 COPY go.mod ./
-COPY main.go main_test.go ./
+COPY *.go ./
 
 RUN go vet ./... && go test ./... -count=1
 
@@ -35,7 +35,7 @@ RUN CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o /out/runner .
 # ---- Этап 2: рантайм --------------------------------------------------------
 FROM debian:bookworm-slim
 
-RUN apt-get update && apt-get install -y --no-install-recommends python3 nodejs \
+RUN apt-get -o Acquire::Retries=3 update && apt-get -o Acquire::Retries=3 install -y --no-install-recommends python3 nodejs bubblewrap \
   && rm -rf /var/lib/apt/lists/* \
   && groupadd --gid 10001 runner \
   && useradd --uid 10001 --gid runner --home-dir /tmp --shell /usr/sbin/nologin runner \

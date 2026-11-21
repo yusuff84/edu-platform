@@ -99,9 +99,9 @@ func (s *PostgresStore) GetUserByEmail(email string) (*User, bool) {
 	u := &User{}
 	var display string
 	err := s.pool.QueryRow(ctx,
-		`SELECT id::text, email, password_hash, role, COALESCE(display_name,''), created_at, status
+		`SELECT id::text, email, password_hash, role, COALESCE(display_name,''), created_at, status, email_verified_at
 		 FROM users WHERE lower(email)=lower($1) LIMIT 1`, normEmail(email)).
-		Scan(&u.ID, &u.Email, &u.PasswordHash, &u.Role, &display, &u.CreatedAt, &u.Status)
+		Scan(&u.ID, &u.Email, &u.PasswordHash, &u.Role, &display, &u.CreatedAt, &u.Status, &u.EmailVerifiedAt)
 	if err != nil {
 		return nil, false
 	}
@@ -115,9 +115,9 @@ func (s *PostgresStore) GetUserByID(id string) (*User, bool) {
 	u := &User{}
 	var display string
 	err := s.pool.QueryRow(ctx,
-		`SELECT id::text, email, password_hash, role, COALESCE(display_name,''), created_at, status
+		`SELECT id::text, email, password_hash, role, COALESCE(display_name,''), created_at, status, email_verified_at
 		 FROM users WHERE id=$1::uuid`, id).
-		Scan(&u.ID, &u.Email, &u.PasswordHash, &u.Role, &display, &u.CreatedAt, &u.Status)
+		Scan(&u.ID, &u.Email, &u.PasswordHash, &u.Role, &display, &u.CreatedAt, &u.Status, &u.EmailVerifiedAt)
 	if err != nil {
 		return nil, false
 	}
@@ -160,6 +160,7 @@ func (s *PostgresStore) CreateSession(userID string, ttl time.Duration) *Session
 		sess.ID, userID, sess.CreatedAt, sess.ExpiresAt)
 	if err != nil {
 		log.Printf("postgres CreateSession: %v", err)
+		return nil
 	}
 	return sess
 }
@@ -169,14 +170,19 @@ func (s *PostgresStore) GetSession(id string) (*Session, bool) {
 	defer cancel()
 	sess := &Session{}
 	err := s.pool.QueryRow(ctx,
-		`SELECT id::text, user_id::text, created_at, expires_at FROM sessions WHERE id=$1::uuid`, id).
-		Scan(&sess.ID, &sess.UserID, &sess.CreatedAt, &sess.ExpiresAt)
+		`SELECT id::text, user_id::text, created_at, expires_at, public_id::text,user_agent,ip_address,last_seen_at FROM sessions WHERE id=$1::uuid`, id).
+		Scan(&sess.ID, &sess.UserID, &sess.CreatedAt, &sess.ExpiresAt, &sess.PublicID, &sess.UserAgent, &sess.IPAddress, &sess.LastSeenAt)
 	if err != nil {
 		return nil, false
 	}
 	if time.Now().UTC().After(sess.ExpiresAt) {
 		_, _ = s.pool.Exec(ctx, `DELETE FROM sessions WHERE id=$1::uuid`, id)
 		return nil, false
+	}
+	if time.Since(sess.LastSeenAt) > 5*time.Minute {
+		if _, err := s.pool.Exec(ctx, `UPDATE sessions SET last_seen_at=now() WHERE id=$1::uuid AND last_seen_at<now()-interval '5 minutes'`, id); err == nil {
+			sess.LastSeenAt = time.Now().UTC()
+		}
 	}
 	return sess, true
 }
@@ -855,14 +861,15 @@ func (s *PostgresStore) EnsureEnrollment(studentID, courseID string) (*Enrollmen
 	}
 	e, ok := s.GetEnrollment(studentID, courseID)
 	if !ok {
-		now := time.Now().UTC()
-		return &Enrollment{ID: uuid.NewString(), StudentID: studentID, CourseID: courseID,
-			Status: EnrollmentActive, CreatedAt: now}, false
+		// Не подменяем ошибку БД фиктивной active-записью: вызывающий код
+		// должен вернуть 5xx и дать провайдеру повторить вебхук.
+		log.Printf("postgres EnsureEnrollment: запись не создана и не найдена")
+		return nil, false
 	}
 	if e.Status != EnrollmentActive {
 		if err := s.SetEnrollmentStatus(studentID, courseID, EnrollmentActive); err != nil {
 			log.Printf("postgres EnsureEnrollment: не удалось открыть доступ: %v", err)
-			return e, false
+			return nil, false
 		}
 		e.Status = EnrollmentActive
 	}
@@ -923,10 +930,14 @@ func (s *PostgresStore) CompleteLesson(studentID, lessonID string) (*LessonProgr
 		if completed == nil {
 			completed = &now
 		}
-		_, _ = s.pool.Exec(ctx,
+		_, err = s.pool.Exec(ctx,
 			`UPDATE lesson_progress SET attempts=$3, completed_at=$4
 			 WHERE student_id=$1::uuid AND lesson_id=$2::uuid`,
 			studentID, lessonID, attempts, *completed)
+		if err != nil {
+			log.Printf("postgres CompleteLesson update: %v", err)
+			return nil, false
+		}
 		return &LessonProgress{StudentID: studentID, LessonID: lessonID,
 			CompletedAt: *completed, Attempts: attempts}, false
 	}
@@ -939,6 +950,7 @@ func (s *PostgresStore) CompleteLesson(studentID, lessonID string) (*LessonProgr
 		studentID, lessonID, now)
 	if err != nil {
 		log.Printf("postgres CompleteLesson: %v", err)
+		return nil, false
 	}
 	return p, true
 }
@@ -1005,7 +1017,7 @@ func scanPayment(scan func(dest ...any) error) (*Payment, error) {
 	var discountCents int
 	if err := scan(&p.ID, &studentID, &courseID, &p.AmountCents, &p.PlatformFeeCents,
 		&p.TeacherAmountCents, &currency, &provider, &providerID, &status,
-		&p.CreatedAt, &processed, &promoCode, &discountCents); err != nil {
+		&p.CreatedAt, &processed, &promoCode, &discountCents, &p.RedirectURL, &p.Description, &p.ReturnURL); err != nil {
 		return nil, err
 	}
 	p.StudentID = studentID
@@ -1024,13 +1036,13 @@ func scanPayment(scan func(dest ...any) error) (*Payment, error) {
 // добавлены promo_code и discount_cents (аддитивные поля контракта).
 const paymentCols = `id::text, student_id::text, course_id::text, amount_cents, platform_fee_cents,
 	teacher_amount_cents, currency::text, provider, COALESCE(provider_payment_id,''),
-	status, created_at, processed_at, COALESCE(promo_code,''), discount_cents`
+	status, created_at, processed_at, COALESCE(promo_code,''), discount_cents, redirect_url, checkout_description, checkout_return_url`
 
 // paymentColsP — то же, что paymentCols, но с алиасом таблицы p
 // (для JOIN-запросов журнала платежей).
 const paymentColsP = `p.id::text, p.student_id::text, p.course_id::text, p.amount_cents, p.platform_fee_cents,
 	p.teacher_amount_cents, p.currency::text, p.provider, COALESCE(p.provider_payment_id,''),
-	p.status, p.created_at, p.processed_at, COALESCE(p.promo_code,''), p.discount_cents`
+	p.status, p.created_at, p.processed_at, COALESCE(p.promo_code,''), p.discount_cents, p.redirect_url, p.checkout_description, p.checkout_return_url`
 
 func (s *PostgresStore) CreatePayment(p *Payment) (*Payment, error) {
 	ctx, cancel := s.ctx()
@@ -1048,11 +1060,11 @@ func (s *PostgresStore) CreatePayment(p *Payment) (*Payment, error) {
 	row := s.pool.QueryRow(ctx,
 		`INSERT INTO payments (student_id, course_id, amount_cents, platform_fee_cents,
 		  teacher_amount_cents, currency, provider, provider_payment_id, status,
-		  promo_code, discount_cents)
-		 VALUES ($1::uuid,$2::uuid,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+		  promo_code, discount_cents, redirect_url, checkout_description, checkout_return_url)
+		 VALUES ($1::uuid,$2::uuid,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
 		 RETURNING `+paymentCols,
 		p.StudentID, p.CourseID, p.AmountCents, p.PlatformFeeCents, p.TeacherAmountCents,
-		currency, p.Provider, providerID, string(p.Status), p.PromoCode, p.DiscountCents)
+		currency, p.Provider, providerID, string(p.Status), p.PromoCode, p.DiscountCents, p.RedirectURL, p.Description, p.ReturnURL)
 	if res, err := scanPayment(row.Scan); err != nil {
 		if isUniqueViolation(err) {
 			return nil, ErrAlreadyExists
@@ -1773,10 +1785,8 @@ func (s *PostgresStore) DeactivatePromoCode(id string) error {
 	return nil
 }
 
-// IncrementPromoCodeUsage атомарно увеличивает used_count на 1, не превышая
-// max_uses (0 — без лимита). false — промокода нет ИЛИ лимит уже исчерпан;
-// handler различает эти случаи повторным чтением. Возврат средств счётчик
-// не уменьшает (контракт T63).
+// IncrementPromoCodeUsage атомарно увеличивает used_count на 1. false —
+// промокода нет. Возврат средств счётчик не уменьшает (контракт T63).
 func (s *PostgresStore) IncrementPromoCodeUsage(id string) bool {
 	if _, err := uuid.Parse(strings.TrimSpace(id)); err != nil {
 		return false
@@ -1784,8 +1794,7 @@ func (s *PostgresStore) IncrementPromoCodeUsage(id string) bool {
 	ctx, cancel := s.ctx()
 	defer cancel()
 	tag, err := s.pool.Exec(ctx,
-		`UPDATE promo_codes SET used_count=used_count+1
-		 WHERE id=$1::uuid AND (max_uses=0 OR used_count < max_uses)`, id)
+		`UPDATE promo_codes SET used_count=used_count+1 WHERE id=$1::uuid`, id)
 	if err != nil {
 		log.Printf("postgres IncrementPromoCodeUsage: %v", err)
 		return false

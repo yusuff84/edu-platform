@@ -17,6 +17,12 @@ import (
 	"time"
 )
 
+func newTestRunner() *runner {
+	rn := newRunner()
+	rn.sandboxMode = "none"
+	return rn
+}
+
 // requireBin пропускает тест, если интерпретатор недоступен.
 func requireBin(t *testing.T, name string) {
 	t.Helper()
@@ -37,7 +43,7 @@ func doRun(t *testing.T, rn *runner, body string) *httptest.ResponseRecorder {
 
 func TestHealth(t *testing.T) {
 	rec := httptest.NewRecorder()
-	rn := newRunner()
+	rn := newTestRunner()
 	rn.handler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/health", nil))
 	if rec.Code != http.StatusOK || rec.Body.String() != "ok" {
 		t.Fatalf("GET /health: код %d, тело %q", rec.Code, rec.Body.String())
@@ -46,14 +52,14 @@ func TestHealth(t *testing.T) {
 
 func TestRunRejectsGET(t *testing.T) {
 	rec := httptest.NewRecorder()
-	newRunner().runHandler(rec, httptest.NewRequest(http.MethodGet, "/run", nil))
+	newTestRunner().runHandler(rec, httptest.NewRequest(http.MethodGet, "/run", nil))
 	if rec.Code != http.StatusMethodNotAllowed {
 		t.Fatalf("GET /run: ожидался 405, получен %d", rec.Code)
 	}
 }
 
 func TestUnknownLanguage(t *testing.T) {
-	rec := doRun(t, newRunner(), `{"language":"ruby","code":"puts 1"}`)
+	rec := doRun(t, newTestRunner(), `{"language":"ruby","code":"puts 1"}`)
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("неизвестный язык: ожидался 400, получен %d", rec.Code)
 	}
@@ -63,7 +69,7 @@ func TestUnknownLanguage(t *testing.T) {
 }
 
 func TestEmptyCode(t *testing.T) {
-	rec := doRun(t, newRunner(), `{"language":"python","code":"   "}`)
+	rec := doRun(t, newTestRunner(), `{"language":"python","code":"   "}`)
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("пустой код: ожидался 400, получен %d", rec.Code)
 	}
@@ -74,7 +80,7 @@ func TestEmptyCode(t *testing.T) {
 func TestPythonSuccess(t *testing.T) {
 	requireBin(t, "python3")
 	body := `{"language":"python","code":"x=int(input())\nprint(x*2)","tests":[{"name":"удвоение","input":"21","expected":"42"}]}`
-	rec := doRun(t, newRunner(), body)
+	rec := doRun(t, newTestRunner(), body)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("код ответа %d: %s", rec.Code, rec.Body.String())
 	}
@@ -86,7 +92,7 @@ func TestPythonSuccess(t *testing.T) {
 func TestPythonFailureShowsDiff(t *testing.T) {
 	requireBin(t, "python3")
 	body := `{"language":"python","code":"print('мир')","tests":[{"name":"приветствие","input":"","expected":"привет"}]}`
-	rec := doRun(t, newRunner(), body)
+	rec := doRun(t, newTestRunner(), body)
 	if !strings.Contains(rec.Body.String(), `"passed":false`) {
 		t.Fatalf("ожидался passed=false: %s", rec.Body.String())
 	}
@@ -101,7 +107,7 @@ func TestJSSuccess(t *testing.T) {
 	requireBin(t, "node")
 	code := `const fs=require('fs');const d=fs.readFileSync(0,'utf8').trim();console.log(Number(d)*2);`
 	body := `{"language":"js","code":` + jsonQuote(code) + `,"tests":[{"name":"удвоение","input":"21","expected":"42"}]}`
-	rec := doRun(t, newRunner(), body)
+	rec := doRun(t, newTestRunner(), body)
 	if !strings.Contains(rec.Body.String(), `"passed":true`) {
 		t.Fatalf("ожидался passed=true: %s", rec.Body.String())
 	}
@@ -114,7 +120,7 @@ func TestJSSuccess(t *testing.T) {
 // больше бюджета, «виноват» именно бюджет.
 func TestRequestBudgetKillsInfiniteLoop(t *testing.T) {
 	requireBin(t, "python3")
-	rn := newRunner()
+	rn := newTestRunner()
 	rn.budget = 1 * time.Second
 	rn.execTimeout = 30 * time.Second // заведомо больше бюджета
 
@@ -137,7 +143,7 @@ func TestRequestBudgetKillsInfiniteLoop(t *testing.T) {
 // вывод обрезается с пометкой.
 func TestOutputLimit(t *testing.T) {
 	requireBin(t, "python3")
-	rn := newRunner()
+	rn := newTestRunner()
 	rn.maxOutput = 1024
 
 	rec := doRun(t, rn, `{"language":"python","code":"print('x' * 1000000)","tests":[]}`)
@@ -160,7 +166,7 @@ func TestOutputLimit(t *testing.T) {
 // TestConcurrencyRejected — при заполненном семафоре новый запрос
 // получает 503 немедленно, а не висит в очереди.
 func TestConcurrencyRejected(t *testing.T) {
-	rn := newRunner()
+	rn := newTestRunner()
 	for i := 0; i < cap(rn.sem); i++ {
 		rn.sem <- struct{}{} // занимаем все слоты, как будто идут проверки
 	}
@@ -200,7 +206,7 @@ func TestHTMLCSSPass(t *testing.T) {
 		`{"name":"класс title","expected":"class=\"title\""},` +
 		`{"name":"цвет текста","expected":"color: red"},` +
 		`{"name":"одиночное свойство","expected":"color"}]}`
-	rec := doRun(t, newRunner(), body)
+	rec := doRun(t, newTestRunner(), body)
 	if !strings.Contains(rec.Body.String(), `"passed":true`) {
 		t.Fatalf("ожидался passed=true: %s", rec.Body.String())
 	}
@@ -212,7 +218,7 @@ func TestHTMLCSSStyleInsensitivity(t *testing.T) {
 	body := `{"language":"htmlcss","code":` + jsonQuote(code) + `,"tests":[` +
 		`{"name":"div","expected":"<div class=title>"},` +
 		`{"name":"цвет","expected":"color:red"}]}`
-	rec := doRun(t, newRunner(), body)
+	rec := doRun(t, newTestRunner(), body)
 	if !strings.Contains(rec.Body.String(), `"passed":true`) {
 		t.Fatalf("ожидался passed=true при нормализации стиля: %s", rec.Body.String())
 	}
@@ -222,7 +228,7 @@ func TestHTMLCSSElementNotMentionedInText(t *testing.T) {
 	// Слово «color» в тексте страницы не должно засчитываться как CSS-свойство.
 	code := `<p>Цвет color — это просто текст</p>`
 	body := `{"language":"htmlcss","code":` + jsonQuote(code) + `,"tests":[{"name":"свойство color","expected":"color"}]}`
-	rec := doRun(t, newRunner(), body)
+	rec := doRun(t, newTestRunner(), body)
 	if !strings.Contains(rec.Body.String(), `"passed":false`) {
 		t.Fatalf("упоминание слова в тексте не должно проходить проверку: %s", rec.Body.String())
 	}
@@ -230,7 +236,7 @@ func TestHTMLCSSElementNotMentionedInText(t *testing.T) {
 
 func TestHTMLCSSErrorExplainsLimitation(t *testing.T) {
 	body := `{"language":"htmlcss","code":"<p>нет нужного тега</p>","tests":[{"name":"таблица","expected":"<table>"}]}`
-	rec := doRun(t, newRunner(), body)
+	rec := doRun(t, newTestRunner(), body)
 	s := rec.Body.String()
 	if !strings.Contains(s, "не найдены фрагменты") {
 		t.Fatalf("нет перечня недостающих фрагментов: %s", s)

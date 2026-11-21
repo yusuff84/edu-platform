@@ -83,6 +83,42 @@ func shortID() string {
 	return strings.ReplaceAll(uuid.NewString(), "-", "")[:8]
 }
 
+// isolatedStore is for global aggregate tests whose fixtures must not be
+// truncated by a production pagination limit as the shared test DB grows.
+func isolatedStore(t *testing.T) *repo.PostgresStore {
+	t.Helper()
+	base := testStore(t)
+	schema := "pgisolated_" + strings.ReplaceAll(uuid.NewString(), "-", "")
+	ctx := context.Background()
+	if _, err := base.Pool().Exec(ctx, `CREATE SCHEMA `+schema); err != nil {
+		t.Fatal(err)
+	}
+	var isolated *pgxpool.Pool
+	t.Cleanup(func() {
+		if isolated != nil {
+			isolated.Close()
+		}
+		if _, err := base.Pool().Exec(context.Background(), `DROP SCHEMA `+schema+` CASCADE`); err != nil {
+			t.Errorf("cleanup isolated schema: %v", err)
+		}
+	})
+	cfg := base.Pool().Config()
+	cfg.ConnConfig.RuntimeParams["search_path"] = schema
+	var err error
+	isolated, err = pgxpool.NewWithConfig(ctx, cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir, err := migrate.FindMigrationsDir("../../internal/migrate/migrations")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = migrate.ApplyMigrations(ctx, isolated, dir); err != nil {
+		t.Fatal(err)
+	}
+	return repo.NewPostgresStore(isolated, 15)
+}
+
 // uniqueEmail — email с префиксом прогона: pgtest-<unix>-<tag>-<id>@example.test.
 func uniqueEmail(tag string) string {
 	return fmt.Sprintf("%s-%s-%s@example.test", runPrefix, tag, shortID())

@@ -1,7 +1,7 @@
 // T64: контрактные тесты промокодов (P8/T63) в API-клиенте.
 //
 // Покрыто: createPromoCode/listPromoCodes/deactivatePromoCode,
-// validatePromoCode и обратная совместимость enroll(courseId, provider).
+// validatePromoCode и enroll(courseId, promoCode?) без выбора провайдера.
 // Тела запросов проверяются точно: backend отвечает 400 на любое лишнее поле
 // (DisallowUnknownFields), а необязательные maxUses/expiresAt не должны
 // уезжать пустыми.
@@ -217,27 +217,24 @@ test('validatePromoCode: 400 «Курс бесплатный — промоко�
   });
 });
 
-// ---------- enroll: promoCode вторым аргументом, provider не передаём ----------
+// ---------- enroll: promoCode без выбора провайдера ----------
 
-test('enroll: (courseId, promoCode) — в теле ровно courseId+promoCode, без provider', async () => {
+test('enroll: без промокода — в теле ровно courseId', async () => {
   const result = enrollmentFixture();
   api.mockReply({ json: result });
-  const res = await enroll('c1', 'SALE20');
+  const res = await enroll('c1');
   assert.deepEqual(res, result);
   const req = lastRequest(api);
   assert.equal(req.method, 'POST');
   assert.equal(req.path, '/api/v1/enrollments');
-  assert.deepEqual(expectBodyKeys(jsonBody(req), ['courseId', 'promoCode']), {
-    courseId: 'c1',
-    promoCode: 'SALE20',
-  });
-  assert.equal('provider' in jsonBody(req), false);
+  assert.deepEqual(expectBodyKeys(jsonBody(req), ['courseId']), { courseId: 'c1' });
 });
 
-test('enroll: без промокода в теле только courseId', async () => {
-  api.mockReply({ json: enrollmentFixture() });
-  await enroll('c1');
-  assert.deepEqual(jsonBody(lastRequest(api)), { courseId: 'c1' });
+test('enroll: redirectUrl mock-страницы возвращается без изменений', async () => {
+  const result = enrollmentFixture({ redirectUrl: '/pay/mock/mock_abc123' });
+  api.mockReply({ json: result });
+  const res = await enroll('c1');
+  assert.equal(res.redirectUrl, '/pay/mock/mock_abc123');
 });
 
 test('enroll: promoCode передаётся вторым параметром', async () => {
@@ -260,7 +257,7 @@ test('enroll: пробелы вокруг промокода обрезаютс�
 test('enroll: пустой promoCode не отправляется (бесплатный курс не ломаем)', async () => {
   api.mockReply({ json: enrollmentFixture({ amountCents: 0, enrollmentActive: true }) });
   await enroll('c1', '');
-  assert.equal('promoCode' in jsonBody(lastRequest(api)), false);
+  assert.deepEqual(jsonBody(lastRequest(api)), { courseId: 'c1' });
 
   api.requests.length = 0;
   api.mockReply({ json: enrollmentFixture({ amountCents: 0, enrollmentActive: true }) });

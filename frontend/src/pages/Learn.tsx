@@ -17,7 +17,7 @@
 // (форма отзыва на странице курса /courses/{slug}). Панель показывается над
 // блоком урока и не скрывает навигацию по урокам.
 
-import { useMemo, useRef, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Link, NavLink, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
@@ -52,17 +52,6 @@ interface ErrorState {
   message: string;
 }
 
-/**
- * Переменные мутации completeLesson. Урок фиксируется в момент отправки:
- * если пользователь переключится на другой урок, ответ не должен «приклеить»
- * вердикт к новому активному уроку.
- */
-interface CompleteLessonVars {
-  courseId: string;
-  lessonId: string;
-  payload: CompleteLessonInput;
-}
-
 /** Понятный текст ошибки completeLesson по статусу. */
 function errorText(e: unknown): string {
   if (e instanceof ApiError) {
@@ -74,7 +63,7 @@ function errorText(e: unknown): string {
 }
 
 export default function Learn(): JSX.Element {
-  useSeo('Обучение — Edu Platform');
+  useSeo('Обучение — skillex.space');
   const { courseId = '', lessonId } = useParams();
   const qc = useQueryClient();
 
@@ -159,12 +148,6 @@ export default function Learn(): JSX.Element {
   const activeLesson: FlatLesson | undefined =
     lessonFromUrl ?? nextByServer ?? flatLessons[0];
 
-  // Актуальный урок для асинхронных колбэков мутации. Ref обновляется на
-  // каждом рендере, поэтому ответ, пришедший после переключения урока,
-  // не запишет вердикт/ошибку «чужому» уроку.
-  const activeLessonIdRef = useRef<string | undefined>(activeLesson?.id);
-  activeLessonIdRef.current = activeLesson?.id;
-
   // Линейный «следующий» для кнопки продолжения, если сервер не дал nextLesson.
   const activeIndex = activeLesson ? flatLessons.indexOf(activeLesson) : -1;
   const flatNext =
@@ -173,22 +156,19 @@ export default function Learn(): JSX.Element {
       : undefined;
 
   const mutation = useMutation({
-    // P11: урок берём из переменных, а не из текущего activeLesson —
-    // иначе ответ старого урока мог примениться к только что открытому.
-    mutationFn: ({ courseId: targetCourseId, lessonId: targetLessonId, payload }: CompleteLessonVars) =>
-      completeLesson(targetCourseId, targetLessonId, payload),
-    onSuccess: (res, variables) => {
-      // Ответ для урока, который уже не открыт, не записываем: иначе вердикт
-      // старого запроса мог бы перебить вердикт нового или «всплыть» позже.
-      if (variables.lessonId === activeLessonIdRef.current) {
-        setVerdictState({ lessonId: variables.lessonId, result: res });
-        // Чужую ошибку (для другого урока) не стираем: она ещё показывается.
-        setErrorState((prev) => (prev?.lessonId === variables.lessonId ? null : prev));
+    mutationFn: (payload: CompleteLessonInput) => {
+      if (!activeLesson) {
+        return Promise.reject(new Error('нет активного урока'));
       }
+      return completeLesson(courseId, activeLesson.id, payload);
+    },
+    onSuccess: (res) => {
+      if (!activeLesson) return;
+      setVerdictState({ lessonId: activeLesson.id, result: res });
+      setErrorState(null);
       // Прогресс перечитываем с сервера: список уроков и полоса обновятся
       // по completedLessonIds/percent (та же query, что и в MyCourses.tsx).
-      // Ключ курса — из переменных: пользователь мог уйти на другой курс.
-      void qc.invalidateQueries({ queryKey: ['course-progress', variables.courseId] });
+      void qc.invalidateQueries({ queryKey: ['course-progress', courseId] });
       // Инвалидируем список «моих курсов»: состав записей и порядок могли измениться.
       // Второй ключ ('me-courses') — запасной вариант переименования из T03.
       void qc.invalidateQueries({ queryKey: ['my-courses'] });
@@ -196,12 +176,10 @@ export default function Learn(): JSX.Element {
       // T68: на 100% бэкенд выдаёт сертификат — подтягиваем номер для баннера.
       void qc.invalidateQueries({ queryKey: ['my-certificates'] });
     },
-    onError: (e: unknown, variables) => {
-      // Ошибку урока, который уже не открыт, не показываем и не записываем.
-      if (variables.lessonId !== activeLessonIdRef.current) return;
-      // Сбрасываем вердикт только того урока, чей запрос упал.
-      setVerdictState((prev) => (prev?.lessonId === variables.lessonId ? null : prev));
-      setErrorState({ lessonId: variables.lessonId, message: errorText(e) });
+    onError: (e: unknown) => {
+      if (!activeLesson) return;
+      setVerdictState(null);
+      setErrorState({ lessonId: activeLesson.id, message: errorText(e) });
     },
   });
 
@@ -471,16 +449,8 @@ export default function Learn(): JSX.Element {
                 <LessonView
                   key={currentLesson.id}
                   lesson={currentLesson}
-                  // Спиннер только у того урока, чей запрос действительно летит:
-                  // pending-мутация другого урока не блокирует текущий.
-                  completing={
-                    mutation.isPending &&
-                    mutation.variables?.courseId === courseId &&
-                    mutation.variables?.lessonId === currentLesson.id
-                  }
-                  onComplete={(payload) =>
-                    mutation.mutate({ courseId, lessonId: currentLesson.id, payload })
-                  }
+                  completing={mutation.isPending}
+                  onComplete={(payload) => mutation.mutate(payload)}
                 />
 
                 {/* Вердикт для скринридеров и визуально. */}

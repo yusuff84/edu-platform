@@ -1,0 +1,9 @@
+FROM alpine:latest
+RUN adduser -D -H appuser && mkdir -p /uploads/covers && chown -R appuser:appuser /uploads
+COPY artifacts/api /api
+COPY backend/internal/migrate/migrations /migrations
+RUN chmod 0755 /api
+USER appuser
+ENV PORT=8080
+EXPOSE 8080
+CMD ["/api"]

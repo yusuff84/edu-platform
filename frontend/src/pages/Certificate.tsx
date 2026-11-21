@@ -81,9 +81,9 @@ export default function Certificate(): JSX.Element {
     retry: false,
   });
   useSeo(
-    query.data ? `Сертификат ${query.data.number} — Edu Platform` : 'Сертификат — Edu Platform',
+    query.data ? `Сертификат ${query.data.number} — skillex.space` : 'Сертификат — skillex.space',
     query.data
-      ? `Сертификат о прохождении курса «${query.data.courseTitle}» на Edu Platform.`
+      ? `Сертификат о прохождении курса «${query.data.courseTitle}» на skillex.space.`
       : DEFAULT_DESCRIPTION,
   );
 
@@ -153,8 +153,8 @@ export default function Certificate(): JSX.Element {
         </div>
         <article className="panel cert-card">
           <div className="cert-seal" aria-hidden="true">
-            <span className="cert-seal-mark">E</span>
-            <span className="cert-seal-text">Edu Platform</span>
+            <span className="cert-seal-mark">S</span>
+            <span className="cert-seal-text">skillex.space</span>
           </div>
           <p className="cert-kicker">{t('p8.cert.awarded')}</p>
           <h1 className="cert-title">{t('p8.cert.pageTitle')}</h1>

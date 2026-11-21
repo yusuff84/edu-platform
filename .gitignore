@@ -2,6 +2,7 @@ node_modules/
 dist/
 pgdata/
 uploads/
+.local/
 # Go binaries
 *.exe
 *.out
@@ -14,6 +15,11 @@ runner/runner
 
 # сборка контрактных тестов API-клиента (T37, frontend/package.json test:build)
 .tmp-api-test/
+frontend/test-results/
+frontend/playwright-report/
+.review-runner-linux
+.review-runner-tests-linux
+.review-compose.yml
 
 # env — в репозитории лежит только dev-копия .env (не секреты, см. README);
 # реальные значения задавайте через --env-file. Новые/локальные env — не коммитить.

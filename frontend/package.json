@@ -4,28 +4,28 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
+    "test:e2e": "playwright test",
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "test:build": "vite build --ssr src/api/client.ts --outDir .tmp-api-test --emptyOutDir --mode test",
-    "test": "npm run test:build && node --test \"tests/api-contract/*.test.mjs\""
+    "test": "npm run test:build && node --test tests/api-contract/"
   },
   "dependencies": {
-    "@hookform/resolvers": "^3.6.0",
+    "@hookform/resolvers": "^5.9.2",
     "@tanstack/react-query": "^5.51.0",
-    "prism-react-renderer": "^2.4.1",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "react-hook-form": "^7.52.1",
-    "react-router-dom": "^6.24.1",
-    "react-simple-code-editor": "^0.14.1",
-    "zod": "^3.23.8"
+    "react-hook-form": "^7.92.0",
+    "react-router-dom": "^7.18.5",
+    "zod": "^4.6.7"
   },
   "devDependencies": {
+    "@playwright/test": "^1.65.1",
     "@types/react": "^18.3.3",
     "@types/react-dom": "^18.3.0",
     "@vitejs/plugin-react": "^4.3.1",
     "typescript": "^5.5.3",
-    "vite": "^5.4.0"
+    "vite": "^7.3.8"
   }
 }

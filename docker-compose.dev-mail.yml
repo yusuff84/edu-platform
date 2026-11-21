@@ -1,0 +1,31 @@
+# Local testing only: SMTP sink retains messages in memory and delivers nothing
+# outside this Compose project. Never include this override in production.
+services:
+  api:
+    environment:
+      SMTP_ADDR: dev-mail:11025
+      SMTP_FROM: support@e2e.test
+      SMTP_TLS: none
+      SMTP_USERNAME: ""
+      SMTP_PASSWORD: ""
+    depends_on:
+      dev-mail:
+        condition: service_healthy
+  dev-mail:
+    image: node:22-alpine
+    command: ["node", "/mail-server.mjs"]
+    environment:
+      MAIL_TEST_HOST: 0.0.0.0
+    volumes:
+      - ./frontend/tests/e2e/mail-server.mjs:/mail-server.mjs:ro
+    ports:
+      - "127.0.0.1:13025:13025"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:13025/healthz').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 2s
+      timeout: 2s
+      retries: 15

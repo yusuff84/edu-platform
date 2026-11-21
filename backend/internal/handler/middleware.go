@@ -57,7 +57,9 @@ type App struct {
 	// должны быть одной критической секцией, иначе одновременные доставки
 	// одного события обе отвечают processed (тест T35 под нагрузкой видел
 	// processed=2). Вебхуки редки — общий замок на приложение достаточен.
-	webhookMu sync.Mutex
+	webhookMu        sync.Mutex
+	accountMailOnce  sync.Once
+	accountMailSlots chan struct{}
 }
 
 type ctxKey string
@@ -101,11 +103,7 @@ func NewRouter(app *App) http.Handler {
 	// chi r.Get требует http.HandlerFunc — оборачиваем Handler через ServeHTTP.
 	// Страница читает платёж из Store (handler/mock_payment.go), а не из
 	// in-memory реестра провайдера: статус переживает рестарт API.
-	// P11: mock — только dev-инструмент. Вне dev маршрут не регистрируется
-	// вовсе (404), чтобы тестовая страница не оказалась в проде.
-	if app.Config.IsDev() {
-		r.Get("/pay/mock/{id}", app.MockPaymentPage)
-	}
+	r.Get("/pay/mock/{id}", app.MockPaymentPage)
 	// T13: обслуживание уже загруженных файлов (обложки курсов и т.п.,
 	// см. internal/storage). Загрузочного эндпоинта в MVP нет — раздаются
 	// только файлы, которые уже лежат в каталоге uploads/.
@@ -121,6 +119,7 @@ func NewRouter(app *App) http.Handler {
 		r.With(app.rateLimit("auth", app.Config.RateLimitAuthPerMin)).Post("/auth/register", app.Register)
 		r.With(app.rateLimit("auth", app.Config.RateLimitAuthPerMin)).Post("/auth/login", app.Login)
 		r.Post("/auth/logout", app.Logout)
+		app.RegisterAccountSecurityRoutes(r)
 		r.Get("/auth/me", app.Me)
 
 		// T13: вход через Яндекс ID (хендлеры — auth_yandex.go, клиент —
@@ -212,22 +211,8 @@ func NewRouter(app *App) http.Handler {
 			r.Post("/invites/{id}/revoke", app.AdminRevokeInvite)
 			r.Get("/courses/review", app.AdminReviewQueue)
 			r.Post("/courses/{id}/moderate", app.AdminModerateCourse)
-			// T87: принудительная публикация курса супер-админом
-			// (draft|review → published, published идемпотентно).
-			r.Post("/courses/{id}/publish", app.AdminPublishCourse)
-			app.RegisterAdminUsersRoutes(r)    // T24: /admin/users — управление пользователями
-			app.RegisterAdminSessionsRoutes(r) // T93: /admin/users/{id}/sessions — сессии и выход
+			app.RegisterAdminUsersRoutes(r) // T24: /admin/users — управление пользователями
 			app.RegisterAdminConsoleRoutes(r)
-			// T89: глобальный журнал промокодов — GET /promo-codes,
-			// PATCH /promo-codes/{id} (handler/admin_promos.go).
-			app.RegisterAdminPromosRoutes(r)
-			// T85: глобальная модерация Q&A — GET /admin/questions
-			// (handler/admin_questions.go). Групповые requireAuth/
-			// requireRole(admin) уже навешены выше.
-			app.RegisterAdminQuestionsRoutes(r)
-			// T83: глобальный список отзывов GET /admin/reviews (удаление —
-			// существующий DELETE /admin/reviews/{id} из admin_console.go).
-			app.RegisterAdminReviewsRoutes(r)
 			// T55: детали курса GET /admin/courses/{id} — программа, статистика
 			// и карточка «одним экраном» (handler/admin_course_detail.go).
 			// Регистрируется после очереди модерации: статический сегмент
@@ -366,9 +351,26 @@ func (a *App) sessionCookieFor(r *http.Request, value string, maxAge int) *http.
 }
 
 // startSession создаёт сессию и ставит подписанную httpOnly cookie.
-func (a *App) startSession(w http.ResponseWriter, r *http.Request, userID string) {
-	sess := a.Store.CreateSession(userID, sessionTTL)
+func (a *App) startSession(w http.ResponseWriter, r *http.Request, user *repo.User) bool {
+	ua := []rune(strings.ToValidUTF8(r.UserAgent(), ""))
+	if len(ua) > 256 {
+		ua = ua[:256]
+	}
+	ip := clientIP(r)
+	if net.ParseIP(ip) == nil {
+		ip = ""
+	}
+	sess, err := a.Store.CreateAccountSession(user.ID, user.PasswordHash, sessionTTL, string(ua), ip)
+	if errors.Is(err, repo.ErrConflict) {
+		writeErr(w, http.StatusUnauthorized, "Учётные данные изменились, войдите снова")
+		return false
+	}
+	if err != nil || sess == nil {
+		writeErr(w, http.StatusServiceUnavailable, "Не удалось создать сессию, попробуйте позже")
+		return false
+	}
 	http.SetCookie(w, a.sessionCookieFor(r, a.sessionValue(sess.ID), int(sessionTTL.Seconds())))
+	return true
 }
 
 func (a *App) clearSession(w http.ResponseWriter, r *http.Request) {
@@ -606,13 +608,13 @@ func clientIP(r *http.Request) string {
 }
 
 // realIP подставляет клиента из заголовков балансировщика (X-Real-IP /
-// X-Forwarded-For), но только когда реальный RemoteAddr — loopback или
-// приватная сеть (доверенный прокси). Иначе заголовкам доверять нельзя:
+// X-Forwarded-For), но только когда реальный RemoteAddr явно перечислен
+// в TrustedProxyCIDRs. Private/loopback сети автоматически не доверяются:
 // браузер умеет подставлять X-Forwarded-For сам и обходил бы rate-limit по IP.
 func (a *App) realIP(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if host, _, err := net.SplitHostPort(r.RemoteAddr); err == nil {
-			if ip := net.ParseIP(host); ip != nil && (ip.IsLoopback() || ip.IsPrivate()) {
+			if ip := net.ParseIP(host); ip != nil && a.trustedProxy(ip) {
 				if v := strings.TrimSpace(r.Header.Get("X-Real-IP")); v != "" {
 					r.RemoteAddr = v
 				} else if v := strings.TrimSpace(r.Header.Get("X-Forwarded-For")); v != "" {
@@ -628,6 +630,18 @@ func (a *App) realIP(next http.Handler) http.Handler {
 }
 
 // ---- CORS / CSRF ----
+
+func (a *App) trustedProxy(ip net.IP) bool {
+	for _, entry := range a.Config.TrustedProxyCIDRs {
+		if trusted := net.ParseIP(entry); trusted != nil && trusted.Equal(ip) {
+			return true
+		}
+		if _, network, err := net.ParseCIDR(entry); err == nil && network.Contains(ip) {
+			return true
+		}
+	}
+	return false
+}
 
 func originOf(r *http.Request) string {
 	if o := strings.TrimSpace(r.Header.Get("Origin")); o != "" {

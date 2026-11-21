@@ -1,0 +1,9 @@
+abi <abi/4.0>,
+include <tunables/global>
+
+# Outer container profile: permit bubblewrap's nested namespaces/mount setup.
+# The container still drops all capabilities and runs with a read-only root,
+# no-new-privileges, an internal network and the inner bubblewrap sandbox.
+profile skillex-runner flags=(unconfined) {
+  userns,
+}

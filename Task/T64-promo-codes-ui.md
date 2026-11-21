@@ -20,8 +20,8 @@
 2. `frontend/src/api/client.ts`:
    - `createPromoCode(courseId, payload)`, `listPromoCodes(courseId)`,
      `deactivatePromoCode(courseId, promoId)`, `validatePromoCode(courseId, code)`;
-   - `enroll(courseId, provider, promoCode?)` — необязательный третий параметр,
-     обратная совместимость обязательна.
+   - `enroll(courseId, promoCode?)` — провайдера выбирает сервер; поле
+     `provider` в тело запроса не отправляется.
 3. Конструктор (`frontend/src/pages/Constructor.tsx`): секция «Промокоды» для
    существующего курса (не для архива):
    - форма: код, скидка % (1–90), лимит использований (0 — без лимита),

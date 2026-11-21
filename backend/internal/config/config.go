@@ -2,30 +2,38 @@
 package config
 
 import (
+	"fmt"
 	"log"
+	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
 )
 
 // defaultSessionSecret — дефолт из .env.example/compose: известен публично,
-// поэтому подпись cookie с ним предсказуема (предупреждаем в Load).
+// поэтому подпись cookie с ним предсказуема. В dev предупреждаем, в
+// production validate() запрещает запуск.
 const defaultSessionSecret = "change-me"
 
 // Config — настройки API.
 type Config struct {
-	DatabaseURL      string
-	SessionSecret    string
-	AppEnv           string // APP_ENV: development | production (пусто — дедукция по DATABASE_URL)
-	PaymentsProvider string // mock | stripe | yookassa
-	CommissionPct    int    // комиссия платформы 0..90, default 15
-	Port             string
-	RunnerURL        string // базовый URL code-runner, например http://runner:8081
-	AllowedOrigins   []string
-	AdminEmail       string // опциональный сид админа (создаётся только если задан вместе с паролем)
-	AdminPassword    string
-	PublicAppURL     string // PUBLIC_APP_URL: база ссылок в письмах, default http://localhost:3000
+	DatabaseURL       string
+	SessionSecret     string
+	AppEnv            string // APP_ENV: development | production (пусто — дедукция по DATABASE_URL)
+	PaymentsProvider  string // mock | stripe | yookassa | disabled
+	CommissionPct     int    // комиссия платформы 0..90, default 15
+	Port              string
+	RunnerURL         string // базовый URL code-runner, например http://runner:8081
+	AllowedOrigins    []string
+	TrustedProxyCIDRs []string
+	AdminEmail        string // опциональный bootstrap админа (создаётся только если задан вместе с паролем)
+	AdminPassword     string
+	TeacherEmail      string // опциональный bootstrap преподавателя (только вместе с паролем)
+	TeacherPassword   string
+	MockWebhookSecret string // MOCK_WEBHOOK_SECRET: только dev; production с mock запрещён
+	PublicAppURL      string // PUBLIC_APP_URL: база ссылок в письмах, default http://localhost:3000
 
 	// ---- SMTP для приглашений (опционально) ----
 	SMTPAddr     string // SMTP_ADDR: host:port; пусто — письма выключены
@@ -68,8 +76,19 @@ func (c *Config) IsDev() bool {
 	return strings.TrimSpace(c.DatabaseURL) == ""
 }
 
-// Load собирает Config из окружения с безопасными значениями по умолчанию.
+// Load собирает Config из окружения и завершает процесс при небезопасной
+// конфигурации (production без секретов, mock-оплата, SMTP без TLS и т.п.).
 func Load() *Config {
+	cfg := loadFromEnv()
+	if err := cfg.validate(); err != nil {
+		log.Fatalf("некорректная конфигурация: %v", err)
+	}
+	return cfg
+}
+
+// loadFromEnv только читает переменные окружения и не завершает процесс —
+// так конфигурацию можно тестировать без log.Fatal.
+func loadFromEnv() *Config {
 	commission := 15
 	if v := strings.TrimSpace(os.Getenv("COMMISSION_PCT")); v != "" {
 		if n, err := strconv.Atoi(v); err == nil && n >= 0 && n <= 90 {
@@ -80,26 +99,9 @@ func Load() *Config {
 	if port == "" {
 		port = "8080"
 	}
-	env := strings.TrimSpace(os.Getenv("APP_ENV"))
-	databaseURL := os.Getenv("DATABASE_URL")
-	dev := (&Config{AppEnv: env, DatabaseURL: databaseURL}).IsDev()
 	provider := strings.ToLower(strings.TrimSpace(os.Getenv("PAYMENTS_PROVIDER")))
 	if provider == "" {
-		if dev {
-			provider = "mock"
-		} else {
-			// P11: в prod пустой PAYMENTS_PROVIDER не должен молча
-			// превращаться в mock (иначе тестовый платёж может стать
-			// боевым). Безопасный явный дефолт — реальный провайдер:
-			// без ключей checkout вернёт 502, а не создаст mock-платёж.
-			provider = "stripe"
-			log.Printf("ПРЕДУПРЕЖДЕНИЕ: PAYMENTS_PROVIDER не задан в prod-режиме — используем stripe; mock вне dev запрещён. Задайте провайдера явно")
-		}
-	}
-	if provider == "mock" && !dev {
-		// Явный mock в prod не фатален (конфиг может быть общим для стендов),
-		// но handler отклонит mock-платежи: checkout/webhook вернут 502/404.
-		log.Printf("ПРЕДУПРЕЖДЕНИЕ: PAYMENTS_PROVIDER=mock в prod-режиме — mock-платежи отключены; задайте stripe или yookassa")
+		provider = "mock"
 	}
 	runner := strings.TrimSpace(os.Getenv("RUNNER_URL"))
 	if runner == "" {
@@ -124,30 +126,22 @@ func Load() *Config {
 		}
 	}
 
-	secret := strings.TrimSpace(os.Getenv("SESSION_SECRET"))
-	switch {
-	case secret == "" && dev:
-		log.Printf("ПРЕДУПРЕЖДЕНИЕ: SESSION_SECRET не задан — cookie сессии не подписываются (dev-режим). Задайте секрет перед прод-запуском")
-	case secret == "" && !dev:
-		// Прод без секрета: подписывать нечем, подделка cookie становится тривиальной — не стартуем.
-		log.Fatalf("SESSION_SECRET не задан, а режим продовый (APP_ENV=%q, DATABASE_URL задан): запуск без секрета запрещён. Задайте SESSION_SECRET или APP_ENV=development", env)
-	case secret == defaultSessionSecret:
-		// Комpose из .env.example поднимается с дефолтом: работаем, но громко предупреждаем.
-		log.Printf("ПРЕДУПРЕЖДЕНИЕ: SESSION_SECRET остался дефолтным %q — подпись cookie предсказуема; задайте свой секрет", defaultSessionSecret)
-	}
-
-	cfg := &Config{
-		DatabaseURL:      databaseURL,
-		SessionSecret:    secret,
-		AppEnv:           env,
-		PaymentsProvider: provider,
-		CommissionPct:    commission,
-		Port:             port,
-		RunnerURL:        runner,
-		AllowedOrigins:   origins,
-		AdminEmail:       strings.TrimSpace(os.Getenv("ADMIN_EMAIL")),
-		AdminPassword:    os.Getenv("ADMIN_PASSWORD"),
-		PublicAppURL:     publicAppURL,
+	return &Config{
+		DatabaseURL:       os.Getenv("DATABASE_URL"),
+		SessionSecret:     strings.TrimSpace(os.Getenv("SESSION_SECRET")),
+		AppEnv:            strings.TrimSpace(os.Getenv("APP_ENV")),
+		PaymentsProvider:  provider,
+		CommissionPct:     commission,
+		Port:              port,
+		RunnerURL:         runner,
+		AllowedOrigins:    origins,
+		TrustedProxyCIDRs: strings.FieldsFunc(os.Getenv("TRUSTED_PROXY_CIDRS"), func(r rune) bool { return r == ',' || r == ' ' }),
+		AdminEmail:        strings.TrimSpace(os.Getenv("ADMIN_EMAIL")),
+		AdminPassword:     os.Getenv("ADMIN_PASSWORD"),
+		TeacherEmail:      strings.TrimSpace(os.Getenv("TEACHER_EMAIL")),
+		TeacherPassword:   os.Getenv("TEACHER_PASSWORD"),
+		MockWebhookSecret: strings.TrimSpace(os.Getenv("MOCK_WEBHOOK_SECRET")),
+		PublicAppURL:      publicAppURL,
 
 		SMTPAddr:     strings.TrimSpace(os.Getenv("SMTP_ADDR")),
 		SMTPFrom:     strings.TrimSpace(os.Getenv("SMTP_FROM")),
@@ -166,7 +160,73 @@ func Load() *Config {
 		YandexClientSecret: strings.TrimSpace(os.Getenv("YANDEX_CLIENT_SECRET")),
 		YandexRedirectURI:  strings.TrimSpace(os.Getenv("YANDEX_REDIRECT_URI")),
 	}
-	return cfg
+}
+
+// validate проверяет инварианты production. В dev дефолты разрешены (с
+// предупреждениями), в production возвращённая ошибка превращается Load в
+// log.Fatalf — сервис не стартует с предсказуемыми секретами/mock-оплатой.
+func (c *Config) validate() error {
+	for _, entry := range c.TrustedProxyCIDRs {
+		if net.ParseIP(entry) == nil {
+			if _, _, err := net.ParseCIDR(entry); err != nil {
+				return fmt.Errorf("TRUSTED_PROXY_CIDRS содержит некорректный IP/CIDR: %s", entry)
+			}
+		}
+	}
+	adminEmail := strings.TrimSpace(c.AdminEmail)
+	teacherEmail := strings.TrimSpace(c.TeacherEmail)
+	if adminEmail != "" && teacherEmail != "" && strings.EqualFold(adminEmail, teacherEmail) {
+		return fmt.Errorf("ADMIN_EMAIL и TEACHER_EMAIL не должны совпадать: одна учётка не может быть одновременно админом и преподавателем")
+	}
+
+	secret := strings.TrimSpace(c.SessionSecret)
+	if c.IsDev() {
+		switch {
+		case secret == "":
+			log.Printf("ПРЕДУПРЕЖДЕНИЕ: SESSION_SECRET не задан — cookie сессии не подписываются (dev-режим). Задайте секрет перед прод-запуском")
+		case strings.EqualFold(secret, defaultSessionSecret):
+			// Compose из .env.example поднимается с дефолтом: работаем, но громко предупреждаем.
+			log.Printf("ПРЕДУПРЕЖДЕНИЕ: SESSION_SECRET остался дефолтным %q — подпись cookie предсказуема; задайте свой секрет", defaultSessionSecret)
+		}
+		return nil
+	}
+
+	if secret == "" {
+		return fmt.Errorf("SESSION_SECRET не задан, а режим продовый (APP_ENV=%q): запуск без секрета запрещён; задайте SESSION_SECRET или APP_ENV=development", c.AppEnv)
+	}
+	if strings.EqualFold(secret, defaultSessionSecret) {
+		return fmt.Errorf("SESSION_SECRET остался дефолтным %q: в production задайте уникальный случайный секрет", defaultSessionSecret)
+	}
+	provider := strings.ToLower(strings.TrimSpace(c.PaymentsProvider))
+	if provider == "mock" {
+		// Mock-страница подтверждения не умеет подписывать вебхук секретом,
+		// который нельзя отдавать браузеру. Поэтому mock — только dev-режим,
+		// даже если MOCK_WEBHOOK_SECRET задан: production обязан использовать
+		// реального провайдера.
+		return fmt.Errorf("PAYMENTS_PROVIDER=mock запрещён в production: используйте stripe/yookassa, а mock оставьте для APP_ENV=development")
+	}
+	if provider != "stripe" && provider != "yookassa" && provider != "disabled" {
+		// Иначе сервис стартовал бы и падал только на первой покупке;
+		// ошибка конфигурации должна обнаруживаться при запуске.
+		return fmt.Errorf("PAYMENTS_PROVIDER=%q неизвестен: допустимы stripe, yookassa или disabled", c.PaymentsProvider)
+	}
+	smtpTLS := strings.ToLower(strings.TrimSpace(c.SMTPTLS))
+	if smtpTLS == "none" {
+		return fmt.Errorf("SMTP_TLS=none запрещён в production: используйте starttls или implicit")
+	}
+	if smtpTLS != "starttls" && smtpTLS != "implicit" {
+		return fmt.Errorf("SMTP_TLS=%q неизвестен: допустимы starttls или implicit", c.SMTPTLS)
+	}
+	if strings.TrimSpace(c.SMTPAddr) != "" && strings.TrimSpace(c.SMTPFrom) == "" {
+		return fmt.Errorf("SMTP_ADDR задан, но SMTP_FROM пуст: в production письма не должны отключаться молча")
+	}
+	if strings.TrimSpace(c.SMTPAddr) != "" {
+		appURL, err := url.Parse(c.PublicAppURL)
+		if err != nil || appURL.Scheme != "https" || appURL.Host == "" || appURL.User != nil || appURL.RawQuery != "" || appURL.Fragment != "" {
+			return fmt.Errorf("PUBLIC_APP_URL должен быть HTTPS URL приложения без query/fragment: он используется в письмах аккаунта")
+		}
+	}
+	return nil
 }
 
 // parseSameSite переводит COOKIE_SAMESITE=lax|strict|none в http.SameSite.

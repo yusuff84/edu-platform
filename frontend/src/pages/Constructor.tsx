@@ -49,7 +49,6 @@ import {
   formatDate,
   formatPrice,
   listPromoCodes,
-  me,
   myTeaching,
   submitCourse,
   updateLesson,
@@ -121,19 +120,6 @@ const PROMO_STATUS_LABELS: Record<PromoStatus, string> = {
 };
 
 /**
- * Конец выбранного дня по локальному времени → RFC3339 (UTC) для API.
- * input[type=date] отдаёт YYYY-MM-DD; дописывать «Z» нельзя: в Москве
- * 23:59:59Z — это 02:59 следующего дня. Строка без зоны парсится как
- * локальное время, toISOString() уже приводит её к UTC.
- */
-export function promoExpiresAt(date: string): string | undefined {
-  if (!date) return undefined;
-  const d = new Date(`${date}T23:59:59`);
-  if (Number.isNaN(d.getTime())) return undefined;
-  return d.toISOString();
-}
-
-/**
  * Статус промокода — вычисляется на клиенте (отдельного поля в модели нет):
  * отключённый важнее истёкшего, истёкший — активный, но expiresAt уже прошёл.
  */
@@ -156,7 +142,6 @@ const MSG_QUIZ_NO_QUESTIONS = 'Добавьте хотя бы один вопр�
 const MSG_QUIZ_TEXT = 'Укажите текст вопроса';
 const MSG_QUIZ_OPTIONS = 'В вопросе должно быть минимум 2 варианта ответа';
 const MSG_QUIZ_CORRECT = 'Отметьте правильный вариант ответа';
-const MSG_QUIZ_CORRECT_MULTI = 'Отметьте не менее двух правильных вариантов';
 const MSG_CODE_NO_TESTS = 'Добавьте хотя бы один тест';
 const MSG_TEST_NAME = 'Укажите название теста';
 const MSG_TEST_EXPECTED = 'Укажите ожидаемый результат';
@@ -301,12 +286,8 @@ interface QuestionState {
   id?: string;
   text: string;
   options: string[];
-  /** Индекс правильного варианта [0, options.length) для одиночного вопроса. */
+  /** Индекс правильного варианта [0, options.length). */
   correct: number;
-  /** FR-010: множественный выбор — можно отметить несколько правильных вариантов. */
-  multi: boolean;
-  /** Правильные индексы для multi (после валидации — не менее двух). */
-  correctIndexes: number[];
   explanation: string;
 }
 
@@ -350,7 +331,7 @@ function emptyLesson(moduleId: string): LessonDraft {
     videoUrl: '',
     liveUrl: '',
     startsAt: '',
-    questions: [{ text: '', options: ['', ''], correct: 0, multi: false, correctIndexes: [0], explanation: '' }],
+    questions: [{ text: '', options: ['', ''], correct: 0, explanation: '' }],
     language: 'python',
     template: '',
     tests: [{ name: '', input: '', expected: '', hidden: false }],
@@ -384,22 +365,15 @@ function lessonToDraft(l: Lesson, moduleId: string): LessonDraft {
   d.liveUrl = l.liveUrl ?? '';
   d.startsAt = toLocalInput(l.startsAt);
   if (l.kind === 'quiz' && l.quiz) {
-    d.questions = l.quiz.questions.map((q) => {
-      const correct = q.correct ?? 0;
-      const correctIndexes =
-        q.correctIndexes && q.correctIndexes.length > 0 ? [...q.correctIndexes] : [correct];
-      return {
-        id: q.id,
-        text: q.text,
-        options: [...q.options],
-        correct: q.multi ? (correctIndexes[0] ?? correct) : correct,
-        multi: Boolean(q.multi),
-        correctIndexes,
-        explanation: q.explanation ?? '',
-      };
-    });
+    d.questions = l.quiz.questions.map((q) => ({
+      id: q.id,
+      text: q.text,
+      options: [...q.options],
+      correct: q.correct ?? 0,
+      explanation: q.explanation ?? '',
+    }));
     if (d.questions.length === 0) {
-      d.questions = [{ text: '', options: ['', ''], correct: 0, multi: false, correctIndexes: [0], explanation: '' }];
+      d.questions = [{ text: '', options: ['', ''], correct: 0, explanation: '' }];
     }
   }
   if (l.kind === 'code' && l.codeTask) {
@@ -439,12 +413,8 @@ function lessonToPreview(d: LessonDraft): LessonPreviewData {
         const question: NonNullable<LessonPreviewData['quiz']>['questions'][number] = {
           text: q.text,
           options: [...q.options],
-          correct: q.multi ? (q.correctIndexes[0] ?? q.correct) : q.correct,
+          correct: q.correct,
         };
-        if (q.multi) {
-          question.multi = true;
-          question.correctIndexes = [...q.correctIndexes];
-        }
         if (q.explanation) question.explanation = q.explanation;
         return question;
       }),
@@ -501,14 +471,7 @@ function validateLesson(d: LessonDraft): { errors: Record<string, string>; first
       if (!q.text.trim()) put(`q-${qi}-text`, MSG_QUIZ_TEXT);
       const filled = q.options.filter((o) => o.trim()).length;
       if (filled < 2) put(`q-${qi}-options`, MSG_QUIZ_OPTIONS);
-      if (q.multi) {
-        const valid =
-          q.correctIndexes.length >= 2 &&
-          q.correctIndexes.every((idx) => idx >= 0 && idx < q.options.length);
-        if (!valid) put(`q-${qi}-options`, MSG_QUIZ_CORRECT_MULTI);
-      } else if (q.correct < 0 || q.correct >= q.options.length) {
-        put(`q-${qi}-options`, MSG_QUIZ_CORRECT);
-      }
+      if (q.correct < 0 || q.correct >= q.options.length) put(`q-${qi}-options`, MSG_QUIZ_CORRECT);
     });
   }
   if (d.kind === 'code') {
@@ -570,14 +533,8 @@ function buildLessonInput(d: LessonDraft): CreateLessonInput {
             const question: NonNullable<CreateLessonInput['quiz']>['questions'][number] = {
               text: q.text.trim(),
               options: q.options.map((o) => o.trim()),
-              // correct остаётся первым правильным индексом и для multi —
-              // старые клиенты продолжают понимать вопрос.
-              correct: q.multi ? (q.correctIndexes[0] ?? q.correct) : q.correct,
+              correct: q.correct,
             };
-            if (q.multi) {
-              question.multi = true;
-              question.correctIndexes = [...q.correctIndexes];
-            }
             const explanation = q.explanation.trim();
             if (explanation) question.explanation = explanation;
             return question;
@@ -630,12 +587,8 @@ function buildLessonPatchBody(d: LessonDraft): Record<string, unknown> {
           const question: Record<string, unknown> = {
             text: q.text.trim(),
             options: q.options.map((o) => o.trim()),
-            correct: q.multi ? (q.correctIndexes[0] ?? q.correct) : q.correct,
+            correct: q.correct,
           };
-          if (q.multi) {
-            question.multi = true;
-            question.correctIndexes = [...q.correctIndexes];
-          }
           // Сохраняем id исходных вопросов: ответы студентов привязаны к ним.
           if (q.id) question.id = q.id;
           const explanation = q.explanation.trim();
@@ -687,10 +640,9 @@ function lessonReady(l: Lesson): boolean {
           (q) =>
             q.text.trim() !== '' &&
             q.options.filter((o) => o.trim() !== '').length >= 2 &&
-            (q.multi
-              ? (q.correctIndexes ?? []).length >= 2 &&
-                (q.correctIndexes ?? []).every((idx) => idx >= 0 && idx < q.options.length)
-              : q.correct !== undefined && q.correct >= 0 && q.correct < q.options.length),
+            q.correct !== undefined &&
+            q.correct >= 0 &&
+            q.correct < q.options.length,
         )
       );
     }
@@ -726,7 +678,7 @@ function focusField(id: string): void {
 // ---------- Компонент ----------
 
 export default function Constructor(): JSX.Element {
-  useSeo('Конструктор курса — Edu Platform');
+  useSeo('Конструктор курса — skillex.space');
   const { id } = useParams();
   const isNew = !id || id === 'new';
   const navigate = useNavigate();
@@ -736,7 +688,7 @@ export default function Constructor(): JSX.Element {
   const [notice, setNotice] = useState<{ text: string; kind: 'ok' | 'error' } | null>(null);
 
   // ---------- Форма создания курса (/teach/new) ----------
-  const { register, handleSubmit, formState, watch } = useForm<CourseForm>({
+  const { register, handleSubmit, formState, watch } = useForm<z.input<typeof courseSchema>, unknown, CourseForm>({
     resolver: zodResolver(courseSchema),
     defaultValues: { title: '', description: '', priceRub: 0, slug: '' },
   });
@@ -747,7 +699,7 @@ export default function Constructor(): JSX.Element {
   const slugValue = watch('slug');
   const slugReady = slugValue.trim() === '' || SLUG_RE.test(slugValue.trim());
 
-  function onInvalidCourse(errs: FieldErrors<CourseForm>): void {
+  function onInvalidCourse(errs: FieldErrors<z.input<typeof courseSchema>>): void {
     focusField(
       errs.title
         ? 'course-title'
@@ -770,16 +722,9 @@ export default function Constructor(): JSX.Element {
     retry: false,
   });
 
-  // T88: режим супер-админа. Для teacher всё остаётся как было (editable —
-  // только черновик); admin правит содержимое любого курса, кроме архива.
-  const meQuery = useQuery({ queryKey: ['me'], queryFn: me, retry: false });
-  const isAdmin = meQuery.data?.role === 'admin';
-
   const course = detailQuery.data?.course;
   const modules = detailQuery.data?.modules ?? [];
-  const editable = course
-    ? course.status === 'draft' || (isAdmin && course.status !== 'archived')
-    : false;
+  const editable = course?.status === 'draft';
   // T36: в архиве карточка заморожена — PATCH отвечает 409 (контракт T33),
   // поэтому форму правки заранее не показываем, а выводим подсказку.
   const cardFrozen = course?.status === 'archived';
@@ -1027,9 +972,8 @@ export default function Constructor(): JSX.Element {
   /**
    * Клиентская предвалидация по замороженным ключам p8.promo.*Invalid.
    * Код нормализуется (trim+upper), дата «действует до» — конец выбранного
-   * дня по локальному времени, в API уходит RFC3339 UTC. Ошибки сервера
-   * показываются отдельно текстом ApiError.message (notice), клиентские —
-   * под полями.
+   * дня UTC: YYYY-MM-DDT23:59:59Z. Ошибки сервера показываются отдельно
+   * текстом ApiError.message (notice), клиентские — под полями.
    */
   function onPromoSubmit(e: FormEvent): void {
     e.preventDefault();
@@ -1049,10 +993,9 @@ export default function Constructor(): JSX.Element {
 
     let expiresAt: string | undefined;
     if (promoForm.expiresAt) {
-      // Конец дня по локальному времени; в API — RFC3339 UTC (см. promoExpiresAt).
-      expiresAt = promoExpiresAt(promoForm.expiresAt);
-      const expiresTime = expiresAt ? new Date(expiresAt).getTime() : NaN;
-      if (!expiresAt || Number.isNaN(expiresTime) || expiresTime <= Date.now()) {
+      expiresAt = `${promoForm.expiresAt}T23:59:59Z`;
+      const expiresTime = new Date(expiresAt).getTime();
+      if (Number.isNaN(expiresTime) || expiresTime <= Date.now()) {
         errors.expiresAt = t('p8.promo.expiresInvalid');
       }
     }
@@ -1385,44 +1328,10 @@ export default function Constructor(): JSX.Element {
     }));
   }
 
-  /** FR-010: переключение вопроса между одиночным и множественным выбором. */
-  function setQuestionMulti(qi: number, multi: boolean): void {
-    setLesson((prev) => ({
-      ...prev,
-      questions: prev.questions.map((q, i) => {
-        if (i !== qi) return q;
-        if (multi) {
-          const indexes = q.correctIndexes.length > 0 ? q.correctIndexes : [q.correct];
-          return { ...q, multi: true, correctIndexes: indexes, correct: indexes[0] ?? q.correct };
-        }
-        const correct = q.correctIndexes[0] ?? q.correct;
-        return { ...q, multi: false, correct, correctIndexes: [correct] };
-      }),
-    }));
-  }
-
-  /** FR-010: отметить/снять правильный вариант (radio — один, checkbox — много). */
-  function toggleCorrectOption(qi: number, oi: number): void {
-    setLesson((prev) => ({
-      ...prev,
-      questions: prev.questions.map((q, i) => {
-        if (i !== qi) return q;
-        if (!q.multi) return { ...q, correct: oi, correctIndexes: [oi] };
-        const next = q.correctIndexes.includes(oi)
-          ? q.correctIndexes.filter((idx) => idx !== oi)
-          : [...q.correctIndexes, oi].sort((a, b) => a - b);
-        return { ...q, correctIndexes: next, correct: next[0] ?? q.correct };
-      }),
-    }));
-  }
-
   function addQuestion(): void {
     setLesson((prev) => ({
       ...prev,
-      questions: [
-        ...prev.questions,
-        { text: '', options: ['', ''], correct: 0, multi: false, correctIndexes: [0], explanation: '' },
-      ],
+      questions: [...prev.questions, { text: '', options: ['', ''], correct: 0, explanation: '' }],
     }));
   }
 
@@ -1467,12 +1376,8 @@ export default function Constructor(): JSX.Element {
       questions: prev.questions.map((q, i) => {
         if (i !== qi) return q;
         const options = q.options.filter((_, j) => j !== oi);
-        const shifted = q.correct > oi ? q.correct - 1 : q.correct;
-        const correct = Math.max(0, Math.min(shifted, options.length - 1));
-        const correctIndexes = q.correctIndexes
-          .filter((idx) => idx !== oi)
-          .map((idx) => (idx > oi ? idx - 1 : idx));
-        return { ...q, options, correct, correctIndexes };
+        const correct = Math.max(0, Math.min(q.correct, options.length - 1));
+        return { ...q, options, correct };
       }),
     }));
   }
@@ -1497,10 +1402,7 @@ export default function Constructor(): JSX.Element {
         let correct = q.correct;
         if (correct === oi) correct = j;
         else if (correct === j) correct = oi;
-        const correctIndexes = q.correctIndexes.map((idx) =>
-          idx === oi ? j : idx === j ? oi : idx,
-        );
-        return { ...q, options, correct, correctIndexes };
+        return { ...q, options, correct };
       }),
     }));
   }
@@ -1738,21 +1640,6 @@ export default function Constructor(): JSX.Element {
                 </span>{' '}
                 {t('teach.status')}: {STATUS_LABELS[course.status]} · {formatPrice(course.priceCents)}
               </p>
-
-              {/* T88: спокойный баннер режима супер-админа. Учитель его не видит,
-                  бизнес-логика teacher не меняется. В архиве доступ к правкам
-                  закрыт и для админа (T87) — показываем причину. */}
-              {isAdmin && (
-                <section className="teach-banner" role="note">
-                  <h2>{t('p10.courseAdmin.adminMode')}</h2>
-                  <p>{t('p10.courseAdmin.adminModeHint')}</p>
-                  <p className="teach-note">
-                    {course.status === 'archived'
-                      ? t('p10.courseAdmin.contentLockedArchived')
-                      : t('p10.courseAdmin.contentEditable')}
-                  </p>
-                </section>
-              )}
 
               {/* T28: сводка структуры — по уже загруженному CourseDetail. */}
               <p className="ce-structure">
@@ -2207,10 +2094,8 @@ export default function Constructor(): JSX.Element {
               )}
 
               {/* Отправка на модерацию — только для черновика. Рядом — чеклист
-                  готовности (T56): пока не закрыты все пункты, кнопка выключена.
-                  T88: admin правит содержимое review/published, но отправка на
-                  модерацию остаётся действием черновика (teacher не затронут). */}
-              {course.status === 'draft' ? (
+                  готовности (T56): пока не закрыты все пункты, кнопка выключена. */}
+              {editable ? (
                 <div className="teach-section panel">
                   <div className="ce-checklist">
                     <p className="ce-checklist-title">
@@ -2249,9 +2134,9 @@ export default function Constructor(): JSX.Element {
                   </div>
                   <p className="teach-note">{t('teach.confirmSubmit')}</p>
                 </div>
-              ) : !editable ? (
+              ) : (
                 <p className="teach-note">{MSG_CONTENT_LOCKED}</p>
-              ) : null}
+              )}
 
               {/* Создание модулей и уроков — только в черновике. */}
               {editable && (
@@ -2436,13 +2321,13 @@ export default function Constructor(): JSX.Element {
                       )}
 
                       {lesson.kind === 'quiz' && (
-                        <div id="lesson-quiz" className="teach-focusable ce-quiz" tabIndex={-1}>
+                        <div id="lesson-quiz" className="teach-focusable" tabIndex={-1}>
                           <p className="teach-counter">Вопросов: {lesson.questions.length}</p>
                           {lessonErrors['lesson-quiz'] && (
                             <p className="error">{lessonErrors['lesson-quiz']}</p>
                           )}
                           {lesson.questions.map((q, qi) => (
-                            <div key={qi} className="teach-q-box ce-q-box">
+                            <div key={qi} className="teach-q-box">
                               <div className="ce-q-head">
                                 <label htmlFor={`q-${qi}-text`}>
                                   {t('teach.questionText')} {qi + 1}
@@ -2451,7 +2336,6 @@ export default function Constructor(): JSX.Element {
                                 <span className="ce-reorder">
                                   <button
                                     type="button"
-                                    className="ce-btn-sm"
                                     onClick={() => moveQuestion(qi, -1)}
                                     disabled={qi === 0}
                                   >
@@ -2459,7 +2343,6 @@ export default function Constructor(): JSX.Element {
                                   </button>
                                   <button
                                     type="button"
-                                    className="ce-btn-sm"
                                     onClick={() => moveQuestion(qi, 1)}
                                     disabled={qi === lesson.questions.length - 1}
                                   >
@@ -2469,24 +2352,12 @@ export default function Constructor(): JSX.Element {
                               </div>
                               <input
                                 id={`q-${qi}-text`}
-                                className="input"
                                 value={q.text}
                                 onChange={(e) => updateQuestion(qi, { text: e.target.value })}
                               />
                               {lessonErrors[`q-${qi}-text`] && (
                                 <p className="error">{lessonErrors[`q-${qi}-text`]}</p>
                               )}
-
-                              {/* FR-010: множественный выбор. Подпись без нового
-                                  ключа i18n (ru.json в этой задаче не меняем). */}
-                              <label className="ce-multi-toggle">
-                                <input
-                                  type="checkbox"
-                                  checked={q.multi}
-                                  onChange={(e) => setQuestionMulti(qi, e.target.checked)}
-                                />{' '}
-                                Несколько правильных ответов
-                              </label>
 
                               <fieldset
                                 id={`q-${qi}-options`}
@@ -2498,12 +2369,10 @@ export default function Constructor(): JSX.Element {
                                   <div key={oi} className="teach-option-row ce-option-row">
                                     <label className="teach-correct-radio">
                                       <input
-                                        type={q.multi ? 'checkbox' : 'radio'}
+                                        type="radio"
                                         name={`q-correct-${qi}`}
-                                        checked={
-                                          q.multi ? q.correctIndexes.includes(oi) : q.correct === oi
-                                        }
-                                        onChange={() => toggleCorrectOption(qi, oi)}
+                                        checked={q.correct === oi}
+                                        onChange={() => updateQuestion(qi, { correct: oi })}
                                       />
                                       <span className="sr-only">{t('teach.correctOption')}</span>
                                     </label>
@@ -2512,44 +2381,31 @@ export default function Constructor(): JSX.Element {
                                     </label>
                                     <input
                                       id={`q-${qi}-opt-${oi}`}
-                                      className="input"
                                       value={opt}
                                       onChange={(e) => setOption(qi, oi, e.target.value)}
                                     />
                                     {/* T28: перестановка вариантов с пересчётом
                                         индекса correct — ключ следует за вариантом. */}
-                                    <span className="ce-option-actions">
-                                      <button
-                                        type="button"
-                                        className="ce-btn-sm"
-                                        onClick={() => moveOption(qi, oi, -1)}
-                                        disabled={oi === 0}
-                                      >
-                                        {t('teach.moveUp')}
-                                      </button>
-                                      <button
-                                        type="button"
-                                        className="ce-btn-sm"
-                                        onClick={() => moveOption(qi, oi, 1)}
-                                        disabled={oi === q.options.length - 1}
-                                      >
-                                        {t('teach.moveDown')}
-                                      </button>
-                                      <button
-                                        type="button"
-                                        className="ce-btn-sm ce-btn-danger"
-                                        onClick={() => removeOption(qi, oi)}
-                                      >
-                                        {t('common.delete')}
-                                      </button>
-                                    </span>
+                                    <button
+                                      type="button"
+                                      onClick={() => moveOption(qi, oi, -1)}
+                                      disabled={oi === 0}
+                                    >
+                                      {t('teach.moveUp')}
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => moveOption(qi, oi, 1)}
+                                      disabled={oi === q.options.length - 1}
+                                    >
+                                      {t('teach.moveDown')}
+                                    </button>
+                                    <button type="button" onClick={() => removeOption(qi, oi)}>
+                                      {t('common.delete')}
+                                    </button>
                                   </div>
                                 ))}
-                                <button
-                                  type="button"
-                                  className="ce-add"
-                                  onClick={() => addOption(qi)}
-                                >
+                                <button type="button" onClick={() => addOption(qi)}>
                                   {t('teach.addOption')}
                                 </button>
                                 {lessonErrors[`q-${qi}-options`] && (
@@ -2560,33 +2416,27 @@ export default function Constructor(): JSX.Element {
                               <label htmlFor={`q-${qi}-explanation`}>{t('lesson.explanation')}</label>
                               <textarea
                                 id={`q-${qi}-explanation`}
-                                className="input"
                                 rows={2}
                                 value={q.explanation}
                                 onChange={(e) => updateQuestion(qi, { explanation: e.target.value })}
                               />
 
-                              <button
-                                type="button"
-                                className="ce-btn-sm ce-btn-danger ce-q-remove"
-                                onClick={() => removeQuestion(qi)}
-                              >
+                              <button type="button" onClick={() => removeQuestion(qi)}>
                                 {t('teach.deleteQuestion')}
                               </button>
                             </div>
                           ))}
-                          <button type="button" className="ce-add" onClick={addQuestion}>
+                          <button type="button" onClick={addQuestion}>
                             {t('teach.addQuestion')}
                           </button>
                         </div>
                       )}
 
                       {lesson.kind === 'code' && (
-                        <div className="ce-code">
+                        <div>
                           <label htmlFor="lesson-language">{t('lesson.codeLanguage')}</label>
                           <select
                             id="lesson-language"
-                            className="select"
                             value={lesson.language}
                             onChange={(e) => setLessonField('language', e.target.value as Language)}
                           >
@@ -2600,55 +2450,19 @@ export default function Constructor(): JSX.Element {
                           <label htmlFor="lesson-template">{t('lesson.codeTemplate')}</label>
                           <textarea
                             id="lesson-template"
-                            className="input"
                             rows={4}
                             value={lesson.template}
                             onChange={(e) => setLessonField('template', e.target.value)}
                           />
 
-                          {/* T62: класс для типографики заголовка «Тесты» (ce-tests-box).
-                              T91: карточка теста — заголовок и компактный ряд действий. */}
+                          {/* T62: класс для типографики заголовка «Тесты» (ce-tests-box). */}
                           <div id="code-tests" className="teach-focusable ce-tests-box" tabIndex={-1}>
                             <h3>Тесты</h3>
                             {lesson.tests.map((x, ti) => (
-                              <div key={ti} className="teach-test-box ce-test-box">
-                                <div className="ce-test-head">
-                                  <span className="ce-test-title">Тест {ti + 1}</span>
-                                  <span className="ce-reorder ce-test-actions">
-                                    {/* T28: порядок тестов = порядок проверки; ссылок
-                                        на индексы в codeTask нет — обмен безопасен. */}
-                                    <button
-                                      type="button"
-                                      className="ce-btn-sm"
-                                      onClick={() => moveTest(ti, -1)}
-                                      disabled={ti === 0}
-                                    >
-                                      {t('teach.moveUp')}
-                                    </button>
-                                    <button
-                                      type="button"
-                                      className="ce-btn-sm"
-                                      onClick={() => moveTest(ti, 1)}
-                                      disabled={ti === lesson.tests.length - 1}
-                                    >
-                                      {t('teach.moveDown')}
-                                    </button>
-                                    {lesson.tests.length > 1 && (
-                                      <button
-                                        type="button"
-                                        className="ce-btn-sm ce-btn-danger"
-                                        onClick={() => removeTest(ti)}
-                                      >
-                                        {t('common.delete')}
-                                      </button>
-                                    )}
-                                  </span>
-                                </div>
-
+                              <div key={ti} className="teach-test-box">
                                 <label htmlFor={`test-${ti}-name`}>{t('teach.testName')}</label>
                                 <input
                                   id={`test-${ti}-name`}
-                                  className="input"
                                   value={x.name}
                                   onChange={(e) => updateTest(ti, { name: e.target.value })}
                                 />
@@ -2659,7 +2473,6 @@ export default function Constructor(): JSX.Element {
                                 <label htmlFor={`test-${ti}-input`}>{t('teach.testInput')}</label>
                                 <input
                                   id={`test-${ti}-input`}
-                                  className="input"
                                   value={x.input}
                                   onChange={(e) => updateTest(ti, { input: e.target.value })}
                                 />
@@ -2669,7 +2482,6 @@ export default function Constructor(): JSX.Element {
                                 </label>
                                 <input
                                   id={`test-${ti}-expected`}
-                                  className="input"
                                   value={x.expected}
                                   onChange={(e) => updateTest(ti, { expected: e.target.value })}
                                 />
@@ -2685,12 +2497,36 @@ export default function Constructor(): JSX.Element {
                                   />
                                   {t('teach.testHidden')}
                                 </label>
+
+                                <span className="ce-reorder">
+                                  {/* T28: порядок тестов = порядок проверки; ссылок
+                                      на индексы в codeTask нет — обмен безопасен. */}
+                                  <button
+                                    type="button"
+                                    onClick={() => moveTest(ti, -1)}
+                                    disabled={ti === 0}
+                                  >
+                                    {t('teach.moveUp')}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => moveTest(ti, 1)}
+                                    disabled={ti === lesson.tests.length - 1}
+                                  >
+                                    {t('teach.moveDown')}
+                                  </button>
+                                  {lesson.tests.length > 1 && (
+                                    <button type="button" onClick={() => removeTest(ti)}>
+                                      {t('common.delete')}
+                                    </button>
+                                  )}
+                                </span>
                               </div>
                             ))}
                             {lessonErrors['code-tests'] && (
                               <p className="error">{lessonErrors['code-tests']}</p>
                             )}
-                            <button type="button" className="ce-add" onClick={addTest}>
+                            <button type="button" onClick={addTest}>
                               Добавить тест
                             </button>
                           </div>

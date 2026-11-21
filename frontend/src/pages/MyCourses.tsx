@@ -20,7 +20,7 @@ import '../styles/certificate.css';
 import '../styles/favorites.css';
 
 export default function MyCourses(): JSX.Element {
-  useSeo('Мои курсы — Edu Platform');
+  useSeo('Мои курсы — skillex.space');
   const query = useQuery({ queryKey: ['my-courses'], queryFn: myCourses });
   const items = query.data ?? [];
 

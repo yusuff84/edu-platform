@@ -42,23 +42,10 @@ var mockRegistry = struct {
 const MockPaymentIDPrefix = "mock_"
 
 // MockProvider — mock-провайдер.
-type MockProvider struct {
-	// dev разрешает работу без MOCK_WEBHOOK_SECRET и вообще существование
-	// mock-провайдера. Вне dev mock запрещён (см. NewProvider).
-	dev bool
-}
+type MockProvider struct{}
 
-// NewMockProvider создаёт mock-провайдер. Без явного dev-флага сохраняется
-// историческое поведение (dev): handler всегда передаёт режим из Config и
-// запрещает mock вне dev. Явный false делает mock непригодным и для
-// CreatePayment, и для unsigned-вебхука.
-func NewMockProvider(dev ...bool) *MockProvider {
-	devMode := true
-	if len(dev) > 0 {
-		devMode = dev[0]
-	}
-	return &MockProvider{dev: devMode}
-}
+// NewMockProvider создаёт mock-провайдер.
+func NewMockProvider() *MockProvider { return &MockProvider{} }
 
 // Name возвращает имя провайдера.
 func (m *MockProvider) Name() string { return "mock" }
@@ -71,14 +58,18 @@ func MockConfirmPath(paymentID string) string {
 
 // CreatePayment создаёт mock-платёж и ссылку на рабочую страницу оплаты.
 func (m *MockProvider) CreatePayment(_ context.Context, req CreatePaymentRequest) (CreatePaymentResult, error) {
-	if !m.dev {
-		return CreatePaymentResult{}, fmt.Errorf("%w: mock-провайдер запрещён вне dev", ErrNotConfigured)
-	}
 	if req.AmountCents < 0 {
 		return CreatePaymentResult{}, errors.New("mock: отрицательная сумма платежа")
 	}
 	id := MockPaymentIDPrefix + strings.ReplaceAll(uuid.NewString(), "-", "")
+	if req.PaymentID != "" {
+		id = MockPaymentIDPrefix + strings.ReplaceAll(req.PaymentID, "-", "")
+	}
 	mockRegistry.Lock()
+	if _, exists := mockRegistry.items[id]; exists {
+		mockRegistry.Unlock()
+		return CreatePaymentResult{ProviderPaymentID: id, RedirectURL: MockConfirmPath(id)}, nil
+	}
 	mockRegistry.items[id] = &mockPayment{
 		Status:      "pending",
 		AmountCents: req.AmountCents,
@@ -97,24 +88,28 @@ type mockWebhookBody struct {
 	Status            string `json:"status"`
 }
 
+// MockWebhookSecret возвращает секрет подписи mock-вебхука из
+// MOCK_WEBHOOK_SECRET (trim). Пустая строка означает, что подпись не
+// настроена; mock разрешён только в dev, а production запрещает его целиком
+// (см. handler/enroll.go, mockPaymentsDisabled).
+func MockWebhookSecret() string {
+	return strings.TrimSpace(os.Getenv("MOCK_WEBHOOK_SECRET"))
+}
+
 // VerifyWebhook: у mock нет внешней подписи. Если задан MOCK_WEBHOOK_SECRET
 // (или передан secret явно), требуем заголовок X-Mock-Signature —
-// hex HMAC-SHA256 по сырому телу. Без секрета — dev-режим, подпись не нужен.
+// hex HMAC-SHA256 по сырому телу. Без секрета проверять нечего — это
+// допустимо только в dev; в production handler не вызывает mock-провайдера
+// вовсе (mockPaymentsDisabled).
 func (m *MockProvider) VerifyWebhook(r *http.Request, secret []byte) error {
 	key := secret
 	if len(key) == 0 {
-		if v := strings.TrimSpace(os.Getenv("MOCK_WEBHOOK_SECRET")); v != "" {
+		if v := MockWebhookSecret(); v != "" {
 			key = []byte(v)
 		}
 	}
 	if len(key) == 0 {
-		// Пустой MOCK_WEBHOOK_SECRET допустим только в dev: вне dev mock-
-		// вебхук без подписи принимать нельзя (защита в глубину — сам
-		// провайдер вне dev уже не создаётся).
-		if m.dev {
-			return nil
-		}
-		return fmt.Errorf("%w: mock: MOCK_WEBHOOK_SECRET не задан вне dev", ErrUnauthorized)
+		return nil
 	}
 	raw, err := readRawBody(r)
 	if err != nil {
@@ -162,7 +157,7 @@ func (m *MockProvider) HandleWebhook(r *http.Request) (WebhookEvent, error) {
 }
 
 // Refund помечает mock-платёж возвращённым.
-func (m *MockProvider) Refund(_ context.Context, providerPaymentID string, _ ...string) error {
+func (m *MockProvider) Refund(_ context.Context, providerPaymentID string) error {
 	mockRegistry.Lock()
 	defer mockRegistry.Unlock()
 	p, ok := mockRegistry.items[providerPaymentID]

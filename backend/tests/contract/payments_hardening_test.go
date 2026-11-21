@@ -466,3 +466,319 @@ func TestPaymentsHardeningFreeCourseRepurchaseAfterRefund(t *testing.T) {
 		t.Fatalf("доступ после повторной покупки: total=%d", total)
 	}
 }
+
+// productionPaymentsCfg — конфиг production-режима для проверок политики
+// mock-провайдера. CSRFAllowMissingOrigin нужен тестовым POST без браузера.
+func productionPaymentsCfg(provider string) *config.Config {
+	return &config.Config{
+		PaymentsProvider:       provider,
+		CommissionPct:          15,
+		AppEnv:                 "production",
+		SessionSecret:          "contract-secret-payments-hardening",
+		AllowedOrigins:         []string{},
+		CSRFAllowMissingOrigin: true,
+	}
+}
+
+// 7. Провайдера выбирает только сервер (критический security-фикс): поле
+// provider в запросе оставлено для совместимости, но не влияет на выбор.
+func TestPaymentsHardeningClientCannotChooseProvider(t *testing.T) {
+	t.Setenv("MOCK_WEBHOOK_SECRET", "")
+
+	t.Run("конфиг mock: клиентский stripe игнорируется", func(t *testing.T) {
+		app, router := newTestApp()
+		_, courseID, _ := seedPublishedCourse(t, app, router, 10000)
+		studentCookies, studentID := registerUser(t, router, "provider-mock@example.com", "password123", "")
+
+		rec := doRequest(t, router, http.MethodPost, "/api/v1/enrollments", map[string]any{
+			"courseId": courseID, "provider": "stripe",
+		}, studentCookies)
+		if rec.Code != http.StatusCreated {
+			t.Fatalf("enroll с клиентским stripe: status=%d body=%s", rec.Code, rec.Body.String())
+		}
+		var out map[string]any
+		decodeBody(t, rec, &out)
+		pid, _ := out["providerPaymentId"].(string)
+		if !strings.HasPrefix(pid, "mock_") {
+			t.Fatalf("клиентский stripe создал не mock-платёж: %s", rec.Body.String())
+		}
+		p, ok := app.Store.GetPaymentByProviderID(pid)
+		if !ok || p.Provider != "mock" {
+			t.Fatalf("провайдер должен быть серверным mock: %+v", p)
+		}
+		if got := app.Store.ListPaymentsByStudent(studentID); len(got) != 1 {
+			t.Fatalf("платежей %d, ждали ровно один", len(got))
+		}
+	})
+
+	t.Run("конфиг stripe: клиентский mock не создаёт mock-платёж", func(t *testing.T) {
+		t.Setenv("STRIPE_SECRET_KEY", "")
+		t.Setenv("STRIPE_WEBHOOK_SECRET", "")
+		cfg := &config.Config{
+			PaymentsProvider: "stripe",
+			CommissionPct:    15,
+			AllowedOrigins:   []string{},
+		}
+		app, router := newTestAppWithCfg(cfg)
+		_, courseID, _ := seedPublishedCourse(t, app, router, 10000)
+		studentCookies, studentID := registerUser(t, router, "provider-stripe@example.com", "password123", "")
+
+		rec := doRequest(t, router, http.MethodPost, "/api/v1/enrollments", map[string]any{
+			"courseId": courseID, "provider": "mock",
+		}, studentCookies)
+		if rec.Code != http.StatusBadGateway {
+			t.Fatalf("клиентский mock при конфиге stripe: status=%d body=%s, ждали 502 (stripe без ключей), не 201",
+				rec.Code, rec.Body.String())
+		}
+		var errBody map[string]any
+		decodeBody(t, rec, &errBody)
+		if msg, _ := errBody["error"].(string); !strings.Contains(msg, "не настроен") {
+			t.Fatalf("текст ошибки конфигурации: %v", errBody["error"])
+		}
+		if got := app.Store.ListPaymentsByStudent(studentID); len(got) != 0 {
+			t.Fatalf("платёж создан при ненастроенном stripe: %+v", got)
+		}
+	})
+}
+
+// 8. Mock в production запрещён полностью и независимо от секрета: платёж не
+// создаётся, а даже заранее созданный mock-платёж нельзя активировать
+// публичным вебхуком. Выбранный контракт — 503 и понятный русский текст.
+func TestPaymentsHardeningMockForbiddenInProduction(t *testing.T) {
+	t.Setenv("MOCK_WEBHOOK_SECRET", "")
+
+	app, router := newTestAppWithCfg(productionPaymentsCfg("mock"))
+	_, courseID, _ := seedPublishedCourse(t, app, router, 10000)
+	studentCookies, studentID := registerUser(t, router, "prod-mock-denied@example.com", "password123", "")
+
+	rec := doRequest(t, router, http.MethodPost, "/api/v1/enrollments", map[string]any{
+		"courseId": courseID, "provider": "mock",
+	}, studentCookies)
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("mock в production: status=%d body=%s, ждали 503", rec.Code, rec.Body.String())
+	}
+	var errBody map[string]any
+	decodeBody(t, rec, &errBody)
+	if msg, _ := errBody["error"].(string); !strings.Contains(msg, "stripe или yookassa") {
+		t.Fatalf("текст ошибки должен объяснять причину: %v", errBody["error"])
+	}
+	if got := app.Store.ListPaymentsByStudent(studentID); len(got) != 0 {
+		t.Fatalf("mock-платёж создан в production: %+v", got)
+	}
+
+	// Даже если mock-платёж уже есть в Store (например, остался от dev),
+	// вебхук отклоняется, и статус не меняется.
+	p, err := app.Store.CreatePayment(&repo.Payment{
+		StudentID: studentID, CourseID: courseID,
+		AmountCents: 10000, Currency: "RUB",
+		Provider: "mock", ProviderPaymentID: "mock_prod_without_secret",
+		Status: repo.PaymentPending,
+	})
+	if err != nil {
+		t.Fatalf("CreatePayment: %v", err)
+	}
+	rec = webhookMock(t, router, p.ProviderPaymentID, "succeeded")
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("mock-вебхук в production: status=%d body=%s, ждали 503", rec.Code, rec.Body.String())
+	}
+	if got, _ := app.Store.GetPaymentByProviderID(p.ProviderPaymentID); got == nil || got.Status != repo.PaymentPending {
+		t.Fatalf("вебхук изменил платёж: %+v", got)
+	}
+	if total := myCoursesTotal(t, router, studentCookies); total != 0 {
+		t.Fatalf("доступ открылся через запрещённый mock-вебхук: total=%d", total)
+	}
+}
+
+// 9. Даже с MOCK_WEBHOOK_SECRET mock в production остаётся запрещён:
+// страница подтверждения не умеет подписывать вебхук, поэтому production
+// обязан использовать реального провайдера. Проверяем 503 и на покупку,
+// и на уже существующий mock-платёж.
+func TestPaymentsHardeningMockForbiddenInProductionWithSecret(t *testing.T) {
+	const secret = "prod-mock-webhook-secret"
+	t.Setenv("MOCK_WEBHOOK_SECRET", secret)
+
+	app, router := newTestAppWithCfg(productionPaymentsCfg("mock"))
+	_, courseID, _ := seedPublishedCourse(t, app, router, 10000)
+	studentCookies, studentID := registerUser(t, router, "prod-mock-signed@example.com", "password123", "")
+
+	rec := doRequest(t, router, http.MethodPost, "/api/v1/enrollments", map[string]any{
+		"courseId": courseID, "provider": "mock",
+	}, studentCookies)
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("mock в production с секретом: status=%d body=%s, ждали 503", rec.Code, rec.Body.String())
+	}
+	if got := app.Store.ListPaymentsByStudent(studentID); len(got) != 0 {
+		t.Fatalf("mock-платёж создан в production с секретом: %+v", got)
+	}
+
+	p, err := app.Store.CreatePayment(&repo.Payment{
+		StudentID: studentID, CourseID: courseID,
+		AmountCents: 10000, Currency: "RUB",
+		Provider: "mock", ProviderPaymentID: "mock_prod_with_secret",
+		Status: repo.PaymentPending,
+	})
+	if err != nil {
+		t.Fatalf("CreatePayment: %v", err)
+	}
+	raw, err := json.Marshal(map[string]any{"providerPaymentId": p.ProviderPaymentID, "status": "succeeded"})
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	rec = doRequestHeaders(t, router, http.MethodPost, "/api/v1/payments/webhook/mock",
+		json.RawMessage(raw), nil, map[string]string{"X-Mock-Signature": mockSignature(secret, raw)})
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("mock-вебхук в production с секретом: status=%d body=%s, ждали 503", rec.Code, rec.Body.String())
+	}
+	if got, _ := app.Store.GetPaymentByProviderID(p.ProviderPaymentID); got == nil || got.Status != repo.PaymentPending {
+		t.Fatalf("вебхук изменил платёж: %+v", got)
+	}
+	if total := myCoursesTotal(t, router, studentCookies); total != 0 {
+		t.Fatalf("доступ открылся через mock-вебхук в production: total=%d", total)
+	}
+}
+
+// 10. Вебхук должен принадлежать платежу: mock-вебхук к stripe-платежу — 404,
+// статус не меняется, доступ не выдаётся.
+func TestPaymentsHardeningWebhookRejectsForeignProvider(t *testing.T) {
+	t.Setenv("MOCK_WEBHOOK_SECRET", "")
+
+	app, router := newTestApp()
+	_, courseID, _ := seedPublishedCourse(t, app, router, 10000)
+	studentCookies, studentID := registerUser(t, router, "foreign-provider@example.com", "password123", "")
+
+	p, err := app.Store.CreatePayment(&repo.Payment{
+		StudentID: studentID, CourseID: courseID,
+		AmountCents: 10000, Currency: "RUB",
+		Provider: "stripe", ProviderPaymentID: "pi_foreign_provider",
+		Status: repo.PaymentPending,
+	})
+	if err != nil {
+		t.Fatalf("CreatePayment: %v", err)
+	}
+
+	rec := webhookMock(t, router, p.ProviderPaymentID, "succeeded")
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("mock-вебхук к stripe-платежу: status=%d body=%s, ждали 404", rec.Code, rec.Body.String())
+	}
+	if got, _ := app.Store.GetPaymentByProviderID(p.ProviderPaymentID); got == nil || got.Status != repo.PaymentPending {
+		t.Fatalf("чужой вебхук изменил платёж: %+v", got)
+	}
+	if e, ok := app.Store.GetEnrollment(studentID, courseID); ok && e.Status == repo.EnrollmentActive {
+		t.Fatalf("чужой вебхук открыл доступ: %+v", e)
+	}
+	if total := myCoursesTotal(t, router, studentCookies); total != 0 {
+		t.Fatalf("доступ открылся через чужой вебхук: total=%d", total)
+	}
+}
+
+// 11. Явная state machine и out-of-order доставки: поздние failed/refunded/
+// succeeded не отзывают и не воскрешают доступ, промокод не считается дважды.
+func TestPaymentsHardeningOutOfOrderWebhookStateMachine(t *testing.T) {
+	t.Setenv("MOCK_WEBHOOK_SECRET", "")
+
+	app, router := newTestApp()
+	teacherCookies, courseID, _ := seedPublishedCourse(t, app, router, 10000)
+	seedPromo(t, router, courseID, "OOO20", 20, 5, teacherCookies)
+	studentCookies, studentID := registerUser(t, router, "out-of-order@example.com", "password123", "")
+
+	rec := doRequest(t, router, http.MethodPost, "/api/v1/enrollments", map[string]any{
+		"courseId": courseID, "provider": "mock", "promoCode": "OOO20",
+	}, studentCookies)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("enroll: status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var out map[string]any
+	decodeBody(t, rec, &out)
+	pid, _ := out["providerPaymentId"].(string)
+	if pid == "" {
+		t.Fatalf("нет providerPaymentId: %s", rec.Body.String())
+	}
+
+	webhook := func(status string) string {
+		t.Helper()
+		r := webhookMock(t, router, pid, status)
+		if r.Code != http.StatusOK {
+			t.Fatalf("webhook %s: status=%d body=%s", status, r.Code, r.Body.String())
+		}
+		var body map[string]any
+		decodeBody(t, r, &body)
+		label, _ := body["status"].(string)
+		return label
+	}
+	paymentStatus := func() repo.PaymentStatus {
+		t.Helper()
+		p, ok := app.Store.GetPaymentByProviderID(pid)
+		if !ok {
+			t.Fatalf("платёж %s не найден", pid)
+		}
+		return p.Status
+	}
+	enrollmentStatus := func() repo.EnrollmentStatus {
+		e, ok := app.Store.GetEnrollment(studentID, courseID)
+		if !ok {
+			return ""
+		}
+		return e.Status
+	}
+	assertState := func(wantPayment repo.PaymentStatus, wantEnrollment repo.EnrollmentStatus, wantUsed int, wantAccess int) {
+		t.Helper()
+		if got := paymentStatus(); got != wantPayment {
+			t.Fatalf("статус платежа=%s, ждали %s", got, wantPayment)
+		}
+		if got := enrollmentStatus(); got != wantEnrollment {
+			t.Fatalf("статус записи=%q, ждали %q", got, wantEnrollment)
+		}
+		if got := promoByCode(t, app, courseID, "OOO20").UsedCount; got != wantUsed {
+			t.Fatalf("usedCount=%d, ждали %d", got, wantUsed)
+		}
+		if got := myCoursesTotal(t, router, studentCookies); got != wantAccess {
+			t.Fatalf("доступных курсов=%d, ждали %d", got, wantAccess)
+		}
+	}
+
+	// pending/неизвестный статус — ignored, ничего не меняет.
+	if got := webhook("pending"); got != "ignored" {
+		t.Fatalf("pending: status=%s, ждали ignored", got)
+	}
+	assertState(repo.PaymentPending, "", 0, 0)
+
+	// pending -> failed: processed; повтор failed — duplicate.
+	if got := webhook("failed"); got != "processed" {
+		t.Fatalf("failed из pending: status=%s, ждали processed", got)
+	}
+	assertState(repo.PaymentFailed, "", 0, 0)
+	if got := webhook("failed"); got != "duplicate" {
+		t.Fatalf("повтор failed: status=%s, ждали duplicate", got)
+	}
+	assertState(repo.PaymentFailed, "", 0, 0)
+
+	// failed -> succeeded: processed, доступ и промокод выдаются один раз.
+	if got := webhook("succeeded"); got != "processed" {
+		t.Fatalf("succeeded из failed: status=%s, ждали processed", got)
+	}
+	assertState(repo.PaymentSucceeded, repo.EnrollmentActive, 1, 1)
+
+	// succeeded -> failed: ignored, доступ не отзывается.
+	if got := webhook("failed"); got != "ignored" {
+		t.Fatalf("failed после succeeded: status=%s, ждали ignored", got)
+	}
+	assertState(repo.PaymentSucceeded, repo.EnrollmentActive, 1, 1)
+
+	// succeeded -> refunded: processed, доступ отзывается, usedCount не уменьшается.
+	if got := webhook("refunded"); got != "processed" {
+		t.Fatalf("refunded из succeeded: status=%s, ждали processed", got)
+	}
+	assertState(repo.PaymentRefunded, repo.EnrollmentRefunded, 1, 0)
+
+	// refunded -> succeeded: ignored, доступ не воскрешает и промокод не растёт.
+	if got := webhook("succeeded"); got != "ignored" {
+		t.Fatalf("succeeded после refunded: status=%s, ждали ignored", got)
+	}
+	assertState(repo.PaymentRefunded, repo.EnrollmentRefunded, 1, 0)
+
+	// refunded -> refunded: duplicate.
+	if got := webhook("refunded"); got != "duplicate" {
+		t.Fatalf("повтор refunded: status=%s, ждали duplicate", got)
+	}
+	assertState(repo.PaymentRefunded, repo.EnrollmentRefunded, 1, 0)
+}

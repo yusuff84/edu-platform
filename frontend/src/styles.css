@@ -7,17 +7,11 @@
   --faint: #a8a6a0;
   --line: #e8e4dc;
   --line-soft: #f0ede6;
-  /* P11: белый текст на исходном #e63223 давал ~4.34:1 (ниже AA).
-     #cf3021 — тот же красный, но ≥ 4.5:1 и на белом, и на фоне #f4f3ef. */
-  --brand: #cf3021;
+  --brand: #e63223;
   --brand-dark: #b71f14;
   --sun: #fec466;
   --sun-soft: #fff3d4;
-  /* #7CA0FF остаётся брендовым акцентом (декор/подсветка), но как фон
-     под белым текстом он даёт ~2.5:1. Для шапки и hero — тёмный оттенок:
-     белый на #2F5FD0 — ~5.7:1, с запасом выше AA. */
   --hero: #7ca0ff;
-  --hero-strong: #2f5fd0;
   --cta-blue: #2f4bff;
   --ok: #1f9d55;
   --ok-bg: #e4f5ea;
@@ -49,9 +43,7 @@
   --btn-font-size: 14.5px; --btn-font-size-sm: 13.5px;
   --control-border-w: 1.5px;
   --control-h: 48px; /* однострочные поля = высоте обычной кнопки */
-  /* P11: сплошной тёмный оттенок вместо полупрозрачного красного —
-     кольцо фокуса видно на светлом фоне (контраст ≥ 3:1). */
-  --focus-ring-color: #b71f14;
+  --focus-ring-color: rgba(230, 50, 35, 0.55);
   --focus-ring-offset: 2px;
   --press-shift: 1px;
 }
@@ -108,36 +100,6 @@ h3 {
   font-size: 17.5px;
 }
 
-/* Ссылка-заголовок (название курса в карточке/списке) наследует цвет и
-   начертание заголовка, а не браузерный синий: подчёркивание — только при
-   наведении/фокусе. Без этого <h3><Link> выглядит как ссылка в тексте
-   (см. .page p a:not(.btn) — тот стиль на заголовки не рассчитан). */
-h1 a:not(.btn),
-h2 a:not(.btn),
-h3 a:not(.btn),
-h4 a:not(.btn),
-h5 a:not(.btn),
-h6 a:not(.btn) {
-  color: inherit;
-  text-decoration: none;
-}
-
-h1 a:not(.btn):hover,
-h2 a:not(.btn):hover,
-h3 a:not(.btn):hover,
-h4 a:not(.btn):hover,
-h5 a:not(.btn):hover,
-h6 a:not(.btn):hover,
-h1 a:not(.btn):focus-visible,
-h2 a:not(.btn):focus-visible,
-h3 a:not(.btn):focus-visible,
-h4 a:not(.btn):focus-visible,
-h5 a:not(.btn):focus-visible,
-h6 a:not(.btn):focus-visible {
-  text-decoration: underline;
-  text-underline-offset: 2px;
-}
-
 ::selection {
   background: var(--sun);
   color: #141414;
@@ -169,29 +131,18 @@ h6 a:not(.btn):focus-visible {
   color: var(--muted);
 }
 
-/* T92: обычные текстовые ссылки в контенте — спокойные: в покое наследуют
-   цвет и начертание родительского текста и не подчёркнуты; при hover и
-   focus-visible — мягкий фирменный акцент + underline. Полужирность (600)
-   оставляет ссылку отличимой от обычного текста без постоянного подчёркивания.
-   Кнопкообразные ссылки (.btn) и ссылки-кнопки конструктора (.teach-link-btn,
-   карточки .teach-card) исключены — их стилизует constructor.css (T91). */
 .page p a:not(.btn),
-.page li:not(.teach-card) a:not(.btn):not(.teach-link-btn),
+.page li a:not(.btn),
 .empty a:not(.btn) {
-  color: inherit;
-  font-weight: 600;
-  text-decoration: none;
-  text-underline-offset: 3px;
+  color: var(--cta-blue);
+  text-decoration: underline;
+  text-underline-offset: 2px;
 }
 
 .page p a:not(.btn):hover,
-.page p a:not(.btn):focus-visible,
-.page li:not(.teach-card) a:not(.btn):not(.teach-link-btn):hover,
-.page li:not(.teach-card) a:not(.btn):not(.teach-link-btn):focus-visible,
-.empty a:not(.btn):hover,
-.empty a:not(.btn):focus-visible {
-  color: var(--brand);
-  text-decoration: underline;
+.page li a:not(.btn):hover,
+.empty a:not(.btn):hover {
+  color: #1f3ae0;
 }
 
 .error {
@@ -267,7 +218,7 @@ a.sr-only:focus-visible {
 }
 
 .topbar {
-  background: var(--hero-strong);
+  background: var(--hero);
 }
 
 .topbar-in {
@@ -320,14 +271,12 @@ a.sr-only:focus-visible {
   font-size: 14.5px;
   padding: 10px 15px;
   border-radius: 999px;
-  color: #fff;
+  color: rgba(255, 255, 255, 0.92);
 }
 
-/* P11: активная/наведённая «пилюля» затемняет синий фон, а не осветляет:
-   белый текст на полупрозрачном белом не проходил AA. */
 .nav a.active,
 .nav a:hover {
-  background: rgba(0, 0, 0, 0.18);
+  background: rgba(255, 255, 255, 0.22);
   color: #fff;
 }
 
@@ -346,9 +295,8 @@ a.sr-only:focus-visible {
   color: #fff;
   font-size: 13.5px;
   font-weight: 700;
-  /* P11: тёмная подложка сохраняет белый текст читаемым (AA). */
-  background: rgba(0, 0, 0, 0.18);
-  border: 1px solid rgba(255, 255, 255, 0.38);
+  background: rgba(255, 255, 255, 0.18);
+  border: 1px solid rgba(255, 255, 255, 0.28);
   border-radius: 999px;
   padding: 8px 14px;
   max-width: clamp(140px, 18vw, 260px);
@@ -419,44 +367,20 @@ a.sr-only:focus-visible {
   border-color: var(--brand-dark);
 }
 
-/* P11: «призрачная» кнопка по умолчанию живёт на светлых панелях
-   (отзывы, кабинет, сертификат) — тёмный текст на нейтральной подложке.
-   На тёмных поверхностях каркаса её переопределяют правила ниже. */
+/* .btn-ghost рассчитан на тёмный/цветной фон (шапка, hero). */
 .btn-ghost {
-  background: rgba(20, 20, 20, 0.04);
-  border-color: var(--line);
-  color: var(--fg);
+  background: rgba(255, 255, 255, 0.16);
+  border-color: rgba(255, 255, 255, 0.55);
+  color: #fff;
 }
 
 .btn-ghost:hover {
-  background: rgba(20, 20, 20, 0.08);
-  border-color: #c9c5ba;
-  color: var(--fg);
+  background: rgba(255, 255, 255, 0.28);
+  border-color: #fff;
 }
 
 .btn-ghost:active:not(:disabled) {
-  background: rgba(20, 20, 20, 0.12);
-}
-
-/* На синей шапке и hero — белый текст, но на затемняющей подложке:
-   полупрозрачный белый фон снижал контраст ниже AA. */
-.topbar .btn-ghost,
-.hero .btn-ghost {
-  background: rgba(0, 0, 0, 0.16);
-  border-color: rgba(255, 255, 255, 0.7);
-  color: #fff;
-}
-
-.topbar .btn-ghost:hover,
-.hero .btn-ghost:hover {
-  background: rgba(0, 0, 0, 0.26);
-  border-color: #fff;
-  color: #fff;
-}
-
-.topbar .btn-ghost:active:not(:disabled),
-.hero .btn-ghost:active:not(:disabled) {
-  background: rgba(0, 0, 0, 0.32);
+  background: rgba(255, 255, 255, 0.34);
 }
 
 .btn-blue {
@@ -512,7 +436,6 @@ button:focus-visible {
 .topbar :focus-visible,
 .hero :focus-visible,
 .lead-zone :focus-visible,
-.panel-dark :focus-visible,
 .footer :focus-visible {
   outline-color: rgba(255, 255, 255, 0.9);
 }
@@ -521,7 +444,7 @@ button:focus-visible {
 .hero {
   position: relative;
   overflow: hidden;
-  background: var(--hero-strong);
+  background: var(--hero);
   padding: 70px 48px 60px;
   margin: 0 calc(50% - 50vw) 8px;
   display: grid;
@@ -534,11 +457,9 @@ button:focus-visible {
   content: '';
   position: absolute;
   inset: 0;
-  /* P11: светлые блики приглушены, чтобы не «съедать» контраст белого
-     заголовка/статистики; акцентный #7CA0FF остаётся в декоре. */
   background:
-    radial-gradient(600px 300px at 15% 20%, rgba(124, 160, 255, 0.12), transparent 60%),
-    radial-gradient(700px 340px at 85% 15%, rgba(20, 20, 20, 0.12), transparent 60%);
+    radial-gradient(600px 300px at 15% 20%, rgba(255, 255, 255, 0.28), transparent 60%),
+    radial-gradient(700px 340px at 85% 15%, rgba(255, 255, 255, 0.22), transparent 60%);
   pointer-events: none;
 }
 
@@ -575,9 +496,7 @@ button:focus-visible {
 }
 
 .lead {
-  /* P11: чистый белый вместо 94% — на самом светлом участке блика
-     полупрозрачный текст опускался ниже AA для обычного кегля. */
-  color: #fff;
+  color: rgba(255, 255, 255, 0.94);
   font-size: 18px;
   margin: 0 0 24px;
   max-width: 60ch;
@@ -609,9 +528,7 @@ button:focus-visible {
 
 .stats span {
   font-size: 14px;
-  /* P11: подписи статистики — обычный кегль, поэтому чистый белый:
-     на блике hero он даёт ≥ 4.5:1, полупрозрачный — уже нет. */
-  color: #fff;
+  color: rgba(255, 255, 255, 0.9);
 }
 
 .cats {
@@ -1847,20 +1764,12 @@ tr:last-child td {
 
 .perk p a {
   color: inherit;
-  text-decoration: none;
+  text-decoration: underline;
   text-underline-offset: 3px;
 }
 
-.perk p a:hover,
-.perk p a:focus-visible {
-  color: var(--brand);
-  text-decoration: underline;
-}
-
-.perk.dark p a:hover,
-.perk.dark p a:focus-visible {
+.perk.dark p a:hover {
   color: #fff;
-  text-decoration: underline;
 }
 
 /* ---------- marketing: dreams ---------- */
@@ -2029,14 +1938,12 @@ tr:last-child td {
 
 .diploma p a {
   color: inherit;
-  text-decoration: none;
+  text-decoration: underline;
   text-underline-offset: 3px;
 }
 
-.diploma p a:hover,
-.diploma p a:focus-visible {
+.diploma p a:hover {
   color: var(--brand);
-  text-decoration: underline;
 }
 
 .diploma-visual {

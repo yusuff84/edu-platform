@@ -51,7 +51,7 @@ export function RequireRole({
 }
 
 export function StudentCab(): JSX.Element {
-  useSeo('Кабинет ученика — Edu Platform');
+  useSeo('Кабинет ученика — skillex.space');
   return (
     <RequireRole roles={['student', 'teacher', 'admin']}>
       <MyCoursesPage />
@@ -66,7 +66,7 @@ export function StudentCab(): JSX.Element {
  * и AdminCab сохранены — их использует такая разводка маршрутов.
  */
 export function TeacherCab(): JSX.Element {
-  useSeo('Кабинет преподавателя — Edu Platform');
+  useSeo('Кабинет преподавателя — skillex.space');
   return (
     <RequireRole roles={['teacher', 'admin']}>
       <div className="wrap">

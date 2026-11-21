@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net"
 	"net/http"
 	"net/url"
@@ -40,7 +41,11 @@ type YookassaProvider struct {
 	secret  string
 	apiBase string
 	client  *http.Client
-	trusted []*net.IPNet // пусто — проверка источника выключена (env не задан)
+	// trusted пуст при выключенной проверке; trustedConfigured отличает
+	// «env не задан» от «env задан, но не распарсился» — во втором случае
+	// вебхуки отклоняются, а не принимаются молча.
+	trusted           []*net.IPNet
+	trustedConfigured bool
 }
 
 // NewYookassaProvider создаёт адаптер YooKassa из env.
@@ -51,7 +56,12 @@ func NewYookassaProvider() (*YookassaProvider, error) {
 		return nil, fmt.Errorf("%w: yookassa требует YOOKASSA_SHOP_ID и YOOKASSA_SECRET_KEY", ErrNotConfigured)
 	}
 	p := newYookassaProvider(shopID, secret)
-	p.trusted = parseTrustedNets(os.Getenv("YOOKASSA_TRUSTED_IPS"))
+	rawTrusted := strings.TrimSpace(os.Getenv("YOOKASSA_TRUSTED_IPS"))
+	p.trusted = parseTrustedNets(rawTrusted)
+	p.trustedConfigured = rawTrusted != ""
+	if p.trustedConfigured && len(p.trusted) == 0 {
+		log.Printf("ПРЕДУПРЕЖДЕНИЕ: YOOKASSA_TRUSTED_IPS=%q не содержит валидных IP/CIDR — все вебхуки YooKassa будут отклонены", rawTrusted)
+	}
 	return p, nil
 }
 
@@ -205,6 +215,9 @@ func parseTrustedNets(raw string) []*net.IPNet {
 // подтверждение события запросом к API YooKassa (см. HandleWebhook).
 func (y *YookassaProvider) checkSource(r *http.Request) error {
 	if len(y.trusted) == 0 {
+		if y.trustedConfigured {
+			return fmt.Errorf("%w: yookassa: YOOKASSA_TRUSTED_IPS задан, но не содержит валидных IP/CIDR", ErrUnauthorized)
+		}
 		return nil
 	}
 	host, _, err := net.SplitHostPort(r.RemoteAddr)
@@ -313,14 +326,23 @@ func (y *YookassaProvider) HandleWebhook(r *http.Request) (WebhookEvent, error) 
 	ctx := r.Context()
 	if strings.HasPrefix(ev.Type, "refund.") {
 		// Подтверждаем возврат по его собственному id: фиктивный rf_* даст 404.
-		if _, err := y.apiGet(ctx, "/refunds/"+url.PathEscape(ev.Object.ID)); err != nil {
+		confirmedRaw, err := y.apiGet(ctx, "/refunds/"+url.PathEscape(ev.Object.ID))
+		if err != nil {
 			return WebhookEvent{}, fmt.Errorf("yookassa: возврат %s не подтверждён API: %w", ev.Object.ID, err)
 		}
-		pid := ev.Object.PaymentID
-		if pid == "" {
-			pid = ev.Object.ID
+		var confirmed struct {
+			ID        string `json:"id"`
+			PaymentID string `json:"payment_id"`
+			Status    string `json:"status"`
 		}
-		return WebhookEvent{ProviderPaymentID: pid, Status: "refunded", Raw: raw}, nil
+		if err := json.Unmarshal(confirmedRaw, &confirmed); err != nil || confirmed.ID != ev.Object.ID || confirmed.PaymentID == "" {
+			return WebhookEvent{}, fmt.Errorf("%w: некорректный ответ API возврата", ErrUpstream)
+		}
+		status := "pending"
+		if confirmed.Status == "succeeded" {
+			status = "refunded"
+		}
+		return WebhookEvent{ProviderPaymentID: confirmed.PaymentID, Status: status, Raw: raw}, nil
 	}
 	// payment.* — подтверждаем платёж и берём статус от провайдера.
 	id := ev.Object.ID
@@ -334,7 +356,7 @@ func (y *YookassaProvider) HandleWebhook(r *http.Request) (WebhookEvent, error) 
 }
 
 // Refund возвращает платёж полностью: GET платёж → POST /v3/refunds с Idempotence-Key.
-func (y *YookassaProvider) Refund(ctx context.Context, providerPaymentID string, idempotencyKey ...string) error {
+func (y *YookassaProvider) Refund(ctx context.Context, providerPaymentID string) error {
 	p, err := y.getPayment(ctx, providerPaymentID)
 	if err != nil {
 		return err
@@ -358,13 +380,10 @@ func (y *YookassaProvider) Refund(ctx context.Context, providerPaymentID string,
 	}
 	y.authorize(httpReq)
 	httpReq.Header.Set("Content-Type", "application/json")
-	// P11: стабильный ключ идемпотентности возврата. Повторный вызов Refund
-	// по тому же платежу (ретрай админки/сети) не создаст второй возврат.
-	key := "refund-" + providerPaymentID
-	if len(idempotencyKey) > 0 && strings.TrimSpace(idempotencyKey[0]) != "" {
-		key = strings.TrimSpace(idempotencyKey[0])
-	}
-	httpReq.Header.Set("Idempotence-Key", key)
+	// Ключ детерминирован от платежа: повторный вызов Refund после сетевого
+	// таймаута не создаст второй возврат, а вернёт результат первого запроса.
+	refundIdem := uuid.NewSHA1(uuid.NameSpaceOID, []byte("yookassa-refund:"+providerPaymentID)).String()
+	httpReq.Header.Set("Idempotence-Key", refundIdem)
 	resp, err := y.client.Do(httpReq)
 	if err != nil {
 		return fmt.Errorf("%w: yookassa недоступен: %v", ErrUpstream, err)
@@ -374,7 +393,7 @@ func (y *YookassaProvider) Refund(ctx context.Context, providerPaymentID string,
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
 		return fmt.Errorf("%w: yookassa вернул %d при возврате: %s", ErrUpstream, resp.StatusCode, yookassaAPIError(respRaw))
 	}
-	return nil
+	return confirmedRefund(respRaw)
 }
 
 // GetStatus запрашивает статус платежа: GET /v3/payments/{id}.

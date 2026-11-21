@@ -1,8 +1,7 @@
 // Просмотр урока: все четыре kind (video_text, live, quiz, code).
 // Формы полей строго по контракту Task/00-api-contract.md:
 //   - текст урока — bodyMd (markdown-строка контракта);
-//   - квиз — quiz.questions[] c полем text, ответы { [questionId]: index } или
-//     массив индексов для вопроса с multi (FR-010);
+//   - квиз — quiz.questions[] c полем text, ответы { [questionId]: index варианта };
 //   - эфир — liveUrl + startsAt;
 //   - код — codeTask.{language, template, tests}, редактор инициализируется шаблоном.
 // Вердикт «Зачтено / Не зачтено» показывает родитель (Learn.tsx) по полю passed.
@@ -10,11 +9,9 @@
 
 import { useId, useState } from 'react';
 import type { ReactNode } from 'react';
-import Editor from 'react-simple-code-editor';
 import type { CompleteLessonInput, Lesson } from '../api/client';
 import { formatDate } from '../api/client';
 import { t } from '../i18n/t';
-import CodeBlock, { highlightCode } from './CodeBlock';
 import '../styles/learn.css';
 
 interface Props {
@@ -31,7 +28,7 @@ type MdBlock =
   | { type: 'p'; lines: string[] }
   | { type: 'ul'; items: string[] }
   | { type: 'ol'; items: string[] }
-  | { type: 'code'; text: string; language?: string }
+  | { type: 'code'; text: string }
   | { type: 'quote'; lines: string[] }
   | { type: 'h'; level: number; text: string };
 
@@ -56,9 +53,6 @@ function parseBlocks(src: string): MdBlock[] {
     }
     if (RE_FENCE.test(line)) {
       // Ограждённый блок кода: собираем до закрывающих «```» (или до конца).
-      // Язык берём из info-string после ```: ```python, ```js и т.п.
-      const info = line.trim().slice(3).trim();
-      const language = info ? info.split(/\s+/)[0] : undefined;
       const text: string[] = [];
       i++;
       while (i < lines.length && !RE_FENCE.test(lines[i])) {
@@ -66,7 +60,7 @@ function parseBlocks(src: string): MdBlock[] {
         i++;
       }
       i++; // пропускаем закрывающую «```»
-      blocks.push({ type: 'code', text: text.join('\n'), language });
+      blocks.push({ type: 'code', text: text.join('\n') });
       continue;
     }
     const heading = RE_HEADING.exec(line);
@@ -113,7 +107,17 @@ function parseBlocks(src: string): MdBlock[] {
 }
 
 // **жирный**, *курсив*, `код` — без интерпретации HTML (текст рендерится как текст).
-const RE_INLINE = /(\*\*[^*]+\*\*|`[^`]+`|\*[^*\n]+\*)/g;
+const RE_INLINE = /(!?\[[^\]\n]*\]\([^\s)]+\)|\*\*[^*]+\*\*|`[^`]+`|\*[^*\n]+\*)/g;
+
+function safeMarkdownUrl(value: string): string | null {
+  if (value.startsWith('/') && !value.startsWith('//') && !value.includes('\\')) return value;
+  try {
+    const url = new URL(value);
+    return url.protocol === 'https:' || url.protocol === 'http:' ? url.href : null;
+  } catch {
+    return null;
+  }
+}
 
 function renderInline(text: string, keyBase: string): ReactNode[] {
   return text
@@ -121,6 +125,14 @@ function renderInline(text: string, keyBase: string): ReactNode[] {
     .filter((part) => part !== '')
     .map((part, idx) => {
       const key = `${keyBase}-${idx}`;
+      const media = /^(!?)\[([^\]]*)\]\(([^\s)]+)\)$/.exec(part);
+      if (media) {
+        const url = safeMarkdownUrl(media[3]);
+        if (!url) return media[2];
+        return media[1]
+          ? <img key={key} src={url} alt={media[2]} loading="lazy" style={{ maxWidth: '100%', height: 'auto' }} />
+          : <a key={key} href={url} target="_blank" rel="noopener noreferrer">{media[2]}</a>;
+      }
       if (part.length > 4 && part.startsWith('**') && part.endsWith('**')) {
         return <strong key={key}>{part.slice(2, -2)}</strong>;
       }
@@ -154,7 +166,11 @@ export function Markdown({ source }: { source: string }): JSX.Element {
             return <h6 key={key}>{inline}</h6>;
           }
           case 'code':
-            return <CodeBlock key={key} code={b.text} language={b.language} className="md-pre" />;
+            return (
+              <pre key={key} className="md-pre">
+                <code>{b.text}</code>
+              </pre>
+            );
           case 'quote':
             return (
               <blockquote key={key} className="md-quote">
@@ -204,68 +220,42 @@ export function QuizForm({
   disabled,
 }: {
   lesson: Lesson;
-  onSubmit: (answers: Record<string, number | number[]>) => void;
+  onSubmit: (answers: Record<string, number>) => void;
   disabled: boolean;
 }): JSX.Element {
   const questions = lesson.quiz?.questions ?? [];
-  // Ответ всегда храним массивом: для одиночного вопроса в нём один индекс,
-  // для multi — все отмеченные (FR-010).
-  const [answers, setAnswers] = useState<Record<string, number[]>>({});
+  const [answers, setAnswers] = useState<Record<string, number>>({});
   // Пояснения показываем только после отправки ответов на проверку.
   const [answered, setAnswered] = useState(false);
   // Отправка заблокирована, пока не выбраны ответы на все вопросы.
   const allAnswered =
-    questions.length > 0 &&
-    questions.every((q) => {
-      const picked = answers[q.id];
-      return q.multi ? (picked?.length ?? 0) > 0 : picked?.length === 1;
-    });
+    questions.length > 0 && questions.every((q) => answers[q.id] !== undefined);
   return (
     <form
       className="quiz"
       onSubmit={(e) => {
         e.preventDefault();
         if (!disabled && allAnswered) {
-          const payload: Record<string, number | number[]> = {};
-          for (const q of questions) {
-            const picked = answers[q.id] ?? [];
-            // Одиночный вопрос отправляем числом (старый контракт), multi —
-            // массивом индексов.
-            payload[q.id] = q.multi ? picked : (picked[0] ?? -1);
-          }
           setAnswered(true);
-          onSubmit(payload);
+          onSubmit(answers);
         }
       }}
     >
       {questions.map((q, qi) => (
         <fieldset key={q.id || `q${qi}`}>
           <legend>{q.text}</legend>
-          {q.options.map((opt, oi) => {
-            const picked = answers[q.id] ?? [];
-            const checked = q.multi ? picked.includes(oi) : picked[0] === oi;
-            return (
-              <label key={oi} className="radio">
-                <input
-                  type={q.multi ? 'checkbox' : 'radio'}
-                  name={`q-${q.id || qi}`}
-                  checked={checked}
-                  onChange={() =>
-                    setAnswers((a) => {
-                      const current = a[q.id] ?? [];
-                      if (!q.multi) return { ...a, [q.id]: [oi] };
-                      const next = current.includes(oi)
-                        ? current.filter((x) => x !== oi)
-                        : [...current, oi].sort((x, y) => x - y);
-                      return { ...a, [q.id]: next };
-                    })
-                  }
-                  disabled={disabled}
-                />{' '}
-                {opt}
-              </label>
-            );
-          })}
+          {q.options.map((opt, oi) => (
+            <label key={oi} className="radio">
+              <input
+                type="radio"
+                name={`q-${q.id || qi}`}
+                checked={answers[q.id] === oi}
+                onChange={() => setAnswers((a) => ({ ...a, [q.id]: oi }))}
+                disabled={disabled}
+              />{' '}
+              {opt}
+            </label>
+          ))}
           {/* Пояснение показываем после ответа (backend отдаёт explanation в публичном виде). */}
           {answered && q.explanation && (
             <p className="quiz-explanation">
@@ -313,21 +303,15 @@ export function CodeEditor({
       <label className="sr-only" htmlFor={inputId}>
         {t('lesson.code')}
       </label>
-      {/* Редактор с подсветкой: controlled value, табы и отступы, без innerHTML. */}
-      <Editor
+      <textarea
+        id={inputId}
         value={code}
-        onValueChange={setCode}
-        highlight={(value) => highlightCode(value, language)}
-        padding={12}
-        tabSize={4}
-        insertSpaces
-        textareaId={inputId}
-        disabled={disabled}
+        onChange={(e) => setCode(e.target.value)}
         placeholder={t('lesson.codePlaceholder')}
-        className="code-input code-editor-input code-highlight"
-        textareaClassName="code-editor-textarea"
-        preClassName="code-editor-pre"
-        style={{ minHeight: '16rem' }}
+        rows={12}
+        spellCheck={false}
+        disabled={disabled}
+        className="code-input"
       />
       <div className="code-toolbar">
         <button
@@ -428,7 +412,9 @@ export default function LessonView({ lesson, onComplete, completing }: Props): J
         {lesson.codeTask?.template && (
           <div className="code-template">
             <h4>{t('lesson.codeTemplate')}</h4>
-            <CodeBlock code={lesson.codeTask.template} language={lesson.codeTask.language} />
+            <pre>
+              <code>{lesson.codeTask.template}</code>
+            </pre>
           </div>
         )}
         <CodeEditor

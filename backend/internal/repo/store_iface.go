@@ -1,6 +1,9 @@
 package repo
 
-import "time"
+import (
+	"context"
+	"time"
+)
 
 // StoreAPI — общий интерфейс хранилища для handler/service слоёв.
 //
@@ -11,6 +14,15 @@ import "time"
 // с предупреждением в логе. Сигнатуры повторяют границы pgx-репозиториев,
 // поэтому handler/service слои не зависят от конкретной реализации.
 type StoreAPI interface {
+	IssueAccountToken(userID, expectedPasswordHash, purpose, hash string, now, expires time.Time) error
+	DiscardAccountToken(hash string) error
+	ConsumeAccountToken(hash, purpose, passwordHash string, now time.Time) error
+	CreateAccountSession(userID, expectedPasswordHash string, ttl time.Duration, userAgent, ip string) (*Session, error)
+	ListAccountSessions(userID string) ([]*Session, error)
+	RevokeAccountSession(userID, publicID string) (bool, error)
+	RevokeOtherAccountSessions(userID, keepSessionID string) error
+	AcquireBillingLock(context.Context) (func(), error)
+	HasCourseBillingHistory(string) (bool, error)
 	// Users
 	CreateUser(email, passwordHash string, role Role) (*User, error)
 	GetUserByEmail(email string) (*User, bool)
@@ -43,14 +55,6 @@ type StoreAPI interface {
 	CreateSession(userID string, ttl time.Duration) *Session
 	GetSession(id string) (*Session, bool)
 	DeleteSession(id string)
-	// ListSessionsByUser — активные (не истёкшие) сессии пользователя для
-	// админки (T93), новые первыми. Никогда не nil (пустой слайс — сессий
-	// нет). Токены/подписи cookie в Session не хранятся.
-	ListSessionsByUser(userID string) []*Session
-	// DeleteSessionsByUser удаляет ВСЕ сессии пользователя (включая уже
-	// истёкшие) и возвращает их количество — для логов и тестов (T93).
-	// Ноль — не ошибка: у пользователя просто нет сессий.
-	DeleteSessionsByUser(userID string) int
 	// Invites
 	CreateInvite(email, tokenHash, prefix, createdBy string, expiresAt time.Time) *TeacherInvite
 	GetInviteByTokenHash(hash string) (*TeacherInvite, bool)
@@ -151,6 +155,7 @@ type StoreAPI interface {
 	ListCompletedLessonIDs(studentID, courseID string) []string
 	// Payments
 	CreatePayment(p *Payment) (*Payment, error)
+	SetPaymentCheckout(id, providerID, redirectURL string) error
 	GetPaymentByProviderID(id string) (*Payment, bool)
 	// GetPaymentByID — платёж по внутреннему id (T47: возврат средств).
 	GetPaymentByID(id string) (*Payment, bool)
@@ -193,9 +198,6 @@ type StoreAPI interface {
 	// DeleteReview удаляет отзыв и пересчитывает рейтинг курса (T25).
 	// ErrNotFound — отзыва нет.
 	DeleteReview(id string) error
-	// ListAdminReviews — глобальный список отзывов с фильтрами/поиском,
-	// сортировкой и пагинацией (T83); total — до пагинации, items — не nil.
-	ListAdminReviews(f AdminReviewFilter) (items []*AdminReviewRow, total int)
 	// ListEnrollmentRows — все записи на курсы с данными ученика и курса (T25),
 	// новые первыми; total — до пагинации. T48: поиск по ученику (Q) и статус
 	// записи (Status) — в EnrollmentFilter.
@@ -262,10 +264,8 @@ type StoreAPI interface {
 	// DeactivatePromoCode идемпотентно ставит active=false, запись
 	// сохраняется (история). ErrNotFound — промокода нет.
 	DeactivatePromoCode(id string) error
-	// IncrementPromoCodeUsage атомарно увеличивает usedCount на 1, не
-	// превышая maxUses (0 — без лимита). false — промокода нет ИЛИ лимит
-	// исчерпан (handler различает повторным чтением и не считает лимит
-	// ошибкой записи). Вызывается ровно один раз при первом переходе
+	// IncrementPromoCodeUsage атомарно увеличивает usedCount на 1.
+	// false — промокода нет. Вызывается ровно один раз при первом переходе
 	// платежа в succeeded (идемпотентность обеспечивает handler).
 	IncrementPromoCodeUsage(id string) bool
 
@@ -370,32 +370,6 @@ type StoreAPI interface {
 	// teacher/admin (handler отвечает 404). Агрегаты считаются без N+1:
 	// in-memory — одним проходом по картам, Postgres — агрегирующими SQL.
 	GetTeacherProfile(teacherID string) (*TeacherProfileData, bool)
-
-	// ---- T89: глобальный журнал промокодов ----
-
-	// ListAdminPromoCodes — все коды платформы для админ-журнала: фильтры
-	// CourseID/Q/Active комбинируются через AND, Q — подстрока без учёта
-	// регистра по коду ИЛИ названию курса. Сортировка createdAt DESC, при
-	// равенстве id ASC; total — до пагинации. Строки содержат данные курса
-	// (courseTitle/courseSlug); пустой результат — не nil.
-	ListAdminPromoCodes(f AdminPromoFilter) ([]*AdminPromoRow, int)
-	// UpdateAdminPromoCode — частичное обновление скидки/лимита/срока/
-	// активности; меняются только переданные поля. ExpiresAt различает
-	// «не менять» и «очистить» (см. AdminPromoPatch). Возвращает снимок
-	// строки журнала с данными курса. ErrNotFound — кода нет. Валидацию
-	// значений и запрет архивного курса выполняет handler.
-	UpdateAdminPromoCode(id string, p AdminPromoPatch) (*AdminPromoRow, error)
-
-	// ---- T85: глобальная модерация Q&A ----
-
-	// ListAdminQuestions — вопросы/ответы всей платформы для админки (T85).
-	// Фильтры CourseID/LessonID — точные ("" — любой), Q — подстрока без
-	// учёта регистра по вопросам, ответам, email/именам авторов, названиям
-	// курса и урока. Новые вопросы первыми (createdAt desc, id desc), ответы
-	// внутри — старые первыми (createdAt asc, id asc). Пагинация 1-based:
-	// Limit по умолчанию 20, максимум 100; total — до пагинации. Никогда не
-	// возвращает nil-срез; у каждой строки Answers — не-nil срез.
-	ListAdminQuestions(f AdminQuestionFilter) (items []*AdminQuestionRow, total int)
 }
 
 // PaymentFilter — параметры журнала платежей для админки (US6, T31).

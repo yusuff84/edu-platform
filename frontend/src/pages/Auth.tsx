@@ -11,6 +11,7 @@ import { ApiError, login, register } from '../api/client';
 import { meQueryOptions } from '../components/RouteGuards';
 import { t } from '../i18n/t';
 import { useSeo } from '../app/useSeo';
+import { setSessionUser } from '../app/sessionCache';
 
 // Логин не требует полноценного e-mail: демо- и QA-аккаунты (admin@local,
 // teacher@local) заводятся с локальным доменом, а проверку учётных данных
@@ -27,7 +28,7 @@ const loginSchema = z.object({
 
 const registerSchema = z.object({
   email: z.string().min(1, 'Укажите email').email('Некорректный email'),
-  password: z.string().min(8, 'Пароль не короче 8 символов'),
+  password: z.string().min(8, 'Пароль не короче 8 символов').refine(value => new TextEncoder().encode(value).length <= 72, 'Пароль слишком длинный. Сократите его.'),
   inviteToken: z.string().optional(),
 });
 
@@ -45,9 +46,9 @@ const INTERNAL_PATH_RE = /^\/(?!\/)(?!\\)/;
  * Достаёт и валидирует state.from, который кладут гварды RequireAuth/RequireRole
  * (см. RouteGuards.tsx) перед редиректом на /login.
  *
- * Формат from — контракт между гвардом и этой страницей: гвард кладёт объект
- * Location (pathname + search + hash), чтобы не потерять query/hash. Строковый
- * путь тоже принимаем — для старых ссылок и совместимости.
+ * Формат from — контракт между гвардом и этой страницей; гвард сейчас кладёт
+ * строку-путь (location.pathname), но на случай смены формата на объект
+ * Location (pathname + search + hash) принимаем и его.
  *
  * Защита от open redirect:
  * 1) путь обязан начинаться с одного «/» (отсекает «https://evil.example»,
@@ -83,7 +84,7 @@ function resolveRedirectFrom(state: unknown): string | null {
 }
 
 export function Login(): JSX.Element {
-  useSeo('Вход — Edu Platform', 'Войдите в Edu Platform, чтобы продолжить обучение.');
+  useSeo('Вход — skillex.space', 'Войдите в skillex.space, чтобы продолжить обучение.');
   const navigate = useNavigate();
   const location = useLocation();
   const qc = useQueryClient();
@@ -102,9 +103,9 @@ export function Login(): JSX.Element {
 
   const mutation = useMutation({
     mutationFn: (v: LoginForm) => login(v),
-    onSuccess: () => {
+    onSuccess: async (user) => {
       setServerError('');
-      void qc.invalidateQueries({ queryKey: ['me'] });
+      await setSessionUser(qc, user);
       // replace: «назад» после входа не возвращает на форму логина.
       navigate(fromPath ?? '/', { replace: true });
     },
@@ -117,7 +118,7 @@ export function Login(): JSX.Element {
   // Сессия уже есть — уводим со страницы входа: если гвард запомнил, откуда
   // пришли (state.from), возвращаем туда (та же безопасная валидация from,
   // что после отправки формы — логику T15 не дублируем), иначе — в кабинет.
-  if (meQuery.data) return <Navigate to={fromPath ?? '/me'} replace />;
+  if (meQuery.data && !mutation.isPending && !mutation.isSuccess) return <Navigate to={fromPath ?? '/me'} replace />;
 
   return (
     <div className="wrap">
@@ -162,10 +163,11 @@ export function Login(): JSX.Element {
             <p>
               {/* Пробрасываем state, чтобы from не потерялся при переходе Login ↔ Register. */}
               <Link to="/register" state={location.state}>{t('auth.noAccount')}</Link>
+              {' · '}<Link to="/forgot-password">Забыли пароль?</Link>
             </p>
           </div>
           <div className="panel panel-dark">
-            <h2>Почему Edu Platform</h2>
+            <h2>Почему skillex.space</h2>
             <ul className="checklist">
               <li>Практика с автопроверкой</li>
               <li>Живые разборы</li>
@@ -179,7 +181,7 @@ export function Login(): JSX.Element {
 }
 
 export function Register(): JSX.Element {
-  useSeo('Регистрация — Edu Platform', 'Создайте аккаунт Edu Platform и начните учиться.');
+  useSeo('Регистрация — skillex.space', 'Создайте аккаунт skillex.space и начните учиться.');
   const navigate = useNavigate();
   const location = useLocation();
   const qc = useQueryClient();
@@ -213,9 +215,9 @@ export function Register(): JSX.Element {
         password: v.password,
         inviteToken: v.inviteToken?.trim() ? v.inviteToken.trim() : undefined,
       }),
-    onSuccess: (_res, variables) => {
+    onSuccess: async (user, variables) => {
       setServerError('');
-      void qc.invalidateQueries({ queryKey: ['me'] });
+      await setSessionUser(qc, user);
       // Приглашённый по invite-токену регистрируется с ролью teacher —
       // логичный старт для него кабинет учителя /teach. Явный from
       // (намерение пользователя) приоритетнее этой эвристики.
@@ -238,7 +240,7 @@ export function Register(): JSX.Element {
 
   // Сессия уже есть — со страницы регистрации уводим так же, как со входа:
   // в state.from (если гвард его положил), иначе — в кабинет.
-  if (meQuery.data) return <Navigate to={fromPath ?? '/me'} replace />;
+  if (meQuery.data && !mutation.isPending && !mutation.isSuccess) return <Navigate to={fromPath ?? '/me'} replace />;
 
   return (
     <div className="wrap">

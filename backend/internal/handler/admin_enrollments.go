@@ -56,6 +56,11 @@ func (a *App) setEnrollmentStatus(w http.ResponseWriter, r *http.Request, status
 	if !a.adminOnly(w, r) {
 		return
 	}
+	unlock, locked := a.lockBilling(w, r)
+	if !locked {
+		return
+	}
+	defer unlock()
 	studentID := strings.TrimSpace(chi.URLParam(r, "studentId"))
 	courseID := strings.TrimSpace(chi.URLParam(r, "courseId"))
 	if _, err := uuid.Parse(studentID); err != nil {

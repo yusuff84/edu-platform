@@ -231,7 +231,24 @@ func (a *App) resolvePromo(c *repo.Course, code string) (*repo.PromoCode, int, s
 	if p.ExpiresAt != nil && !p.ExpiresAt.After(time.Now().UTC()) {
 		return nil, http.StatusBadRequest, promoExpiredErr
 	}
-	if p.MaxUses > 0 && p.UsedCount >= p.MaxUses {
+	reserved, paid := 0, 0
+	for _, payment := range a.Store.ListPaymentsByCourse(c.ID) {
+		if payment.PromoCode != p.Code {
+			continue
+		}
+		switch payment.Status {
+		case repo.PaymentSucceeded, repo.PaymentRefunded:
+			paid++
+		default:
+			// A timeout or failed payment may still receive a late success.
+			// Keep its slot reserved until provider reconciliation is definitive.
+			reserved++
+		}
+	}
+	if paid < p.UsedCount {
+		paid = p.UsedCount
+	}
+	if p.MaxUses > 0 && paid+reserved >= p.MaxUses {
 		return nil, http.StatusBadRequest, promoLimitErr
 	}
 	return p, 0, ""

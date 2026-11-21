@@ -161,7 +161,10 @@ func TestLessonQuestionsPublicListAndPagination(t *testing.T) {
 		t.Fatalf("уроков в seed-курсе: %d, ждали 1", len(lessons))
 	}
 	firstLesson := lessons[0]
-	secondLesson := qaAddLesson(t, app, router, teacherCookies, courseID, "Второй урок")
+	var secondLesson string
+	withDraftCourse(t, app, courseID, func() {
+		secondLesson = qaAddLesson(t, app, router, teacherCookies, courseID, "Второй урок")
+	})
 
 	// Пустая лента: items — массив, не null; page/limit — дефолты.
 	empty := qaListQuestions(t, router, "/api/v1/courses/"+courseID+"/questions", nil)

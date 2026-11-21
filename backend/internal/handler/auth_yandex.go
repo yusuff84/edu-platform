@@ -148,7 +148,9 @@ func (a *App) YandexAuthCallback(w http.ResponseWriter, r *http.Request) {
 	if u.DisplayName == "" && profile.DisplayName != "" {
 		a.Store.SetUserDisplayName(u.ID, profile.DisplayName)
 	}
-	a.startSession(w, r, u.ID)
+	if !a.startSession(w, r, u) {
+		return
+	}
 	// Фронтенд-хост отличается от API (3000 против 8082), поэтому ведём на
 	// корень приложения, а не на /api/v1 — браузер окажется на фронтенде.
 	http.Redirect(w, r, "/", http.StatusFound)

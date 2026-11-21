@@ -294,7 +294,7 @@ func TestPostgresTeacherStatsParity(t *testing.T) {
 // чужой курс не показывает. Точные глобальные суммы не проверяются: в БД
 // могут быть данные других тестов прогона.
 func TestPostgresTeacherStatsAdminAll(t *testing.T) {
-	pg := testStore(t)
+	pg := isolatedStore(t)
 	d := t77Seed(t, pg)
 
 	all := pg.TeacherCourseStats(d.admin.ID, true, 200)

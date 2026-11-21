@@ -88,7 +88,7 @@ export default function Reviews({
     handleSubmit,
     reset,
     formState: { errors },
-  } = useForm<Form>({
+  } = useForm<z.input<typeof schema>, unknown, Form>({
     resolver: zodResolver(schema),
     defaultValues: { rating: 5, body: '' },
   });

@@ -8,7 +8,6 @@ import { ApiError, formatMoney } from '../api/client';
 import { getAdminStats } from '../api/adminConsole';
 import { t } from '../i18n/t';
 import type { RuKey } from '../i18n/t';
-import { useSeo } from '../app/useSeo';
 // Стили экранов консоли изолированы в styles/adminConsole.css (префикс .ac-).
 import '../styles/adminConsole.css';
 
@@ -32,16 +31,18 @@ function formatRating(value: number): string {
 }
 
 /**
- * T59: быстрые переходы из сводки в разделы супер-админки. Все пункты —
- * самостоятельные страницы: журнал платежей и очередь модерации после
- * разделения админки живут на /admin/payments и /admin/moderation.
+ * T59: быстрые переходы из сводки в разделы супер-админки. Пользователи,
+ * курсы и записи — отдельные страницы; журнал платежей и очередь модерации —
+ * секции /admin, у Admin.tsx есть якоря (section id="journal"/"queue"),
+ * поэтому ведём по ним: после перезагрузки /admin#queue браузер отскроллит
+ * к нужной секции (html { scroll-behavior: smooth } из styles.css).
  */
 const QUICK_LINKS: Array<{ label: RuKey; to: string }> = [
   { label: 'p7.stats.linksUsers', to: '/admin/users' },
   { label: 'p7.stats.linksCourses', to: '/admin/courses' },
   { label: 'p7.stats.linksEnrollments', to: '/admin/enrollments' },
-  { label: 'p7.stats.linksJournal', to: '/admin/payments' },
-  { label: 'p7.stats.linksQueue', to: '/admin/moderation' },
+  { label: 'p7.stats.linksJournal', to: '/admin#journal' },
+  { label: 'p7.stats.linksQueue', to: '/admin#queue' },
 ];
 
 /** Строка «подпись — значение» внутри карточки сводки. */
@@ -55,7 +56,6 @@ function StatRow({ label, value }: { label: string; value: string | number }): J
 }
 
 export default function AdminStats(): JSX.Element {
-  useSeo(`${t('adminStats.title')} — ${t('cabinet.adminTitle')} — Edu Platform`);
   const stats = useQuery({
     // Ключ совпадает с инвалидацией в AdminCourses.tsx: действия над курсами
     // и удаление отзыва обновляют и сводку.
@@ -71,9 +71,6 @@ export default function AdminStats(): JSX.Element {
     <div className="wrap">
       <div className="page">
         <main className="ac-page">
-          <p className="muted">
-            <Link to="/admin">{t('p10.nav.backToAdmin')}</Link>
-          </p>
           <div className="ac-head">
             <h1>{t('adminStats.title')}</h1>
             <button

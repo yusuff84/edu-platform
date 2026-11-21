@@ -1,15 +1,26 @@
+# Локальный запуск (dev):
+#   docker compose up -d --build
+#   .env задаёт APP_ENV=development, поэтому mock-оплата и change-me работают.
+#   Без APP_ENV Compose не стартует: production не должен случайно стать dev.
+#
+# Production требует ЯВНОГО env-file (в репозитории секретов нет):
+#   docker compose --env-file .env.production up -d --build
+#   Там должны быть APP_ENV=production, явный DATABASE_URL (не dev-креды
+#   edu/edu), уникальный SESSION_SECRET, реальный PAYMENTS_PROVIDER=stripe|
+#   yookassa (mock в production запрещён) и SMTP_TLS=starttls|implicit.
 services:
   db:
     image: postgres:16
     restart: unless-stopped
     environment:
-      POSTGRES_USER: edu
-      POSTGRES_PASSWORD: edu
-      POSTGRES_DB: edu
+      POSTGRES_USER: ${POSTGRES_USER:-edu}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-edu}
+      POSTGRES_DB: ${POSTGRES_DB:-edu}
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U edu -d edu"]
+      # $$ — чтобы Compose не подставил значения, а shell контейнера прочитал env.
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 5s
       timeout: 3s
       retries: 10
@@ -18,16 +29,24 @@ services:
     build: ./backend
     restart: unless-stopped
     ports:
-      - "8082:8080"
+      - "127.0.0.1:8082:8080"
     environment:
-      DATABASE_URL: postgres://edu:edu@db:5432/edu?sslmode=disable
+      # DSN обязателен и должен указывать на те же креды, что POSTGRES_*.
+      # Без него Compose не стартует: иначе production молча получил бы
+      # dev-подключение edu/edu и обходил fail-fast пустого DATABASE_URL.
+      DATABASE_URL: "${DATABASE_URL:?DATABASE_URL is required: set an explicit Postgres DSN}"
+      # В production значение change-me запрещено (config.Load не даст стартовать).
       SESSION_SECRET: ${SESSION_SECRET:-change-me}
       PAYMENTS_PROVIDER: ${PAYMENTS_PROVIDER:-mock}
       COMMISSION_PCT: ${COMMISSION_PCT:-15}
       PORT: "8080"
       RUNNER_URL: http://runner:8081
+      # Bootstrap-учётки: создаются только если заданы ОБЕ переменные пары.
+      # Дефолтных teacher@local/teacher1 нет.
       ADMIN_EMAIL: ${ADMIN_EMAIL:-}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+      TEACHER_EMAIL: ${TEACHER_EMAIL:-}
+      TEACHER_PASSWORD: ${TEACHER_PASSWORD:-}
       # Приглашения: публичная база ссылок и SMTP (пусто — только ссылка в API/UI)
       PUBLIC_APP_URL: ${PUBLIC_APP_URL:-http://localhost:3000}
       SMTP_ADDR: ${SMTP_ADDR:-}
@@ -37,7 +56,10 @@ services:
       SMTP_TLS: ${SMTP_TLS:-starttls}
       # CORS/CSRF (config.Load)
       ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:3000,http://127.0.0.1:3000}
-      APP_ENV: ${APP_ENV:-}
+      TRUSTED_PROXY_CIDRS: ${TRUSTED_PROXY_CIDRS:-}
+      # APP_ENV обязателен: production обязан задать его явно, иначе Compose
+      # молча запустил бы dev-режим с mock-оплатой на production-БД.
+      APP_ENV: "${APP_ENV:?APP_ENV is required (development|production)}"
       COOKIE_SAMESITE: ${COOKIE_SAMESITE:-}
       CSRF_ALLOW_MISSING_ORIGIN: ${CSRF_ALLOW_MISSING_ORIGIN:-}
       # Rate-limit (T10); пустое значение — дефолты config.Load
@@ -50,6 +72,7 @@ services:
       YOOKASSA_SHOP_ID: ${YOOKASSA_SHOP_ID:-}
       YOOKASSA_SECRET_KEY: ${YOOKASSA_SECRET_KEY:-}
       YOOKASSA_TRUSTED_IPS: ${YOOKASSA_TRUSTED_IPS:-}
+      # mock разрешён только в dev; в production старт с ним запрещён (config.Load).
       MOCK_WEBHOOK_SECRET: ${MOCK_WEBHOOK_SECRET:-}
       PAYMENTS_RETURN_URL: ${PAYMENTS_RETURN_URL:-}
       # Яндекс OAuth (T10/T13); без ключей /auth/yandex/start отвечает 503
@@ -91,6 +114,8 @@ services:
   runner:
     build: ./runner
     restart: unless-stopped
+    environment:
+      RUNNER_SANDBOX: bubblewrap
     networks:
       - runner_net            # только внутренняя сеть — у runner нет выхода в интернет
     # Порт НЕ публикуется: на internal-сети Docker всё равно его не публикует
@@ -102,6 +127,11 @@ services:
       - ALL
     security_opt:
       - no-new-privileges:true
+      # bubblewrap creates nested user/PID/network namespaces. The outer
+      # container keeps cap_drop, read_only and resource limits; the student
+      # process runs inside the additional unprivileged namespace sandbox.
+      - seccomp=unconfined
+      - systempaths=unconfined
     # pids_limit и deploy.resources.limits.pids одновременно Compose запрещает
     # («can't set distinct values»), поэтому лимит процессов — внутри deploy.
     deploy:

@@ -83,6 +83,7 @@ export type {
   PaymentTotals,
   PromoCode,
   PromoValidation,
+  Provider,
   PublicSettings,
   QuizData,
   QuizQuestion,
@@ -461,11 +462,9 @@ export function enroll(
   courseId: string,
   promoCode?: string,
 ): Promise<EnrollmentResult> {
-  // P11: провайдера выбирает только backend (PAYMENTS_PROVIDER). Клиент не
-  // передаёт provider, иначе при PAYMENTS_PROVIDER=stripe запрос с "mock"
-  // отклоняется как попытка подмены платёжного канала.
-  // P8 (T63): promoCode — необязательное аддитивное поле; пустое не отправляем,
-  // иначе backend проверит его как обычный код и ответит 400.
+  // Платёжного провайдера выбирает backend (mock/stripe/yookassa) — клиент его
+  // не передаёт. P8 (T63): promoCode — необязательное аддитивное поле; пустое
+  // не отправляем, иначе backend проверит его как код и ответит 400.
   const body: Record<string, string> = { courseId };
   if (promoCode && promoCode.trim() !== '') body.promoCode = promoCode.trim();
   return apiFetch<EnrollmentResult>('/enrollments', {

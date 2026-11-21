@@ -5,7 +5,7 @@
 // комментарием / снять с публикации / в архив / вернуть из архива) и
 // аккуратная пагинация. Раскрывающаяся панель отзывов (T27) и выгрузка CSV
 // (T40) сохранены. Контракт волны P6 — Task/00-api-contract.md.
-import { Fragment, type KeyboardEvent, useEffect, useRef, useState } from 'react';
+import { Fragment, useEffect, useRef, useState } from 'react';
 import {
   keepPreviousData,
   useMutation,
@@ -32,7 +32,6 @@ import type {
 } from '../api/adminConsole';
 import { t } from '../i18n/t';
 import type { RuKey } from '../i18n/t';
-import { useSeo } from '../app/useSeo';
 import CsvExportButton, { csvDateStamp, exportTruncated } from '../components/CsvExportButton';
 import '../styles/adminConsole.css';
 
@@ -244,21 +243,10 @@ function RejectDialog({
   const [comment, setComment] = useState('');
   const [error, setError] = useState('');
   const areaRef = useRef<HTMLTextAreaElement | null>(null);
-  const boxRef = useRef<HTMLDivElement | null>(null);
-  // Кнопка, открывшая диалог: на неё вернём фокус после закрытия.
-  const returnFocusRef = useRef<HTMLElement | null>(null);
 
-  // Фокус в поле комментария сразу при открытии окна; после закрытия —
-  // обратно на кнопку «Отклонить» в строке курса.
+  // Фокус в поле комментария сразу при открытии окна.
   useEffect(() => {
-    const active = document.activeElement;
-    returnFocusRef.current = active instanceof HTMLElement ? active : null;
     areaRef.current?.focus();
-    return () => {
-      const back = returnFocusRef.current;
-      if (back && back.isConnected) back.focus();
-      returnFocusRef.current = null;
-    };
   }, []);
 
   const reject = useMutation({
@@ -275,36 +263,6 @@ function RejectDialog({
 
   const canSubmit = comment.trim() !== '' && !reject.isPending;
 
-  /** Esc — закрыть, Tab — не выпускать фокус за пределы диалога. */
-  function onDialogKeyDown(e: KeyboardEvent<HTMLDivElement>): void {
-    if (e.key === 'Escape') {
-      if (!reject.isPending) onClose();
-      return;
-    }
-    if (e.key !== 'Tab') return;
-    const box = boxRef.current;
-    if (!box) return;
-    const focusable = Array.from(
-      box.querySelectorAll<HTMLElement>(
-        'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])',
-      ),
-    ).filter((node) => !node.hidden);
-    if (focusable.length === 0) {
-      e.preventDefault();
-      return;
-    }
-    const first = focusable[0];
-    const last = focusable[focusable.length - 1];
-    const active = document.activeElement;
-    if (e.shiftKey && (active === first || !box.contains(active))) {
-      e.preventDefault();
-      last.focus();
-    } else if (!e.shiftKey && (active === last || !box.contains(active))) {
-      e.preventDefault();
-      first.focus();
-    }
-  }
-
   return (
     <div
       className="ac-modal"
@@ -312,10 +270,11 @@ function RejectDialog({
         // Клик мимо окна закрывает модалку, но не во время запроса.
         if (e.target === e.currentTarget && !reject.isPending) onClose();
       }}
-      onKeyDown={onDialogKeyDown}
+      onKeyDown={(e) => {
+        if (e.key === 'Escape' && !reject.isPending) onClose();
+      }}
     >
       <div
-        ref={boxRef}
         className="ac-modal__box"
         role="dialog"
         aria-modal="true"
@@ -376,7 +335,6 @@ function RejectDialog({
 }
 
 export default function AdminCourses(): JSX.Element {
-  useSeo(`${t('adminCourses.title')} — ${t('cabinet.adminTitle')} — Edu Platform`);
   const qc = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
 
@@ -619,9 +577,6 @@ export default function AdminCourses(): JSX.Element {
     <div className="wrap">
       <div className="page">
         <main className="ac-page">
-          <p className="muted">
-            <Link to="/admin">{t('p10.nav.backToAdmin')}</Link>
-          </p>
           <div className="ac-head">
             <h1>{t('adminCourses.title')}</h1>
             <span className="muted">
@@ -782,13 +737,6 @@ export default function AdminCourses(): JSX.Element {
               {t('common.loading')}
             </p>
           )}
-          {/* keepPreviousData: при смене фильтра таблица остаётся, но данные
-              ещё обновляются — сообщаем об этом и помечаем регион aria-busy. */}
-          {courses.isFetching && !courses.isLoading && (
-            <p className="muted" role="status" aria-live="polite">
-              Обновление…
-            </p>
-          )}
 
           {courses.isError && (
             <div className="ac-error" role="alert">
@@ -813,7 +761,6 @@ export default function AdminCourses(): JSX.Element {
               role="region"
               aria-label={t('adminCourses.title')}
               tabIndex={0}
-              aria-busy={courses.isFetching || undefined}
             >
               <table className="ac-table">
                 <thead>

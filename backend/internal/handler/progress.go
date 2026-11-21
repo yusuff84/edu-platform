@@ -2,8 +2,6 @@ package handler
 
 import (
 	"context"
-	"encoding/json"
-	"errors"
 	"net/http"
 	"strings"
 	"time"
@@ -62,30 +60,10 @@ func (a *App) MyCourses(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"items": items, "total": len(items)})
 }
 
-// quizAnswerValue принимает ответ на вопрос в двух формах: число (одиночный
-// выбор, старый контракт) или массив чисел (множественный выбор, FR-010).
-type quizAnswerValue struct {
-	Indexes []int
-}
-
-func (v *quizAnswerValue) UnmarshalJSON(data []byte) error {
-	var single int
-	if err := json.Unmarshal(data, &single); err == nil {
-		v.Indexes = []int{single}
-		return nil
-	}
-	var many []int
-	if err := json.Unmarshal(data, &many); err == nil {
-		v.Indexes = many
-		return nil
-	}
-	return errors.New("ответ на вопрос должен быть числом или массивом чисел")
-}
-
 type completeRequest struct {
-	QuizAnswers map[string]quizAnswerValue `json:"quizAnswers"`
-	Code        string                     `json:"code"`
-	Language    string                     `json:"language"`
+	QuizAnswers map[string]int `json:"quizAnswers"`
+	Code        string         `json:"code"`
+	Language    string         `json:"language"`
 }
 
 // CompleteLesson — POST /me/courses/{id}/lessons/{lessonId}/complete.
@@ -135,7 +113,10 @@ func (a *App) CompleteLesson(w http.ResponseWriter, r *http.Request) {
 	}
 
 	finish := func() {
-		a.Store.CompleteLesson(u.ID, l.ID)
+		if progress, _ := a.Store.CompleteLesson(u.ID, l.ID); progress == nil {
+			writeErr(w, http.StatusInternalServerError, "Не удалось сохранить прогресс урока")
+			return
+		}
 		// T67: если этим завершением все уроки курса пройдены — выдаём
 		// сертификат (идемпотентно, повторный сертификат не создаётся).
 		a.issueCertificateIfCourseCompleted(u.ID, c)
@@ -172,11 +153,7 @@ func (a *App) CompleteLesson(w http.ResponseWriter, r *http.Request) {
 			writeErr(w, http.StatusBadRequest, "Пришлите ответы на вопросы (quizAnswers)")
 			return
 		}
-		answers := make(map[string][]int, len(req.QuizAnswers))
-		for id, v := range req.QuizAnswers {
-			answers[id] = v.Indexes
-		}
-		passed, correct, total := service.CheckQuiz(l.Quiz, answers)
+		passed, correct, total := service.CheckQuiz(l.Quiz, req.QuizAnswers)
 		if !passed {
 			a.Store.BumpAttempt(u.ID, l.ID)
 			failWithProgress("Не все ответы верны, попробуйте ещё раз", map[string]any{
@@ -194,9 +171,10 @@ func (a *App) CompleteLesson(w http.ResponseWriter, r *http.Request) {
 			writeErr(w, http.StatusBadRequest, "Пришлите код решения (code)")
 			return
 		}
-		lang := strings.TrimSpace(req.Language)
-		if lang == "" {
-			lang = l.CodeTask.Language
+		lang := strings.ToLower(strings.TrimSpace(l.CodeTask.Language))
+		if requested := strings.TrimSpace(req.Language); requested != "" && !strings.EqualFold(requested, lang) {
+			writeErr(w, http.StatusBadRequest, "Язык решения должен совпадать с языком задания")
+			return
 		}
 		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 		defer cancel()

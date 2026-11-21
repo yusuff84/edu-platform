@@ -57,7 +57,7 @@ export default function TeacherProfile(): JSX.Element {
   });
   const teacherName = query.data?.teacher.displayName?.trim() || t('p9.teacher.title');
   useSeo(
-    query.data ? `${teacherName} — Edu Platform` : 'Преподаватель — Edu Platform',
+    query.data ? `${teacherName} — skillex.space` : 'Преподаватель — skillex.space',
     query.data
       ? `Курсы преподавателя ${teacherName}: программа, отзывы и запись на обучение.`
       : DEFAULT_DESCRIPTION,

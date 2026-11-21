@@ -1,0 +1,16 @@
+[Unit]
+Description=skillex.space educational platform
+Requires=docker.service
+After=docker.service network-online.target apparmor.service
+Wants=network-online.target
+ConditionPathExists=/opt/skillex/current/deploy/compose.server.yml
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory=/opt/skillex/current
+ExecStart=/usr/bin/docker compose -p skillex --env-file /opt/skillex/.env -f /opt/skillex/current/deploy/compose.server.yml up -d --wait --wait-timeout 180
+ExecStop=/usr/bin/docker compose -p skillex --env-file /opt/skillex/.env -f /opt/skillex/current/deploy/compose.server.yml stop
+TimeoutStartSec=240
+TimeoutStopSec=120
+[Install]
+WantedBy=multi-user.target

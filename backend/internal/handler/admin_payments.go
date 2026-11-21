@@ -1,11 +1,9 @@
 package handler
 
 import (
-	"errors"
 	"net/http"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -30,6 +28,8 @@ func (a *App) RegisterAdminPaymentsRoutes(r chi.Router) {
 	// T47: возврат средств — id внутреннего UUID платежа (не providerPaymentId).
 	r.With(a.requireAuth, a.requireRole(repo.RoleAdmin)).
 		Post("/admin/payments/{id}/refund", a.AdminRefundPayment)
+	r.With(a.requireAuth, a.requireRole(repo.RoleAdmin)).
+		Post("/admin/payments/{id}/sync", a.AdminSyncPayment)
 }
 
 // adminOnly — страховка к requireRole: проверяет, что запрос пришёл от админа,
@@ -311,43 +311,6 @@ type refundResponse struct {
 	Payment paymentJournalItem `json:"payment"`
 }
 
-// refundLocks сериализует возвраты по одному платежу ДО вызова провайдера
-// (H4): два одновременных запроса не должны дважды дергать Stripe/YooKassa.
-// Замок на платеж, а не глобальный: возвраты разных платежей независимы.
-var refundLocks = struct {
-	sync.Mutex
-	items map[string]*refundLock
-}{items: make(map[string]*refundLock)}
-
-type refundLock struct {
-	mu   sync.Mutex
-	refs int
-}
-
-// lockPaymentRefund берёт замок платежа; возвращённая функция освобождает
-// его и удаляет запись, когда ждущих не осталось (карта не растёт).
-func lockPaymentRefund(id string) func() {
-	refundLocks.Lock()
-	l := refundLocks.items[id]
-	if l == nil {
-		l = &refundLock{}
-		refundLocks.items[id] = l
-	}
-	l.refs++
-	refundLocks.Unlock()
-
-	l.mu.Lock()
-	return func() {
-		l.mu.Unlock()
-		refundLocks.Lock()
-		l.refs--
-		if l.refs == 0 {
-			delete(refundLocks.items, id)
-		}
-		refundLocks.Unlock()
-	}
-}
-
 // isDurableMockPayment — платёж, созданный MockProvider. Такой платёж
 // возвращается только в Store: реестр mock-провайдера живёт в памяти и после
 // рестарта API пуст. Для бесплатного платежа providerPaymentId имеет префикс
@@ -367,25 +330,40 @@ func isDurableMockPayment(p *repo.Payment) bool {
 // Применение результата — под a.webhookMu, тем же замком, что и вебхук
 // (P5, коммит b9a84df): статус перечитывается и меняется в одной критической
 // секции, поэтому два параллельных возврата одного платежа дают ровно один
-// 200, второй — 409. Сам вызов провайдера — ВНЕ замка: он может быть сетевым
-// и долгим (stripe/yookassa), а гонку сериализует повторная проверка ниже.
+// 200, второй — 409. Внешний вызов тоже выполняется под общей блокировкой
+// billing, чтобы два запроса не отправляли параллельные возвраты провайдеру.
 func (a *App) AdminRefundPayment(w http.ResponseWriter, r *http.Request) {
 	if !a.adminOnly(w, r) {
 		return
 	}
 	id := strings.TrimSpace(chi.URLParam(r, "id"))
-	// H4: сериализуем возврат по платежу до обращения к провайдеру. Второй
-	// параллельный запрос дождётся первого и увидит уже refunded → 409,
-	// не выполняя повторный возврат у Stripe/YooKassa.
-	unlockRefund := lockPaymentRefund(id)
-	defer unlockRefund()
-
+	a.webhookMu.Lock()
+	defer a.webhookMu.Unlock()
+	unlock, locked := a.lockBilling(w, r)
+	if !locked {
+		return
+	}
+	defer unlock()
 	p, found := a.Store.GetPaymentByID(id)
 	if !found {
 		writeErr(w, http.StatusNotFound, "Платёж не найден")
 		return
 	}
-	if !canTransition(p.Status, repo.PaymentRefunded) {
+	if p.Status == repo.PaymentRefunded {
+		enrollment, exists := a.Store.GetEnrollment(p.StudentID, p.CourseID)
+		repairNeeded := exists && enrollment.Status == repo.EnrollmentActive
+		if err := a.revokeEnrollmentAccess(p); err != nil {
+			writeErr(w, http.StatusInternalServerError, "Не удалось отозвать доступ к курсу")
+			return
+		}
+		if !repairNeeded {
+			writeErr(w, http.StatusConflict, "Возврат возможен только для успешного платежа")
+			return
+		}
+		writeJSON(w, http.StatusOK, refundResponse{Payment: toJournalItem(a.journalRowFor(p))})
+		return
+	}
+	if p.Status != repo.PaymentSucceeded {
 		writeErr(w, http.StatusConflict, "Возврат возможен только для успешного платежа")
 		return
 	}
@@ -394,43 +372,33 @@ func (a *App) AdminRefundPayment(w http.ResponseWriter, r *http.Request) {
 	// провайдера: денег вне платформы нет, а реестр после рестарта API пуст.
 	// Для free-... и реальных провайдеров вызов остаётся обязательным.
 	if !isDurableMockPayment(p) {
-		prov, err := payments.NewProvider(p.Provider, a.Config.IsDev())
+		prov, err := payments.NewProvider(p.Provider)
 		if err != nil {
 			writeErr(w, http.StatusBadGateway, "Не удалось выполнить возврат у провайдера")
 			return
 		}
-		// Ключ refund-<внутренний id> стабилен между ретраями админки; у
-		// YooKassa/Stripe он не даст создать второй возврат по тому же платежу.
-		if err := prov.Refund(r.Context(), p.ProviderPaymentID, "refund-"+p.ID); err != nil {
+		if err := prov.Refund(r.Context(), p.ProviderPaymentID); err != nil {
 			writeErr(w, http.StatusBadGateway, "Не удалось выполнить возврат у провайдера")
 			return
 		}
 	}
 
-	a.webhookMu.Lock()
-	defer a.webhookMu.Unlock()
-
-	// Свежее чтение внутри замка: пока шёл вызов провайдера, статус мог
-	// измениться (параллельный возврат или вебхук) — тогда 409.
+	// Перечитываем запись перед применением локального результата.
 	fresh, found := a.Store.GetPaymentByID(p.ID)
 	if !found {
 		writeErr(w, http.StatusNotFound, "Платёж не найден")
 		return
 	}
-	if !canTransition(fresh.Status, repo.PaymentRefunded) {
+	if fresh.Status != repo.PaymentSucceeded {
 		writeErr(w, http.StatusConflict, "Возврат возможен только для успешного платежа")
-		return
-	}
-	if !a.Store.SetPaymentStatus(fresh.ID, repo.PaymentRefunded) {
-		writeErr(w, http.StatusInternalServerError, "Не удалось сохранить статус платежа")
 		return
 	}
 	// Возврат средств отменяет доступ: запись на курс становится refunded
 	// (та же семантика, что у ветки refunded в PaymentWebhook, enroll.go).
-	// ErrNotFound не считается сбоем (записи нет — отзывать нечего);
-	// остальные ошибки записи — 500, чтобы не потерять их молча.
-	if err := a.Store.SetEnrollmentStatus(fresh.StudentID, fresh.CourseID, repo.EnrollmentRefunded); err != nil && !errors.Is(err, repo.ErrNotFound) {
-		writeErr(w, http.StatusInternalServerError, "Не удалось закрыть доступ к курсу")
+	// Ошибку не глотаем: повторный вызов админского возврата идемпотентно
+	// дочинит доступ, если платёж уже успел стать refunded.
+	if _, err := a.applyPaymentEvent(fresh, "refunded"); err != nil {
+		writeErr(w, http.StatusInternalServerError, "Не удалось отозвать доступ к курсу")
 		return
 	}
 	// Свежие значения ПОСЛЕ записи: в ответе — актуальный статус refunded

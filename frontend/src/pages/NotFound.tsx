@@ -7,7 +7,7 @@ import '../styles/shell.css';
  * 404 для неизвестных URL (SPA — HTTP-кода нет, текст и ссылка обязательны).
  */
 export default function NotFound(): JSX.Element {
-  useSeo('Страница не найдена — Edu Platform');
+  useSeo('Страница не найдена — skillex.space');
   return (
     <main className="shell-center">
       <h1>{t('error.notFound')}</h1>

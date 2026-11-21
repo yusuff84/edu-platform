@@ -12,23 +12,27 @@ import (
 	"testing"
 	"time"
 
+	"edu-platform/backend/internal/handler"
 	"edu-platform/backend/internal/repo"
 )
 
 // t22VideoLesson добавляет video_text-урок в модуль курса и возвращает его id.
-// Курс может быть опубликован: TeacherCreateLesson статус не проверяет —
-// так же поступает progress_test.go.
-func t22VideoLesson(t *testing.T, router http.Handler, teacherCookies []*http.Cookie, courseID, moduleID, title string) string {
+// Курс может быть опубликован: контент правится только в draft, поэтому
+// фикстура временно снимает публикацию и возвращает исходный статус.
+func t22VideoLesson(t *testing.T, app *handler.App, router http.Handler, teacherCookies []*http.Cookie, courseID, moduleID, title string) string {
 	t.Helper()
-	rec := doRequest(t, router, http.MethodPost, "/api/v1/teacher/courses/"+courseID+"/lessons", map[string]any{
-		"moduleId": moduleID, "title": title, "kind": "video_text", "bodyMd": "текст урока",
-	}, teacherCookies)
-	if rec.Code != http.StatusCreated {
-		t.Fatalf("create lesson %q: status=%d body=%s", title, rec.Code, rec.Body.String())
-	}
-	var lesson map[string]any
-	decodeBody(t, rec, &lesson)
-	id, _ := lesson["id"].(string)
+	var id string
+	withDraftCourse(t, app, courseID, func() {
+		rec := doRequest(t, router, http.MethodPost, "/api/v1/teacher/courses/"+courseID+"/lessons", map[string]any{
+			"moduleId": moduleID, "title": title, "kind": "video_text", "bodyMd": "текст урока",
+		}, teacherCookies)
+		if rec.Code != http.StatusCreated {
+			t.Fatalf("create lesson %q: status=%d body=%s", title, rec.Code, rec.Body.String())
+		}
+		var lesson map[string]any
+		decodeBody(t, rec, &lesson)
+		id, _ = lesson["id"].(string)
+	})
 	return id
 }
 
@@ -176,8 +180,8 @@ func TestTeacherStudentsProgressAndOrder(t *testing.T) {
 		t.Fatal("в курсе нет модулей")
 	}
 	// Сид даёт 1 quiz-урок; добавляем 2 видео → всего 3 урока.
-	videoA := t22VideoLesson(t, router, teacherCookies, courseID, mods[0].ID, "Видео 1")
-	_ = t22VideoLesson(t, router, teacherCookies, courseID, mods[0].ID, "Видео 2")
+	videoA := t22VideoLesson(t, app, router, teacherCookies, courseID, mods[0].ID, "Видео 1")
+	_ = t22VideoLesson(t, app, router, teacherCookies, courseID, mods[0].ID, "Видео 2")
 
 	annaCookies, annaID := registerUser(t, router, "anna-t22@example.com", "password123", "")
 	if !app.Store.SetUserDisplayName(annaID, "Анна Иванова") {
@@ -340,8 +344,8 @@ func TestTeacherCourseStats(t *testing.T) {
 		t.Fatal("в курсе нет модулей")
 	}
 	// Сид: 1 quiz-урок, добавляем 2 видео → всего 3 урока.
-	_ = t22VideoLesson(t, router, teacherCookies, courseID, mods[0].ID, "Видео 1")
-	_ = t22VideoLesson(t, router, teacherCookies, courseID, mods[0].ID, "Видео 2")
+	_ = t22VideoLesson(t, app, router, teacherCookies, courseID, mods[0].ID, "Видео 1")
+	_ = t22VideoLesson(t, app, router, teacherCookies, courseID, mods[0].ID, "Видео 2")
 	lessons := app.Store.ListLessonsByCourse(courseID)
 	if len(lessons) != 3 {
 		t.Fatalf("уроков=%d, ждали 3", len(lessons))

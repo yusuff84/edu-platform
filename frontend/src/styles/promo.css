@@ -136,14 +136,12 @@
   font-size: 14px;
   font-weight: 700;
   cursor: pointer;
-  text-decoration: none;
+  text-decoration: underline;
   text-underline-offset: 3px;
 }
 
-.promo-toggle:hover,
-.promo-toggle:focus-visible {
+.promo-toggle:hover {
   color: var(--brand-dark);
-  text-decoration: underline;
 }
 
 .promo-apply {
@@ -206,14 +204,12 @@
   font-size: 13px;
   font-weight: 700;
   cursor: pointer;
-  text-decoration: none;
+  text-decoration: underline;
   text-underline-offset: 3px;
 }
 
-.promo-remove:hover,
-.promo-remove:focus-visible {
+.promo-remove:hover {
   color: var(--danger);
-  text-decoration: underline;
 }
 
 /* Итоговая цена: полная — зачёркнута и приглушена, итог — акцент. */

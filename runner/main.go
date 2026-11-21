@@ -21,9 +21,8 @@
 // Сеть, память, CPU и права процесса ограничиваются на уровне контейнера
 // (см. рекомендованный блок docker-compose.yml в отчёте T11): внутренняя
 // сеть без выхода в интернет, read_only, cap_drop: [ALL], tmpfs на /tmp,
-// mem/cpu-limits, pids_limit. Этот файл сознательно не содержит настроек
-// процесс-групп (SysProcAttr): они платформозависимы, а exec.CommandContext
-// — основной механизм убийства зависших программ.
+// mem/cpu-limits, pids_limit. Дочерние исполнения дополнительно изолируются
+// bubblewrap; файлы process_*.go завершают дерево процессов по таймауту.
 package main
 
 import (
@@ -38,6 +37,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strconv"
 	"strings"
 	"syscall"
@@ -100,6 +100,7 @@ type runResponse struct {
 // runner — состояние сервиса. Лимиты вынесены в поля, чтобы тесты могли
 // переопределять их без изменения production-констант.
 type runner struct {
+	sandboxMode string
 	sem         chan struct{} // семафор конкурентности
 	budget      time.Duration // общий бюджет запроса
 	execTimeout time.Duration // потолок на один тест
@@ -107,7 +108,12 @@ type runner struct {
 }
 
 func newRunner() *runner {
+	mode := strings.TrimSpace(os.Getenv("RUNNER_SANDBOX"))
+	if mode == "" {
+		mode = "bubblewrap"
+	}
 	return &runner{
+		sandboxMode: mode,
 		sem:         make(chan struct{}, maxConcurrent),
 		budget:      requestBudget,
 		execTimeout: execTimeout,
@@ -166,22 +172,32 @@ func execEnv(dir string) []string {
 
 // runCmd выполняет файл программы через интерпретатор внутри каталога dir.
 // Дедлайн = min(execTimeout, дедлайн ctx запроса). Вывод ограничивается
-// rn.maxOutput байтами. Сеть процессу не запрещается кодом — это работа
-// контейнера (internal-сеть в docker-compose.yml).
+// rn.maxOutput байтами. sandboxCommand создаёт отдельные пространства сети,
+// процессов и файловой системы для каждого исполнения.
 func (rn *runner) runCmd(ctx context.Context, dir, stdin, name string, args ...string) (string, error) {
 	ctx, cancel := context.WithTimeout(ctx, rn.execTimeout)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, name, args...) // при дедлайне убивает процесс (SIGKILL)
-	cmd.Dir = dir                                  // рабочий каталог — временный каталог
-	cmd.Env = execEnv(dir)                         // белый список переменных
-	cmd.Stdin = strings.NewReader(stdin)           // stdin — только input текущего теста
+	if name == "python3" && runtime.GOOS == "windows" {
+		name = "python"
+	}
+	command, commandArgs, err := rn.sandboxCommand(dir, name, args)
+	if err != nil {
+		return "", err
+	}
+	cmd := exec.CommandContext(ctx, command, commandArgs...)
+	cleanup := configureProcessTree(cmd)
+	defer cleanup()
+	cmd.WaitDelay = 150 * time.Millisecond
+	cmd.Dir = dir                        // рабочий каталог — временный каталог
+	cmd.Env = execEnv(dir)               // белый список переменных
+	cmd.Stdin = strings.NewReader(stdin) // stdin — только input текущего теста
 
 	out := &limitedWriter{limit: rn.maxOutput}
 	cmd.Stdout = out
 	cmd.Stderr = out
 
-	err := cmd.Run()
+	err = cmd.Run()
 	text := out.buf.String()
 	if out.truncated {
 		text += "\n…вывод обрезан: превышен лимит " + strconv.Itoa(rn.maxOutput/1024) + " КБ"
@@ -212,7 +228,7 @@ func (rn *runner) checkTests(ctx context.Context, dir, interpreter, file string,
 			return false, out, rn.budgetMsg()
 		}
 		var err error
-		out, err = rn.runCmd(ctx, dir, t.Input, interpreter, file)
+		out, err = rn.runCmd(ctx, dir, t.Input, interpreter, filepath.Base(file))
 		if ctx.Err() != nil {
 			return false, out, rn.budgetMsg()
 		}
@@ -263,7 +279,7 @@ func (rn *runner) runLanguage(ctx context.Context, w http.ResponseWriter, req ru
 
 	if len(req.Tests) == 0 {
 		// Без тестов — просто выполняем и возвращаем вывод.
-		out, err := rn.runCmd(ctx, dir, "", interpreter, file)
+		out, err := rn.runCmd(ctx, dir, "", interpreter, filepath.Base(file))
 		if err != nil {
 			writeJSON(w, http.StatusOK, runResponse{Passed: false, Output: out, Error: rn.runError(ctx)})
 			return
@@ -496,6 +512,17 @@ func (rn *runner) runHandler(w http.ResponseWriter, r *http.Request) {
 
 func main() {
 	rn := newRunner()
+	if rn.sandboxMode != "none" {
+		dir, err := os.MkdirTemp("", "runner-probe-")
+		if err != nil {
+			log.Fatal(err)
+		}
+		out, probeErr := rn.runCmd(context.Background(), dir, "", "python3", "-c", "print('sandbox-ready')")
+		_ = os.RemoveAll(dir)
+		if probeErr != nil || strings.TrimSpace(out) != "sandbox-ready" {
+			log.Fatalf("runner sandbox unavailable: %v: %s", probeErr, out)
+		}
+	}
 
 	srv := &http.Server{
 		Addr:              port,

@@ -148,29 +148,32 @@ func TestCompleteCodeLessonRunnerDown(t *testing.T) {
 	app, router := newTestApp()
 	teacherCookies, courseID, _ := seedPublishedCourse(t, app, router, 0)
 
-	// Добавляем code-урок в опубликованный курс.
+	// Добавляем code-урок: программа меняется только в черновике, поэтому
+	// фикстура временно снимает публикацию и затем возвращает её.
 	teacherID := userIDByEmail(t, app.Store, "teacher@example.com")
 	course, _ := app.Store.GetCourseByID(courseID)
 	if course.TeacherID != teacherID {
 		t.Fatal("seedPublishedCourse создал курс не за того учителя")
 	}
 	mods := app.Store.ListModulesByCourse(courseID)
-	rec := doRequest(t, router, http.MethodPost, "/api/v1/teacher/courses/"+courseID+"/lessons", map[string]any{
-		"moduleId": mods[0].ID, "title": "Сумма", "kind": "code",
-		"codeTask": map[string]any{
-			"language": "python", "template": "print(int(input())+1)",
-			"tests": []any{map[string]any{"name": "пример", "input": "1", "expected": "2"}},
-		},
-	}, teacherCookies)
-	if rec.Code != http.StatusCreated {
-		t.Fatalf("create code lesson: status=%d body=%s", rec.Code, rec.Body.String())
-	}
 	var codeLesson map[string]any
-	decodeBody(t, rec, &codeLesson)
+	withDraftCourse(t, app, courseID, func() {
+		rec := doRequest(t, router, http.MethodPost, "/api/v1/teacher/courses/"+courseID+"/lessons", map[string]any{
+			"moduleId": mods[0].ID, "title": "Сумма", "kind": "code",
+			"codeTask": map[string]any{
+				"language": "python", "template": "print(int(input())+1)",
+				"tests": []any{map[string]any{"name": "пример", "input": "1", "expected": "2"}},
+			},
+		}, teacherCookies)
+		if rec.Code != http.StatusCreated {
+			t.Fatalf("create code lesson: status=%d body=%s", rec.Code, rec.Body.String())
+		}
+		decodeBody(t, rec, &codeLesson)
+	})
 
 	// Запись активна (курс бесплатный).
 	studentCookies, _ := registerUser(t, router, "coder@example.com", "password123", "")
-	rec = doRequest(t, router, http.MethodPost, "/api/v1/enrollments", map[string]any{
+	rec := doRequest(t, router, http.MethodPost, "/api/v1/enrollments", map[string]any{
 		"courseId": courseID,
 	}, studentCookies)
 	if rec.Code != http.StatusCreated {

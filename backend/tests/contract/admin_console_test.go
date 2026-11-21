@@ -646,22 +646,25 @@ func TestAdminConsoleEnrollments(t *testing.T) {
 	teacherCookies, courseID, _ := seedPublishedCourse(t, app, router, 0) // бесплатный
 	adminCookies := loginUser(t, router, "admin@example.com", "password123")
 
-	// Второй урок: 1 из 2 пройденных = 50%.
+	// Второй урок: 1 из 2 пройденных = 50%. Курс уже published, поэтому
+	// фикстура временно возвращает его в draft для добавления урока.
 	mods := app.Store.ListModulesByCourse(courseID)
 	if len(mods) != 1 {
 		t.Fatalf("модулей %d, ждали 1", len(mods))
 	}
-	rec := doRequest(t, router, http.MethodPost, "/api/v1/teacher/courses/"+courseID+"/lessons", map[string]any{
-		"moduleId": mods[0].ID, "title": "Урок два", "kind": "video_text", "bodyMd": "текст",
-	}, teacherCookies)
-	if rec.Code != http.StatusCreated {
-		t.Fatalf("create lesson 2: status=%d body=%s", rec.Code, rec.Body.String())
-	}
 	var lesson map[string]any
-	decodeBody(t, rec, &lesson)
+	withDraftCourse(t, app, courseID, func() {
+		rec := doRequest(t, router, http.MethodPost, "/api/v1/teacher/courses/"+courseID+"/lessons", map[string]any{
+			"moduleId": mods[0].ID, "title": "Урок два", "kind": "video_text", "bodyMd": "текст",
+		}, teacherCookies)
+		if rec.Code != http.StatusCreated {
+			t.Fatalf("create lesson 2: status=%d body=%s", rec.Code, rec.Body.String())
+		}
+		decodeBody(t, rec, &lesson)
+	})
 
 	studentCookies, studentID := registerUser(t, router, "enroll-row@example.com", "password123", "")
-	rec = doRequest(t, router, http.MethodPost, "/api/v1/enrollments", map[string]any{
+	rec := doRequest(t, router, http.MethodPost, "/api/v1/enrollments", map[string]any{
 		"courseId": courseID, "provider": "mock",
 	}, studentCookies)
 	if rec.Code != http.StatusCreated {

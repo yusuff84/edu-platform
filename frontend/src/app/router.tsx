@@ -2,49 +2,39 @@ import { Suspense, lazy, useCallback, useEffect } from 'react';
 import { Link, NavLink, Navigate, Outlet, createBrowserRouter, useLocation } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { getPublicSettings, logout } from '../api/client';
+import { setSessionUser } from './sessionCache';
 import { t } from '../i18n/t';
 import Catalog from '../pages/Catalog';
-import { Login, Register } from '../pages/Auth';
+const Course = lazy(() => import('../pages/Course'));
+const Login = lazy(() => import('../pages/Auth').then(module => ({ default: module.Login })));
+const Register = lazy(() => import('../pages/Auth').then(module => ({ default: module.Register })));
+const ForgotPassword = lazy(() => import('../pages/AccountRecovery').then(module => ({ default: module.ForgotPassword })));
+const ResetPassword = lazy(() => import('../pages/AccountRecovery').then(module => ({ default: module.ResetPassword })));
+const VerifyEmail = lazy(() => import('../pages/AccountRecovery').then(module => ({ default: module.VerifyEmail })));
 import { ErrorBoundary, RouteError } from '../components/ErrorBoundary';
 import { RequireAuth, RequireRole, meQueryOptions } from '../components/RouteGuards';
 import '../styles/shell.css';
 
-// T18: route-based code splitting. Каталог и вход остаются статическими — это
-// первый экран анонимного посетителя, он не должен ждать догрузки. Страница
-// курса вынесена в отдельный чанк: она тянет Markdown/Prism и редактор кода,
-// которым не место в стартовом бандле. Остальные разделы (админка, конструктор,
-// обучение, кабинеты, 404) видны после входа/роли или открываются редко — их
-// чанки подгружаются по факту рендера, из главного чанка они исключены.
-// P11: прямой заход на /courses/:slug работает так же: Layout рендерит
-// Suspense-fallback, пока грузится чанк Course.
-const Course = lazy(() => import('../pages/Course'));
+// T18: route-based code splitting. Каталог, страница курса и вход остаются
+// статическими — это первый экран анонимного посетителя, он не должен ждать
+// догрузки. Админка, конструктор, обучение, кабинеты и 404 видны только после
+// входа/роли или встречаются редко — их чанки подгружаются по факту рендера
+// (после прохождения гвардов), из главного чанка они исключены.
 const MyCourses = lazy(() => import('../pages/MyCourses'));
 // T74: избранное — личный раздел вошедшего, отдельный чанк.
 const Favorites = lazy(() => import('../pages/Favorites'));
 const Learn = lazy(() => import('../pages/Learn'));
 const Constructor = lazy(() => import('../pages/Constructor'));
 const Admin = lazy(() => import('../pages/Admin'));
-// Разделы, которые раньше жили якорями на одной странице /admin, вынесены
-// в самостоятельные маршруты со своими чанками.
-const AdminModeration = lazy(() => import('../pages/AdminModeration'));
-const AdminPayments = lazy(() => import('../pages/AdminPayments'));
-const AdminSettings = lazy(() => import('../pages/AdminSettings'));
-const AdminInvites = lazy(() => import('../pages/AdminInvites'));
 // T26/T27/T29/T30: подразделы, разведённые по задачам отдельными страницами,
 // чтобы агенты правили каждый свой файл и не конфликтовали.
 const AdminUsers = lazy(() => import('../pages/AdminUsers'));
 const AdminCourses = lazy(() => import('../pages/AdminCourses'));
 const AdminStats = lazy(() => import('../pages/AdminStats'));
-// T86: глобальная модерация Q&A — отдельный чанк подраздела «Вопросы и ответы».
-const AdminQa = lazy(() => import('../pages/AdminQa'));
 // T58: страница «Детали курса» — отдельный чанк подраздела «Курсы».
 const AdminCourseDetail = lazy(() => import('../pages/AdminCourseDetail'));
 // T49: экран «Записи на курсы» — отдельная страница подраздела.
 const AdminEnrollments = lazy(() => import('../pages/AdminEnrollments'));
-// T84: глобальная модерация отзывов — отдельный чанк админки.
-const AdminReviews = lazy(() => import('../pages/AdminReviews'));
-// T90: глобальный журнал промокодов — отдельный чанк админки.
-const AdminPromoCodes = lazy(() => import('../pages/AdminPromoCodes'));
 const CourseStudents = lazy(() => import('../pages/CourseStudents'));
 // T78: аналитика преподавателя — отдельный чанк подраздела кабинета.
 const TeacherStats = lazy(() => import('../pages/TeacherStats'));
@@ -60,31 +50,12 @@ const TeacherCab = lazy(async () => {
 });
 const NotFound = lazy(() => import('../pages/NotFound'));
 
-/**
- * Прокрутка к началу страницы при смене маршрута (иначе позиция скролла
- * «уезжает»). Если в URL есть якорь (#lead и т.п.) — прокручиваем
- * к нему: так осмысленные ссылки в футере работают и при переходе с другой
- * страницы, а не только при открытии URL напрямую.
- */
+/** Прокрутка к началу страницы при смене маршрута (иначе позиция скролла «уезжает»). */
 function ScrollToTop(): null {
-  const { pathname, hash } = useLocation();
+  const { pathname } = useLocation();
   useEffect(() => {
-    if (hash) {
-      let id = hash.slice(1);
-      try {
-        id = decodeURIComponent(id);
-      } catch {
-        // Некорректный percent-encoding — оставляем якорь как есть.
-      }
-      // Даём React зафиксировать разметку страницы до поиска элемента.
-      const timer = window.setTimeout(() => {
-        document.getElementById(id)?.scrollIntoView({ block: 'start' });
-      }, 0);
-      return () => window.clearTimeout(timer);
-    }
     window.scrollTo(0, 0);
-    return undefined;
-  }, [pathname, hash]);
+  }, [pathname]);
   return null;
 }
 
@@ -124,9 +95,7 @@ function Layout(): JSX.Element {
   // кнопка не пересоздаёт onClick при каждом обновлении ['me'] и навигации.
   const onLogout = useCallback(async (): Promise<void> => {
     await logout();
-    // resetQueries сбрасывает кэш ['me'] и перезапрашивает: после выхода
-    // пользователь гарантированно исчезает из шапки и гвардов (401 → логин).
-    await qc.resetQueries({ queryKey: ['me'] });
+    await setSessionUser(qc, null);
   }, [qc]);
 
   return (
@@ -144,11 +113,9 @@ function Layout(): JSX.Element {
       <header className="topbar">
         <div className="wrap topbar-in">
           <Link className="logo" to="/">
-            <span className="logo-mark">E</span>Edu&nbsp;Platform
+            <span className="logo-mark" aria-hidden="true">S</span>skillex.space
           </Link>
-          {/* P11: aria-label описывает всю навигацию, а не только «Каталог».
-              Литерал: отдельного ключа в ru.json нет (словарём владеет T02). */}
-          <nav className="nav" aria-label="Основная навигация">
+          <nav className="nav" aria-label={t('nav.catalog')}>
             <NavLink to="/" end className={({ isActive }) => (isActive ? 'active' : '')}>
               {t('nav.catalog')}
             </NavLink>
@@ -222,7 +189,7 @@ function Layout(): JSX.Element {
         <div className="wrap footer-in">
           <div>
             <Link className="logo" to="/">
-              <span className="logo-mark">E</span>Edu&nbsp;Platform
+              <span className="logo-mark" aria-hidden="true">S</span>skillex.space
             </Link>
             <p>
               <small>
@@ -235,26 +202,20 @@ function Layout(): JSX.Element {
               <br />
               <small>hello@edu-platform.ru · Москва</small>
             </p>
-            <small>© Edu Platform, 2026</small>
+            <small>© skillex.space, 2026</small>
           </div>
           <div>
             <b>Направления</b>
-            {/* P11: ссылки направлений ведут в каталог с фильтром по категории,
-                а не на общий «/» (иначе все пункты выглядели одинаково). */}
-            <Link to="/?category=programming">Программирование</Link>
-            <Link to="/?category=design">Дизайн</Link>
-            <Link to="/?category=data">Данные</Link>
-            <Link to="/?category=marketing">Маркетинг</Link>
-            <Link to="/?category=ai">Нейросети</Link>
+            <Link to="/">Программирование</Link>
+            <Link to="/">Дизайн</Link>
+            <Link to="/">Данные</Link>
+            <Link to="/">Маркетинг</Link>
+            <Link to="/">Нейросети</Link>
             <Link to="/">Все курсы</Link>
           </div>
           <div>
             <b>Студенту</b>
             <Link to="/">Каталог</Link>
-            {/* P11: осмысленные якоря на существующий блок подбора курса
-                в каталоге (#lead). Новых страниц под эти ссылки не заводим. */}
-            <Link to="/#lead">Помощь с выбором</Link>
-            <Link to="/#lead">Условия возврата</Link>
             {/* Авторизационные ссылки — по состоянию сессии, как в шапке. */}
             {user ? (
               <Link to="/me">Мои курсы</Link>
@@ -268,14 +229,8 @@ function Layout(): JSX.Element {
           <div>
             <b>Авторам</b>
             <Link to="/teach">Конструктор курса</Link>
-            {/* P11: админ-разделы видны только администратору — тот же
-                query ['me'], что и в шапке/гвардах, без нового запроса. */}
-            {user?.role === 'admin' && (
-              <>
-                <Link to="/admin/moderation">Модерация</Link>
-                <Link to="/admin/invites">Приглашения</Link>
-              </>
-            )}
+            <Link to="/admin">Модерация</Link>
+            <Link to="/admin">Приглашения</Link>
           </div>
         </div>
       </footer>
@@ -297,6 +252,9 @@ export const router = createBrowserRouter([
       { path: '/certificates/:number', element: <Certificate /> },
       { path: '/login', element: <Login /> },
       { path: '/register', element: <Register /> },
+      { path: '/forgot-password', element: <ForgotPassword /> },
+      { path: '/reset-password', element: <ResetPassword /> },
+      { path: '/verify-email', element: <VerifyEmail /> },
       // Кабинеты и обучение — за гвардами (RouteGuards.tsx, query ['me']).
       { path: '/me', element: <RequireAuth><MyCourses /></RequireAuth> },
       // T74: избранное — личный раздел, только вошедшим.
@@ -308,12 +266,6 @@ export const router = createBrowserRouter([
       { path: '/teach/stats', element: <RequireRole roles={['teacher', 'admin']}><TeacherStats /></RequireRole> },
       { path: '/teach/:id', element: <RequireRole roles={['teacher', 'admin']}><Constructor /></RequireRole> },
       { path: '/admin', element: <RequireRole roles={['admin']}><Admin /></RequireRole> },
-      // Бывшие секции /admin#... — теперь самостоятельные страницы.
-      // Статичные пути не конфликтуют с /admin/courses/:id (разные сегменты).
-      { path: '/admin/moderation', element: <RequireRole roles={['admin']}><AdminModeration /></RequireRole> },
-      { path: '/admin/payments', element: <RequireRole roles={['admin']}><AdminPayments /></RequireRole> },
-      { path: '/admin/settings', element: <RequireRole roles={['admin']}><AdminSettings /></RequireRole> },
-      { path: '/admin/invites', element: <RequireRole roles={['admin']}><AdminInvites /></RequireRole> },
       // Подразделы супер-админки — отдельные страницы со своим роутом
       // (каждая со своим владельцем-задачей).
       { path: '/admin/users', element: <RequireRole roles={['admin']}><AdminUsers /></RequireRole> },
@@ -323,12 +275,6 @@ export const router = createBrowserRouter([
       { path: '/admin/courses/:id', element: <RequireRole roles={['admin']}><AdminCourseDetail /></RequireRole> },
       { path: '/admin/stats', element: <RequireRole roles={['admin']}><AdminStats /></RequireRole> },
       { path: '/admin/enrollments', element: <RequireRole roles={['admin']}><AdminEnrollments /></RequireRole> },
-      // T84: модерация отзывов всех курсов — только admin.
-      { path: '/admin/reviews', element: <RequireRole roles={['admin']}><AdminReviews /></RequireRole> },
-      // T86: глобальная модерация вопросов и ответов по всем курсам.
-      { path: '/admin/qa', element: <RequireRole roles={['admin']}><AdminQa /></RequireRole> },
-      // T90: все промокоды платформы — только супер-админ.
-      { path: '/admin/promo-codes', element: <RequireRole roles={['admin']}><AdminPromoCodes /></RequireRole> },
       // Ученики конкретного курса — автору курса и админу.
       { path: '/teach/:id/students', element: <RequireRole roles={['teacher', 'admin']}><CourseStudents /></RequireRole> },
       // Личный кабинет ученика: профиль и история платежей.

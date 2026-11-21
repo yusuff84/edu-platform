@@ -324,14 +324,15 @@ func TestQuizCorrectAnswersDoNotLeak(t *testing.T) {
 // Расхождение №4 (T16) ЗАКРЫТО: POST /teacher/courses/{id}/lessons сохраняет
 // startsAt — планирование живых эфиров работает. Раньше здесь жил тест-фиксатор
 // TestStartsAtNotPersistedDiscrepancy4, ожидавший startsAt=null: он упал бы при
-// починке бага, поэтому проверка перевёрнута.
+// починке бага, поэтому проверка перевёрнута. Сценарий идёт в черновике: вне
+// draft добавление уроков заморожено (аудит, requireDraft).
 func TestStartsAtPersisted(t *testing.T) {
 	app, router := newTestApp()
-	teacherCookies, courseID, _ := seedPublishedCourse(t, app, router, 0)
-	mods := app.Store.ListModulesByCourse(courseID)
+	teacherCookies, _ := lifecycleTeacher(t, app, router, "starts-at-teacher@example.com")
+	courseID, moduleID, _, _, _ := lifecycleCourse(t, router, teacherCookies, "Курс для startsAt")
 
 	rec := doRequest(t, router, http.MethodPost, "/api/v1/teacher/courses/"+courseID+"/lessons", map[string]any{
-		"moduleId": mods[0].ID, "title": "Эфир", "kind": "live",
+		"moduleId": moduleID, "title": "Эфир", "kind": "live",
 		"liveUrl": "https://live.example/stream", "startsAt": "2030-01-01T12:00:00Z",
 	}, teacherCookies)
 	if rec.Code != http.StatusCreated {
@@ -356,7 +357,7 @@ func TestStartsAtPersisted(t *testing.T) {
 
 	// Некорректная дата — 400.
 	rec = doRequest(t, router, http.MethodPost, "/api/v1/teacher/courses/"+courseID+"/lessons", map[string]any{
-		"moduleId": mods[0].ID, "title": "Эфир 2", "kind": "live",
+		"moduleId": moduleID, "title": "Эфир 2", "kind": "live",
 		"liveUrl": "https://live.example/stream", "startsAt": "когда-нибудь",
 	}, teacherCookies)
 	if rec.Code != http.StatusBadRequest {

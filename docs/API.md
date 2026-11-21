@@ -1,13 +1,68 @@
 # API edu-platform — сводка для разработчиков
 
 Машино-читаемый контракт: [`specs/001-it-courses-mvp/contracts/openapi.yaml`](../specs/001-it-courses-mvp/contracts/openapi.yaml)
-(OpenAPI 3.0). ⚠️ **Он отстаёт от кода**: покрывает ранние волны; админ-консоль,
-журнал платежей и настройки, mock-страница оплаты, Яндекс OAuth, Q&A, промокоды,
-избранное, сертификаты, сессии и часть teacher-маршрутов в него не внесены.
-Ниже — фактическое состояние `main @ df9ed31`; формы запросов также
-зафиксированы в `Task/00-api-contract.md`.
+(OpenAPI 3.0). Он покрывает базовый MVP; админские расширения, OAuth,
+mock-страница оплаты и часть post-MVP полей описаны в этом документе и
+`Task/00-api-contract.md`. При расхождении источник истины — код и
+контрактные тесты.
 
 ## Общие правила
+
+### Безопасность аккаунта (T83)
+
+| Метод | Путь | Доступ и результат |
+|---|---|---|
+| POST | `/auth/password/forgot` | `{email}` → 202 `{message}` с одинаковым текстом для существующего/неизвестного/заблокированного аккаунта и cooldown. Невалидный email — 400, почта отключена — 503 |
+| POST | `/auth/password/reset` | `{token,password}` → 200 `{message}`, все сессии и токены аккаунта отозваны. Неверный/истёкший/использованный токен — 400 |
+| POST | `/auth/email/verify` | `{token}` → 200 `{message}`; неверная ссылка — 400. GET ничего не подтверждает |
+| GET | `/me/security` | cookie → `{email,emailVerified,emailVerifiedAt,emailDeliveryAvailable}` |
+| POST | `/me/email/verification` | cookie → 202 `{message}`; уже подтверждён — 200; cooldown — 429 с `Retry-After:60`; почта недоступна — 503 |
+| GET | `/me/sessions` | cookie → `{items:[{id,current,userAgent,ipAddress,createdAt,lastSeenAt,expiresAt}]}` |
+| DELETE | `/me/sessions/{sessionID}` | cookie → 204, только своя сессия. Чужой/неизвестный id — 404. Для текущей удаляется cookie |
+| POST | `/me/sessions/revoke-others` | cookie → 204, текущая сессия сохраняется |
+
+В auth-response (`register`, `login`, `me`) добавлен `emailVerified:boolean`.
+Подтверждение адреса не блокирует существующий доступ к курсам. Сброс действует
+30 минут, подтверждение — 24 часа; новая ссылка заменяет предыдущую того же
+назначения. Только SHA256 токена сохраняется в БД. Все меняющие методы
+используют существующую Origin/CSRF-защиту, публичные recovery-методы — auth
+rate-limit. При сбросе пароль и отзыв сессий меняются одной транзакцией.
+Пароль — минимум 8 символов, максимум 72 UTF-8 байта (bcrypt).
+
+`id` списка сессий — отдельный management ID, а не `session_id` cookie.
+Metadata сессии — подсказка из запроса, а не доказательство устройства.
+Секретные ссылки передаются в email как `/reset-password#token=...` и
+`/verify-email#token=...`; токен не попадает в URL HTTP-запроса и access log.
+Без SMTP ссылки не выдаются через API. Примеры настройки и локальный SMTP —
+[`Task/T83-account-security.md`](../Task/T83-account-security.md).
+
+Изменения после ревью 17.11.2026:
+
+- `GET /courses/{slug}` выдаёт обычные платные уроки только активному покупателю,
+  владельцу и админу. Без покупки остаются метаданные программы и разрешённое
+  превью; материалы бесплатных курсов доступны публично. Покупатель может
+  продолжать обучение после archive/unpublish.
+- Повтор `POST /enrollments` использует сохранённую попытку, исходные параметры,
+  стабильный ключ провайдера и сохранённый redirectUrl. У старого pending без
+  ссылки возможен явный `409`; новый платёж молча не создаётся.
+- Язык `/complete` определяется заданием; несовпадающий language даёт `400`.
+  Ошибка сохранения прогресса даёт `500`, а не `completed:true`.
+- `DELETE /teacher/courses/{id}` требует draft без платежей и записей.
+  Снятие с публикации не разрешает удалить финансовую историю: в этом случае
+  возвращается `409`, вместо удаления используется archive.
+- Duplicate succeeded не снимает ручной revoke; старый refund не отзывает новую
+  успешную покупку. Завершённый refund даёт `409` при повторе; после частичного
+  локального сбоя повтор может восстановить отзыв доступа и вернуть `200`.
+- Платёжные операции используют общий PostgreSQL lock и транзакционное применение
+  статуса/доступа/usedCount. Pending/неопределённые попытки резервируют лимит
+  промокода; безопасное освобождение требует подтверждённой отмены провайдера.
+- `POST /admin/payments/{id}/sync` (admin) сверяет платёж с провайдером и
+  восстанавливает незавершённое присоединение checkout по сохранённому ключу.
+  Ответ: `{payment: PaymentJournalItem}`; неизвестный id — `404`, ошибка
+  провайдера — `502`, ошибка локальной записи — `500`.
+- HTTP-успех создания возврата сам по себе не ставит локальный `refunded`:
+  требуется `status=succeeded`. YooKassa refund webhook использует payment_id
+  и статус из подтверждающего ответа API, а не из присланного тела события.
 
 | Правило | Значение |
 |---|---|
@@ -15,9 +70,9 @@
 | Аутентификация | cookie `session_id`, httpOnly, подпись HMAC-SHA256 (`SESSION_SECRET`), `SameSite` настраивается (`COOKIE_SAMESITE`, по умолчанию `lax`). Клиент шлёт `credentials: 'include'` |
 | Формат тела | `application/json`; ошибка — `{"error": "<текст по-русски>"}` |
 | Строгость JSON | `DisallowUnknownFields`: **любое лишнее поле = 400**. Отправляйте ровно перечисленные поля |
-| Ограничение тела | 1 МБ |
-| Пагинация | `page` (с 1), `limit` (20 по умолчанию, максимум 100) |
-| Rate-limit | per-IP token bucket в памяти процесса: 10/мин на IP для `/auth/login|register`, 300/мин глобально, 120/мин для вебхуков (`RATE_LIMIT_*`); `0` или отрицательное значение выключает лимитер. При превышении `429` + `Retry-After`. Лимиты не разделяются между инстансами API |
+| Ограничение тела | 1 МБ для JSON; обложка курса — до 5 МБ (multipart) |
+| Пагинация | `page` (с 1), `limit` (20 по умолчанию, максимум 100; исключение — `/teacher/stats/courses`, до 200) |
+| Rate-limit | 10/мин на IP для `/auth/login|register`, 300/мин глобально, 120/мин для вебхуков (настраиваются env); при превышении `429` + `Retry-After` |
 | CSRF | не-GET запросы требуют `Origin`/`Referer` из `ALLOWED_ORIGINS`; вебхуки провайдеров проверяются подписью и исключены из проверки |
 
 Формы моделей (`User`, `Course`, `CourseItem`, `LessonView`, `ModuleView`,
@@ -25,13 +80,12 @@
 
 ## Эндпоинты по группам
 
-### Здоровье и статика
+### Здоровье
 
 | Метод | Путь | Доступ | Ответ |
 |---|---|---|---|
 | GET | `/healthz` | публичный | `200 {"status":"ok"}` |
 | GET | `/api/v1/healthz` | публичный | `200 {"status":"ok"}` |
-| GET | `/uploads/*` | публичный | файл из каталога `uploads/` (вне `/api/v1`); обложки — `/uploads/covers/<имя>`, при отсутствии — `404` |
 
 ### Auth
 
@@ -40,9 +94,9 @@
 | POST | `/api/v1/auth/register` | публичный | `{email, password, inviteToken?}` → `201` `User` (`inviteToken` — регистрация преподавателя) |
 | POST | `/api/v1/auth/login` | публичный | `{email, password}` → `200` `User` + cookie `session_id` |
 | POST | `/api/v1/auth/logout` | публичный | → `200 {"status":"ok"}` (клиент также принимает `204`) |
-| GET | `/api/v1/auth/me` | cookie | → `200` `User`; без cookie — `401`, заблокированный — `403` |
-| GET | `/api/v1/auth/yandex/start` | публичный | при заданном `YANDEX_CLIENT_ID` → `302` на `oauth.yandex.ru` + httpOnly cookie `oauth_state` (10 мин); без `CLIENT_ID` — `503 «Вход через Яндекс не настроен на сервере»` |
-| GET | `/api/v1/auth/yandex/callback` | публичный | сверяет `state` (иначе `400`), пустой `code` — `400`, меняет `code` на профиль, ставит `session_id` и редиректит `302 /`; ошибка провайдера или не задан `YANDEX_CLIENT_SECRET` — `502`; заблокированный пользователь — `403`; новый пользователь — роль `student`, без email — `yandex-<id>@oauth.invalid` |
+| GET | `/api/v1/auth/me` | cookie | → `200` `User` |
+| GET | `/api/v1/auth/yandex/start` | публичный | `302` на Яндекс OAuth + одноразовый `oauth_state`; без `YANDEX_CLIENT_ID` — `503 «Вход через Яндекс не настроен»` |
+| GET | `/api/v1/auth/yandex/callback` | публичный | сверяет `state`, обменивает `code`, находит/создаёт пользователя и открывает сессию; ошибки `400`/`403` (блокировка)/`502` |
 
 ### Курсы и отзывы
 
@@ -55,12 +109,6 @@
 | GET | `/api/v1/courses/{id}/reviews?rating=1..5` | публичный | `{id}` — UUID или slug; `rating` необязателен и фильтрует `items`/`total` → `200` `{items:[Review],total,avgRating,ratingsCount,breakdown:{"1".."5"}}`; `avgRating`/`ratingsCount`/`breakdown` — по всем отзывам курса; иной `rating` → `400 «Оценка должна быть числом от 1 до 5»` |
 | POST | `/api/v1/courses/{id}/reviews` | студент с активной записью | `{rating:1..5, body}` → `201` `Review` |
 | GET | `/api/v1/courses/{id}/questions?lessonId=&page=&limit=` | публичный* | → `200` `{items:[LessonQuestion],total,page,limit}`; вопросы новые первыми, ответы внутри — старые первыми; *неопубликованный курс виден только владельцу/админу, остальным `404 «Курс не найден»`; `lessonId` не из курса → `404 «Урок не найден в этом курсе»` |
-| POST | `/api/v1/courses/{id}/questions` | запись/владелец/admin | `{lessonId, body}` после trim 10..2000 → `201 {"question":LessonQuestion}`; иначе `403 «Задавать вопросы могут только записанные на курс»` |
-| POST | `/api/v1/courses/{id}/questions/{questionId}/answers` | запись/владелец/admin | `{body}` после trim 3..2000 → `201 {"answer":LessonAnswer}`; иначе `403 «Отвечать могут только записанные на курс»` |
-| PATCH | `/api/v1/courses/{id}/questions/{questionId}` | автор вопроса | `{body}` после trim 10..2000 → `200 {"question":LessonQuestion}`; чужой вопрос — `403 «Нет прав на редактирование»`, нет — `404 «Вопрос не найден»`, неверная длина — `400` |
-| PATCH | `/api/v1/courses/{id}/questions/{questionId}/answers/{answerId}` | автор ответа | `{body}` после trim 3..2000 → `200 {"answer":LessonAnswer}`; чужой ответ — `403 «Нет прав на редактирование»`, нет — `404 «Ответ не найден»`, неверная длина — `400` |
-| DELETE | `/api/v1/courses/{id}/questions/{questionId}` | автор/владелец/admin | → `204`; ответы удаляются каскадом; иначе `403 «Нет прав на удаление»` |
-| DELETE | `/api/v1/courses/{id}/questions/{questionId}/answers/{answerId}` | автор/владелец/admin | → `204`; иначе `403 «Нет прав на удаление»` |
 | GET | `/api/v1/certificates/{number}` | публичный | → `200` `{number,issuedAt,studentName,courseTitle,courseSlug}`; `studentName` — displayName студента (e-mail не отдаётся); `404 «Сертификат не найден»` |
 | GET | `/api/v1/teachers/{id}` | публичный | → `200 {"teacher":{id,displayName,coursesCount,studentsCount,avgRating,ratingsCount},"courses":[CourseItem]}`; только `published`-курсы, порядок — активные записи desc, затем `createdAt` desc; агрегаты — по published-курсам; `404 «Преподаватель не найден»` — пользователя нет или роль не teacher/admin (T81) |
 
@@ -88,21 +136,11 @@
 | Метод | Путь | Доступ | Тело / ответ |
 |---|---|---|---|
 | GET | `/api/v1/me/courses` | cookie | → `200` `{items:[{course,percent,nextLesson,certificateNumber}],total}`; `certificateNumber` — пустая строка, если сертификата нет |
-| GET | `/api/v1/me/courses/{id}/progress` | активная запись | → `200 {courseId,completedLessonIds:[...],completedLessons,totalLessons,percent,nextLessonId,completed}`; `completedLessonIds` — всегда массив, `nextLessonId` — `null`, когда всё пройдено; `404 «Курс не найден»`, `403 «Сначала купите курс, чтобы видеть прогресс»` |
-| GET | `/api/v1/me/profile` | cookie | → `200 {id,email,role,displayName,createdAt}`; `displayName` — всегда строка (пустая, если не задано) |
-| PATCH | `/api/v1/me/profile` | cookie | `{displayName}` после trim 2..60 символов (в рунах) → `200` тот же профиль; иначе `400 «Имя должно содержать от 2 до 60 символов»` |
-| GET | `/api/v1/me/payments?page=&limit=` | cookie | → `200 {items:[{id,courseId,courseTitle,amountCents,currency,status,provider,createdAt,processedAt}],total,page,limit}` — все статусы, новые первыми; `courseTitle` — пустая строка, если курс удалён; `processedAt` — `null`, пока платёж не обработан |
 | GET | `/api/v1/me/certificates` | cookie | → `200` `{items:[{number,issuedAt,courseId,courseTitle,courseSlug}]}` — новые первыми; сертификат выдаётся автоматически при первом достижении 100% прогресса (все уроки курса завершены) |
 | GET | `/api/v1/me/favorites` | cookie | → `200` `{items:[CourseItem],total}` — избранные курсы, добавленные позже первыми; архивные/неопубликованные и удалённые курсы не попадают (T73) |
 | PUT | `/api/v1/me/favorites/{courseId}` | cookie | без тела → `204`; идемпотентно; только published-курс, иначе `404 «Курс не найден»` (T73) |
 | DELETE | `/api/v1/me/favorites/{courseId}` | cookie | → `204`; идемпотентно, в т.ч. если курса или пары уже нет (T73) |
-| POST | `/api/v1/me/courses/{id}/lessons/{lessonId}/complete` | активная запись | `{quizAnswers?:{"<questionId>":<index>}, code?, language?}`. Успех (video/live или верный quiz/code): `200 {passed:true,completed:true,percent,nextLesson}`. Неверный quiz: `200 {passed:false,completed:false,message,percent,nextLesson,correct,total}` (`correct` — число верных, ключи ответов не раскрываются). Неверный code: `200 {passed:false,completed:false,message,percent,nextLesson}` (`message` — вывод runner). `nextLesson` — `{lessonId,title,kind}` или `null`; `percent` — 0..100. Ошибки: quiz без ответов / пустой code — `400`, урок не из курса — `400 «Урок не принадлежит этому курсу»`, нет записи — `403`, runner недоступен — `502` |
-
-> Публичный вид урока (`GET /courses/{slug}`, превью) не содержит правильных
-> ответов квиза (`correct`/`correctIndex`) и скрытых тестов code-задания:
-> в `quiz.questions[]` отдаются только `id/text/options/explanation`, в
-> `codeTask.tests[]` — только не скрытые (`hidden:false`). Полный вид с ключами
-> доступен владельцу курса и админу. `complete` проверяет ответы на сервере.
+| POST | `/api/v1/me/courses/{id}/lessons/{lessonId}/complete` | активная запись | `{quizAnswers?, code?, language?}` → `200 {passed,completed,percent,nextLesson}` или `{passed:false,message}`; для code-задач `502` при недоступном runner |
 
 ### Преподаватель (`teacher` — роли teacher/admin)
 
@@ -177,11 +215,7 @@
 > `DELETE …/questions/{questionId}` и `DELETE
 > …/questions/{questionId}/answers/{answerId}` — автор, владелец курса или
 > admin, иначе `403 «Нет прав на удаление»`; успех — `204` (ответы вопроса
-> удаляются каскадом). Автор может исправить свой текст через `PATCH
-> …/questions/{questionId}` или `PATCH …/answers/{answerId}` (те же лимиты
-> 10..2000 / 3..2000, ответ `200 {"question"|"answer":…}`); владелец курса и
-> admin чужой текст не переписывают — `403 «Нет прав на редактирование»`.
-> Ошибки: `404 «Курс не найден»`, `404 «Урок не найден в
+> удаляются каскадом). Ошибки: `404 «Курс не найден»`, `404 «Урок не найден в
 > этом курсе»`, `404 «Вопрос не найден»` (в т.ч. вопрос другого курса),
 > `404 «Ответ не найден»`, `400 «Вопрос: от 10 до 2000 символов»`,
 > `400 «Ответ: от 3 до 2000 символов»`.
@@ -218,135 +252,30 @@
 > limit только укорачивает `items`).
 > Ученику оба эндпоинта — `403` (группа `/teacher` — только teacher/admin).
 
-> Волна P10 (T87): супер-админ может читать и менять содержимое **любого
-> неархивного** курса через существующие `/api/v1/teacher/courses/{id}` и
-> вложенные CRUD-маршруты: создание/правка/удаление модулей и уроков,
-> reorder модулей/уроков, перенос урока. Для `teacher` правила не изменились:
-> правка/удаление урока или модуля, reorder и перенос — только в `draft`,
-> иначе `409` «Контент курса можно редактировать только в режиме черновика»
-> (перенос урока — `409 «Менять структуру можно только в черновике»);
-> создание модуля/урока, как и раньше (T19), отдельного draft-guard не имеет.
-> Для `admin` проверка `draft` заменена на `status != archived`: архивный
-> курс — `409` до `unarchive`, включая создание модулей/уроков. Удаление
-> всего курса осталось `draft`-only для всех — это каскадная потеря истории.
-> `submit` не менялся. Принудительная публикация —
-> `POST /api/v1/admin/courses/{id}/publish`.
-
-#### Полный список teacher-маршрутов
-
-Все пути — под `/api/v1`; доступ — `teacher`/`admin`, владение проверяется
-(`403` — чужой курс, `404` — нет курса). Если не указано иное, контентные
-операции `teacher` разрешены только в `draft` (`409`), `admin` — в любом
-неархивном курсе (T87); удаление всего курса — только `draft` для всех.
-
-| Метод | Путь | Кратко |
-|---|---|---|
-| GET | `/teacher/courses` | мои курсы + `modulesCount`/`lessonsCount` |
-| GET | `/teacher/courses/{id}` | карточка курса |
-| PATCH | `/teacher/courses/{id}` | карточка; в архиве — `409` (T33) |
-| POST | `/teacher/courses/{id}/duplicate` | копия курса |
-| POST | `/teacher/courses/{id}/archive` | мягкая архивация (`archived`) |
-| POST | `/teacher/courses/{id}/unarchive` | `archived → draft` |
-| POST | `/teacher/courses/{id}/withdraw` | `review → draft` |
-| POST | `/teacher/courses/{id}/unpublish` | `published → draft` (P7) |
-| PATCH | `/teacher/courses/{id}/modules/{moduleID}` | переименование модуля |
-| DELETE | `/teacher/courses/{id}/modules/{moduleID}` | удаление модуля |
-| POST | `/teacher/courses/{id}/modules/reorder` | порядок модулей |
-| PATCH | `/teacher/courses/{id}/lessons/{lessonID}` | правка урока (в т.ч. `startsAt`, `isPreview`) |
-| DELETE | `/teacher/courses/{id}/lessons/{lessonID}` | удаление урока |
-| POST | `/teacher/courses/{id}/lessons/reorder` | порядок уроков |
-| POST | `/teacher/courses/{id}/lessons/{lessonId}/move` | перенос урока в другой модуль |
-| DELETE | `/teacher/courses/{id}` | удаление курса, только `draft` |
-| GET | `/teacher/courses/{id}/students?q=&page=&limit=` | ученики курса и прогресс |
-| GET | `/teacher/courses/{id}/stats` | статистика курса |
-| GET | `/teacher/stats` | аналитика (P9) |
-| GET | `/teacher/stats/courses?limit=` | аналитика по курсам |
-| POST/GET | `/teacher/courses/{id}/promo-codes` | создание/список промокодов |
-| DELETE | `/teacher/courses/{id}/promo-codes/{promoId}` | деактивация промокода |
-| PUT/DELETE | `/teacher/courses/{id}/reviews/{reviewId}/reply` | ответ на отзыв |
-| POST/DELETE | `/teacher/courses/{id}/cover` | обложка (multipart, JPEG/PNG/WebP ≤5 МБ) |
+> В бэклоге T13: `GET/PATCH/DELETE /teacher/courses[...]`, PATCH модулей/уроков,
+> reorder — в `Task/T13-integration-wiring.md`.
 
 ### Админ (`admin` — только роль admin)
 
 | Метод | Путь | Тело / ответ |
 |---|---|---|
-| POST | `/api/v1/admin/invites` | `{email}` → `201 {id,email,token,tokenPrefix,expiresAt,inviteLink,emailSent}`; токен и `inviteLink` показываются один раз; при пустом SMTP `emailSent:false`; старые активные приглашения на тот же email отзываются |
+| POST | `/api/v1/admin/invites` | `{email}` → `201 {id,email,token,tokenPrefix,expiresAt,inviteLink,emailSent}`; **токен показывается один раз**, `inviteLink` — готовая ссылка, `emailSent:false` при недоступном SMTP |
+| GET | `/api/v1/admin/invites?page=&limit=` | → `200 {items:[{id,email,status,tokenPrefix,expiresAt,createdAt,createdBy}],total,page,limit}`; сырой `token` после создания не возвращается |
+| POST | `/api/v1/admin/invites/{id}/revoke` | без тела → `200 {"invite":{...status:"revoked"}}`; `404`/`409` |
 | GET | `/api/v1/admin/courses/review` | → `200` `{items:[Course],total}` |
 | POST | `/api/v1/admin/courses/{id}/moderate` | `{decision:"approve\|reject", comment?}` → `200` Course; `comment` обязателен при `reject` |
-| POST | `/api/v1/admin/courses/{id}/publish` | → `200` `{course}`; `draft\|review → published` без модерации, `published` — идемпотентный `200`, `archived` — `409`, нет курса — `404`; `moderationComment` очищается (T87) |
-| GET | `/api/v1/admin/courses/{id}` | → `200` `{course:<элемент GET /admin/courses + coverPath + moderationComment>, modules:[{id,title,position,lessons:[{id,title,kind,position}]}], stats:{studentsCount,activeCount,reviewsCount,avgRating,paymentsCount,paidTotalCents}}` (T55/T87; `moderationComment` — всегда строка, пустая если замечаний нет; `404` «Курс не найден») |
-| GET | `/api/v1/admin/questions?courseId=&lessonId=&q=&page=&limit=` | → `200` `{items:[{id,courseId,courseTitle,courseSlug,lessonId,lessonTitle,studentId,studentEmail,studentName,body,createdAt,answers:[{id,authorId,authorEmail,authorName,authorRole,body,createdAt}]}],total,page,limit}` (T85; только admin). `q` — поиск без учёта регистра по вопросу, ответам, email/именам авторов, названиям курса и урока; новые вопросы первыми, ответы старыми первыми; `total` — до пагинации; неверные UUID/пагинация — `400`. Удаление — существующими `DELETE /courses/{courseId}/questions/{questionId}` и `.../answers/{answerId}` (admin удаляет чужие) |
-| GET | `/api/v1/admin/payments?page=&limit=&status=&courseId=&q=&from=&to=` | → `200` `{items:[PaymentJournalItem],total,page,limit,totals:{amountCents,platformFeeCents,teacherAmountCents}}`; `q` — подстрока по email/displayName студента без учёта регистра, `from`/`to` — даты `ГГГГ-ММ-ДД` по `createdAt` включительно; неверные даты/порядок — `400` (T31) |
+| GET | `/api/v1/admin/courses/{id}` | → `200` `{course:<элемент GET /admin/courses + coverPath>, modules:[{id,title,position,lessons:[{id,title,kind,position}]}], stats:{studentsCount,activeCount,reviewsCount,avgRating,paymentsCount,paidTotalCents}}` (T55; `404` «Курс не найден») |
+| GET | `/api/v1/admin/payments?page=&limit=&status=&courseId=&q=&from=&to=` | → `200` `{items:[PaymentJournalItem],total,page,limit,totals}`; `q` — подстрока email/имени студента, `from`/`to` — `ГГГГ-ММ-ДД` включительно (US6, T07/T31) |
 | GET | `/api/v1/admin/settings` | → `200 {commissionPct,promoBarEnabled}` (US6, T07; промо — пост-P7) |
 | PUT | `/api/v1/admin/settings` | `{commissionPct?0..90, promoBarEnabled?}` — хотя бы одно поле → `200 {commissionPct,promoBarEnabled}` (US6, T07; частичное обновление — пост-P7) |
-| GET | `/api/v1/admin/reviews?courseId=&rating=&q=&from=&to=&sort=&dir=&page=&limit=` | → `200 {items:[{id,courseId,courseTitle,courseSlug,studentId,studentEmail,studentName,rating,body,createdAt,teacherReply,teacherReplyAt}],total,page,limit}` (T83). `rating` — 1..5; `q` — поиск без учёта регистра по названию курса, email/имени ученика и тексту отзыва; `from`/`to` — даты ГГГГ-ММ-ДД по `createdAt` включительно; `sort` — `createdAt` (по умолчанию) или `rating`, `dir` — `asc`/`desc` (по умолчанию `desc`); `page` 1-based, `limit` 20 по умолчанию, максимум 100. Неверные параметры — `400`. Удаление — существующий `DELETE /api/v1/admin/reviews/{id}` (`204`/`404`), рейтинг курса пересчитывается |
-| GET | `/api/v1/admin/promo-codes?courseId=&q=&active=&page=&limit=` | → `200 {items:[AdminPromo],total,page,limit}` — глобальный журнал промокодов (T89); `courseId` — UUID, `q` — подстрока без учёта регистра по коду или названию курса, `active` — `true\|false`; `AdminPromo` = поля `PromoCode` + `courseTitle`/`courseSlug`; неверные фильтры/`page`/`limit` — `400` |
-| PATCH | `/api/v1/admin/promo-codes/{id}` | `{discountPct?,maxUses?,expiresAt?,active?}` — хотя бы одно поле → `200 {"promoCode": AdminPromo}` (T89); `discountPct` 1..90, `maxUses >= usedCount`, `expiresAt` — RFC3339 в будущем или `null` (очистка срока), `active` — bool; неизвестное поле/неверные значения — `400`, нет кода — `404`, курс в архиве — `409` |
-
-> Волна P10 (T93): сессии пользователя и принудительный выход.
-> `GET /api/v1/admin/users/{id}/sessions` (только admin) → `200
-> {"items":[{"id":"…","createdAt":"RFC3339","expiresAt":"RFC3339"}]}` —
-> только не истёкшие сессии, новые первыми, `items` всегда массив (пустой —
-> `[]`). `DELETE /api/v1/admin/users/{id}/sessions` → `204` без тела:
-> удаляет все cookie-сессии пользователя, включая текущую, если
-> администратор завершает свои; после удаления старые cookie перестают
-> проходить `requireAuth` (`401`). Нет пользователя — `404` в обоих методах;
-> без входа — `401`, не-admin — `403`.
-
-#### Остальные admin-маршруты
-
-| Метод | Путь | Кратко |
-|---|---|---|
-| GET | `/admin/invites?page=&limit=` | `200 {items:[{id,email,status,tokenPrefix,expiresAt,createdAt,createdBy}],total,page,limit}`; сырой токен не отдаётся (T47) |
-| POST | `/admin/invites/{id}/revoke` | `200 {invite}`; `404`, неактивное — `409` (T47) |
-| POST | `/admin/payments/{id}/refund` | `200 {payment}`; `id` — UUID платежа, только `succeeded` (иначе `409`), ошибка провайдера — `502` (T47) |
-| GET | `/admin/stats` | сводка `{users,courses,payments,enrollments,reviews}` |
-| GET | `/admin/courses?status=&q=&sort=&dir=&teacherEmail=&from=&to=&page=&limit=` | все статусы; `{items,total,page,limit}` (T25/T48) |
-| POST | `/admin/courses/{id}/archive` | `archived`; уже архив — `409` |
-| POST | `/admin/courses/{id}/unarchive` | `archived → draft` |
-| POST | `/admin/courses/{id}/unpublish` | `published → draft` |
-| GET | `/admin/courses/{id}/reviews` | отзывы курса |
-| DELETE | `/admin/reviews/{id}` | `204`/`404`, рейтинг курса пересчитывается |
-| GET | `/admin/enrollments?courseId=&studentId=&status=&q=&page=&limit=` | все записи на курсы (T25/T48) |
-| POST | `/admin/enrollments/{studentId}/courses/{courseId}/revoke` | `revoked` → `200 {studentId,courseId,status}` |
-| POST | `/admin/enrollments/{studentId}/courses/{courseId}/unrevoke` | `active` |
-| GET | `/admin/users?q=&role=&status=&page=&limit=` | `{items:[{id,email,role,displayName,status,createdAt,coursesCount,enrollmentsCount}],total,page,limit}` |
-| PATCH | `/admin/users/{id}/role` | `{role}` → `200 {user}`; `409` — своя роль или последний admin |
-| PATCH | `/admin/users/{id}/status` | `{status:"active\|blocked"}` → `200 {user}`; `409` — своя блокировка или последний admin |
-| GET | `/admin/users/{id}/sessions` | `200 {items:[{id,createdAt,expiresAt}]}` — только не истёкшие сессии, новые первыми, `items` всегда массив; нет пользователя — `404` (T93) |
-| DELETE | `/admin/users/{id}/sessions` | `204` без тела — удаляет все cookie-сессии пользователя, включая текущую; старые cookie перестают проходить `requireAuth` (`401`); нет пользователя — `404` (T93) |
-| DELETE | `/admin/users/{id}` | `204`; `409` — своя учётка, последний admin, курсы/платежи пользователя |
 
 ### Оплата
 
 | Метод | Путь | Доступ | Тело / ответ |
 |---|---|---|---|
-| POST | `/api/v1/enrollments` | cookie | `{courseId, provider?:"mock\|stripe\|yookassa", promoCode?}` → `201 {paymentId,providerPaymentId,redirectUrl,amountCents,status,enrollmentActive}`; `provider` по умолчанию — `PAYMENTS_PROVIDER`; повтор при pending-платеже — `200` с тем же `redirectUrl`; бесплатный курс сразу `succeeded` + `enrollmentActive:true`; ошибка промокода — `400`, провайдер не настроен — `502` |
-| POST | `/api/v1/payments/webhook/{provider}` | подпись провайдера (без cookie) | провайдер-специфичное тело → `200 {status:"processed\|duplicate\|ignored"}`; Stripe — `Stripe-Signature`, YooKassa — IP из `YOOKASSA_TRUSTED_IPS`, mock — опционально `X-Mock-Signature`; провайдер выбирается по `{provider}` из пути |
-| GET | `/pay/mock/{id}` | публичный | HTML-страница подтверждения mock-оплаты (не под `/api/v1`); данные берутся из Store и переживают рестарт API, неизвестный `id` — `200 «Платёж не найден»`; кнопки шлют `POST /api/v1/payments/webhook/mock` |
-
-#### Mock-вебхук
-
-`POST /api/v1/payments/webhook/mock` принимает JSON
-`{"providerPaymentId":"mock_…","status":"succeeded|failed|refunded"}`.
-Статус нормализуется (`success`/`paid` → `succeeded`, `canceled` → `failed`,
-`refund` → `refunded`); неизвестный статус даёт `200 {"status":"ignored"}`.
-Ответы: `200 {"status":"processed"}` — событие применено, `duplicate` — платёж
-уже в этом статусе, `ignored` — статус не обрабатывается; неизвестный
-`providerPaymentId` — `404 «Платёж не найден»`; битый JSON — `400`.
-
-Если задан `MOCK_WEBHOOK_SECRET` (читается из env при каждом запросе), нужен
-заголовок `X-Mock-Signature`: hex HMAC-SHA256 **сырого тела** (префикс
-`sha256=` допускается). Без заголовка или при несовпадении — `401
-«Недействительная подпись вебхука»`. Без секрета подпись не проверяется
-(dev-режим).
-
-> ⚠️ HTML-страница `/pay/mock/{id}` отправляет вебхук без заголовка
-> `X-Mock-Signature`. Если включить `MOCK_WEBHOOK_SECRET`, кнопки «Оплатить» и
-> «Отказаться» получат `401`; для такого стенда подтверждайте оплату вручную
-> подписанным запросом. Также `{provider}` в пути выбирает провайдера и **не
-> сверяется** с `PAYMENTS_PROVIDER`: подпись проверяется для провайдера из URL.
-> `webhookMu` сериализует применение события только внутри одного процесса API.
+| POST | `/api/v1/enrollments` | cookie | `{courseId, promoCode?}` → `201 {paymentId,providerPaymentId,redirectUrl,amountCents,status,enrollmentActive}`; провайдера выбирает сервер из `PAYMENTS_PROVIDER`, поле `provider` в запросе больше не используется; бесплатный курс сразу `succeeded` + `enrollmentActive:true` |
+| POST | `/api/v1/payments/webhook/{provider}` | подпись провайдера (без cookie) | провайдер-специфичное тело → `200 {status:"processed\|duplicate\|ignored"}`; Stripe — `Stripe-Signature`, YooKassa — IP из `YOOKASSA_TRUSTED_IPS`, mock — `X-Mock-Signature` (если задан `MOCK_WEBHOOK_SECRET`). В production `PAYMENTS_PROVIDER=mock` запрещён на старте; defense-in-depth — mock-вебхук `503` |
+| GET | `/pay/mock/{id}` | публичный | HTML-страница подтверждения mock-оплаты (не под `/api/v1`); доступна только когда сервер в dev-режиме |
 
 ## Частые коды ошибок
 
@@ -356,8 +285,8 @@
 | `401` | Нет сессии, истёкшая/подделанная подпись cookie, неверный пароль, неверная подпись вебхука | Перелогиниться; для вебхука — проверить секрет провайдера |
 | `403` | Недостаточно прав (роль), нет активной записи на курс, запрос с недопустимого `Origin` (CSRF) | Проверить роль и запись; для локальных скриптов — `CSRF_ALLOW_MISSING_ORIGIN=true` |
 | `404` | Сущности нет, либо она скрыта (черновик чужого курса) | Проверить идентификатор (slug в каталоге, UUID в остальном); не считать 404 «курс удалён» — он может быть draft |
-| `409` | Конфликт состояния: email занят, курс уже куплен, отзыв уже оставлен, платёж уже создан | Показать «уже есть»; при повторной покупке pending-платежа клиент получит `200` с `redirectUrl` для продолжения |
+| `409` | Конфликт состояния: курс уже куплен, отзыв уже оставлен, платёж уже создан, архивный курс нельзя менять | Показать «уже есть»; при повторной покупке pending-платежа клиент получит `200` с `redirectUrl` для продолжения. Занятый email при регистрации — `400` (историческое расхождение, закреплено тестом) |
+| `503` | Отключённая возможность: Яндекс OAuth без ключей; mock-оплата, если production-конфигурацию обошли (штатно старт с mock запрещён) | Для mock — переключиться на stripe/yookassa; для OAuth — задать `YANDEX_CLIENT_ID`/`YANDEX_CLIENT_SECRET` |
 | `429` | Rate-limit по IP (auth 10/мин, глобально 300/мин, вебхуки 120/мин) | Подождать `Retry-After`; не ретраить в цикле |
 | `500` | Внутренняя ошибка сервера (БД и т.п.) | Логи backend; текст наружу не раскрывает детали |
-| `502` | Внешний сервис недоступен: `PAYMENTS_PROVIDER` не настроен (`ErrNotConfigured`), API оплаты недоступен, runner не ответил, ошибка Яндекс OAuth в callback | Для оплаты — проверить env-ключи провайдера; для runner — `docker compose ps`, `RUNNER_URL`; для Яндекса — `YANDEX_*` и Redirect URI |
-| `503` | `GET /auth/yandex/start` без `YANDEX_CLIENT_ID` — вход через Яндекс не настроен | Задать `YANDEX_CLIENT_ID`/`YANDEX_CLIENT_SECRET`/`YANDEX_REDIRECT_URI` или скрыть кнопку |
+| `502` | Внешний сервис недоступен: `PAYMENTS_PROVIDER` не настроен (`ErrNotConfigured`), API оплаты недоступен, runner не ответил | Для оплаты — проверить env-ключи провайдера; для runner — `docker compose ps`, `RUNNER_URL` |

@@ -17,6 +17,12 @@ export default defineConfig({
         target: process.env.VITE_API_PROXY ?? 'http://localhost:8082',
         changeOrigin: true,
       },
+      // Mock-страница оплаты (/pay/mock/{id}) — HTML backend, не SPA-роут.
+      // Без прокси dev-сервер отдаёт index.html и покупка «теряется».
+      '/pay/mock': {
+        target: process.env.VITE_API_PROXY ?? 'http://localhost:8082',
+        changeOrigin: true,
+      },
     },
   },
   preview: {

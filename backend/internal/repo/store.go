@@ -25,6 +25,8 @@ var ErrConflict = errors.New("конфликт состояния записи")
 // Store — потокобезопасное in-memory хранилище MVP.
 // Границы методов повторяют будущие pgx-репозитории.
 type Store struct {
+	accountTokens      map[string]*AccountToken
+	billingToken       chan struct{}
 	mu                 sync.RWMutex
 	users              map[string]*User
 	usersByEmail       map[string]*User
@@ -82,6 +84,8 @@ func (s *Store) nextCreatedAt() time.Time {
 // NewStore создаёт пустое хранилище.
 func NewStore() *Store {
 	return &Store{
+		accountTokens:      make(map[string]*AccountToken),
+		billingToken:       make(chan struct{}, 1),
 		users:              make(map[string]*User),
 		usersByEmail:       make(map[string]*User),
 		invites:            make(map[string]*TeacherInvite),
@@ -133,7 +137,8 @@ func (s *Store) CreateUser(email, passwordHash string, role Role) (*User, error)
 	}
 	s.users[u.ID] = u
 	s.usersByEmail[email] = u
-	return u, nil
+	copy := *u
+	return &copy, nil
 }
 
 // GetUserByEmail ищет пользователя по email.
@@ -141,7 +146,11 @@ func (s *Store) GetUserByEmail(email string) (*User, bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	u, ok := s.usersByEmail[normEmail(email)]
-	return u, ok
+	if !ok {
+		return nil, false
+	}
+	copy := *u
+	return &copy, true
 }
 
 // GetUserByID ищет пользователя по id.
@@ -149,7 +158,11 @@ func (s *Store) GetUserByID(id string) (*User, bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	u, ok := s.users[id]
-	return u, ok
+	if !ok {
+		return nil, false
+	}
+	copy := *u
+	return &copy, true
 }
 
 // SetUserRole меняет роль пользователя.
@@ -183,10 +196,12 @@ func (s *Store) SetUserPasswordHash(id, hash string) bool {
 func (s *Store) CreateSession(userID string, ttl time.Duration) *Session {
 	now := time.Now().UTC()
 	sess := &Session{
-		ID:        uuid.NewString(),
-		UserID:    userID,
-		CreatedAt: now,
-		ExpiresAt: now.Add(ttl),
+		PublicID:   uuid.NewString(),
+		LastSeenAt: now,
+		ID:         uuid.NewString(),
+		UserID:     userID,
+		CreatedAt:  now,
+		ExpiresAt:  now.Add(ttl),
 	}
 	s.mu.Lock()
 	s.sessions[sess.ID] = sess
@@ -196,19 +211,21 @@ func (s *Store) CreateSession(userID string, ttl time.Duration) *Session {
 
 // GetSession возвращает сессию, если она не истекла.
 func (s *Store) GetSession(id string) (*Session, bool) {
-	s.mu.RLock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	sess, ok := s.sessions[id]
-	s.mu.RUnlock()
 	if !ok {
 		return nil, false
 	}
 	if time.Now().UTC().After(sess.ExpiresAt) {
-		s.mu.Lock()
 		delete(s.sessions, id)
-		s.mu.Unlock()
 		return nil, false
 	}
-	return sess, true
+	if time.Since(sess.LastSeenAt) > 5*time.Minute {
+		sess.LastSeenAt = time.Now().UTC()
+	}
+	copy := *sess
+	return &copy, true
 }
 
 // DeleteSession удаляет сессию.
@@ -1010,7 +1027,11 @@ func (s *Store) GetPaymentByProviderID(id string) (*Payment, bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	p, ok := s.paymentsByProvider[id]
-	return p, ok
+	if !ok {
+		return nil, false
+	}
+	snapshot := *p
+	return &snapshot, true
 }
 
 // GetPaymentByID ищет платёж по внутреннему id (T47: админский возврат
@@ -1036,7 +1057,8 @@ func (s *Store) FindPendingPayment(studentID, courseID string) (*Payment, bool) 
 	defer s.mu.RUnlock()
 	for _, p := range s.payments {
 		if p.StudentID == studentID && p.CourseID == courseID && p.Status == PaymentPending {
-			return p, true
+			snapshot := *p
+			return &snapshot, true
 		}
 	}
 	return nil, false
@@ -1557,18 +1579,13 @@ func (s *Store) DeactivatePromoCode(id string) error {
 	return nil
 }
 
-// IncrementPromoCodeUsage атомарно увеличивает usedCount на 1, не превышая
-// maxUses (0 — без лимита). false — промокода нет ИЛИ лимит уже исчерпан;
-// handler различает эти случаи повторным чтением. Возврат средств счётчик
-// не уменьшает (контракт T63).
+// IncrementPromoCodeUsage атомарно увеличивает usedCount на 1. false —
+// промокода нет. Возврат средств счётчик не уменьшает (контракт T63).
 func (s *Store) IncrementPromoCodeUsage(id string) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	pc, ok := s.promoCodes[id]
 	if !ok {
-		return false
-	}
-	if pc.MaxUses > 0 && pc.UsedCount >= pc.MaxUses {
 		return false
 	}
 	pc.UsedCount++

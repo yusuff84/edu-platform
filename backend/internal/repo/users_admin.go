@@ -66,6 +66,11 @@ func (s *Store) DeleteUser(id string) error {
 		return ErrNotFound
 	}
 	delete(s.users, id)
+	for key, token := range s.accountTokens {
+		if token.UserID == id {
+			delete(s.accountTokens, key)
+		}
+	}
 	for email, u := range s.usersByEmail {
 		if u.ID == id {
 			delete(s.usersByEmail, email)

@@ -153,7 +153,7 @@ function CourseRow({ row }: { row: TeacherCourseStat }): JSX.Element {
 }
 
 export default function TeacherStats(): JSX.Element {
-  useSeo('Аналитика преподавателя — Edu Platform');
+  useSeo('Аналитика преподавателя — skillex.space');
   const overview = useQuery({
     queryKey: ['teacher-stats'],
     queryFn: teacherOverview,

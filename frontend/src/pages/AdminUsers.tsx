@@ -3,10 +3,8 @@
 // смены роли / блокировки / удаления. Контракт backend — T24.
 // T52: карточка «Профиль пользователя» (детали, записи, платежи) и
 // инлайн-подтверждения смены роли / блокировки; правки вёрстки таблицы.
-// T94: активные сессии пользователя и принудительный выход.
-// Стили изолированы в styles/adminUsers.css и styles/adminSessions.css;
-// styles.css и admin.css не изменяются.
-import { useEffect, useRef, useState } from 'react';
+// Стили изолированы в styles/adminUsers.css; styles.css и admin.css не изменяются.
+import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { QueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
@@ -25,18 +23,11 @@ import type {
   EnrollmentStatus,
   UserStatus,
 } from '../api/adminUsers';
-import {
-  listAdminUserSessions,
-  revokeAdminUserSessions,
-} from '../api/adminConsole';
-import type { AdminSessionsResponse } from '../api/adminConsole';
 import type { PaymentStatus, Role } from '../api/types';
 import { t } from '../i18n/t';
 import type { RuKey } from '../i18n/t';
-import { useSeo } from '../app/useSeo';
 import CsvExportButton, { csvDateStamp, exportTruncated } from '../components/CsvExportButton';
 import '../styles/adminUsers.css';
-import '../styles/adminSessions.css';
 
 // ---------- Константы ----------
 
@@ -127,17 +118,6 @@ function errorText(error: unknown): string {
   return t('common.error');
 }
 
-/**
- * Текст ошибки секции сессий (T94). 404 — пользователя уже нет; 401/403
- * обрабатываются общим errorText (как и остальные запросы карточки).
- */
-function sessionsErrorText(error: unknown): string {
-  if (error instanceof ApiError && error.status === 404) {
-    return error.message || t('error.notFound');
-  }
-  return errorText(error);
-}
-
 /** Точечно обновить строку пользователя во всех кэшированных страницах списка. */
 function patchCachedUser(qc: QueryClient, id: string, patch: Partial<AdminUserRow>): void {
   qc.setQueriesData<AdminUserPage>({ queryKey: LIST_KEY }, (prev) => {
@@ -163,89 +143,19 @@ function removeCachedUser(qc: QueryClient, id: string): void {
 
 /**
  * Модальное окно с деталями пользователя: карточка, записи на курсы
- * (GET /admin/enrollments?studentId=…&limit=10), последние платежи
- * (GET /admin/payments?q=<email>&limit=10) и активные сессии
- * (GET /admin/users/{id}/sessions, T94). Монтируется только при открытии —
+ * (GET /admin/enrollments?studentId=…&limit=10) и последние платежи
+ * (GET /admin/payments?q=<email>&limit=10). Монтируется только при открытии —
  * запросы уходят по факту показа. Закрытие: Esc, кнопка «Закрыть», клик по фону.
  */
-function UserDetails({
-  user,
-  onClose,
-  focusSessions = false,
-}: {
-  user: AdminUserRow;
-  onClose: () => void;
-  focusSessions?: boolean;
-}): JSX.Element {
-  const qc = useQueryClient();
-  const sessionsSectionRef = useRef<HTMLElement | null>(null);
-  const dialogRef = useRef<HTMLDivElement | null>(null);
-  const closeButtonRef = useRef<HTMLButtonElement | null>(null);
-  // Элемент, на который вернём фокус после закрытия карточки.
-  const returnFocusRef = useRef<HTMLElement | null>(null);
-
-  // При открытии фокус — на кнопке «Закрыть» (первый элемент диалога),
-  // при закрытии — обратно на действие в строке пользователя.
-  useEffect(() => {
-    const active = document.activeElement;
-    returnFocusRef.current = active instanceof HTMLElement ? active : null;
-    closeButtonRef.current?.focus();
-    return () => {
-      const back = returnFocusRef.current;
-      if (back && back.isConnected) back.focus();
-      returnFocusRef.current = null;
-    };
-  }, []);
-
-  // Esc закрывает окно, Tab не выпускает фокус за пределы диалога.
+function UserDetails({ user, onClose }: { user: AdminUserRow; onClose: () => void }): JSX.Element {
+  // Esc закрывает окно, пока оно смонтировано.
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent): void {
-      if (e.key === 'Escape') {
-        onClose();
-        return;
-      }
-      if (e.key !== 'Tab') return;
-      const dialog = dialogRef.current;
-      if (!dialog) return;
-      const focusable = Array.from(
-        dialog.querySelectorAll<HTMLElement>(
-          'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])',
-        ),
-      ).filter((node) => !node.hidden);
-      if (focusable.length === 0) {
-        e.preventDefault();
-        return;
-      }
-      const first = focusable[0];
-      const last = focusable[focusable.length - 1];
-      const active = document.activeElement;
-      // Секция сессий получает фокус программно (tabIndex=-1), поэтому её нет
-      // в списке: Tab/Shift+Tab с неё должны оставаться внутри диалога.
-      const index = active instanceof HTMLElement ? focusable.indexOf(active) : -1;
-      if (index === -1) {
-        e.preventDefault();
-        (e.shiftKey ? last : first).focus();
-      } else if (e.shiftKey && index === 0) {
-        e.preventDefault();
-        last.focus();
-      } else if (!e.shiftKey && index === focusable.length - 1) {
-        e.preventDefault();
-        first.focus();
-      }
+      if (e.key === 'Escape') onClose();
     }
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [onClose]);
-
-  // T94: действие «Принудительный выход» в строке открывает карточку сразу
-  // на секции сессий, не заставляя прокручивать профиль вручную.
-  useEffect(() => {
-    if (!focusSessions) return;
-    const node = sessionsSectionRef.current;
-    if (!node) return;
-    node.scrollIntoView({ block: 'start' });
-    node.focus({ preventScroll: true });
-  }, [focusSessions]);
 
   const enrollments = useQuery({
     queryKey: ['admin-user-enrollments', user.id],
@@ -259,40 +169,12 @@ function UserDetails({
     retry: (failureCount, error) => !(error instanceof ApiError) && failureCount < 2,
   });
 
-  const sessions = useQuery({
-    queryKey: ['admin-user-sessions', user.id],
-    queryFn: () => listAdminUserSessions(user.id),
-    retry: (failureCount, error) => !(error instanceof ApiError) && failureCount < 2,
-  });
-
-  // T94: подтверждение отзыва всех сессий и сообщение об успехе — локальные,
-  // живут только пока открыта карточка.
-  const [confirmRevoke, setConfirmRevoke] = useState(false);
-  const [sessionsNotice, setSessionsNotice] = useState('');
-
-  const revokeSessions = useMutation({
-    mutationFn: () => revokeAdminUserSessions(user.id),
-    onSuccess: () => {
-      setConfirmRevoke(false);
-      setSessionsNotice(t('p10.sessions.revoked'));
-      // Список пустеет сразу, затем подтверждаем состояние запросом.
-      qc.setQueryData<AdminSessionsResponse>(['admin-user-sessions', user.id], { items: [] });
-      void qc.invalidateQueries({ queryKey: ['admin-user-sessions', user.id] });
-    },
-    onError: () => {
-      setConfirmRevoke(false);
-      setSessionsNotice('');
-    },
-  });
-
   const enrollmentsItems = enrollments.data?.items ?? [];
   const paymentsItems = payments.data?.items ?? [];
-  const sessionsItems = sessions.data?.items ?? [];
 
   return (
     <div className="au-modal-overlay" onClick={onClose}>
       <div
-        ref={dialogRef}
         className="au-modal"
         role="dialog"
         aria-modal="true"
@@ -301,7 +183,7 @@ function UserDetails({
       >
         <div className="au-modal-head">
           <h2>{t('adminUsers.detailsTitle')}</h2>
-          <button ref={closeButtonRef} type="button" className="btn btn-sm" onClick={onClose}>
+          <button type="button" className="btn btn-sm" onClick={onClose}>
             {t('common.close')}
           </button>
         </div>
@@ -391,112 +273,6 @@ function UserDetails({
             </ul>
           )}
         </section>
-
-        {/* ----- Активные сессии (T94) ----- */}
-        <section
-          ref={sessionsSectionRef}
-          className="au-details-section au-sessions"
-          aria-label={t('p10.sessions.title')}
-          tabIndex={-1}
-        >
-          <h3>{t('p10.sessions.title')}</h3>
-          <p className="muted au-sessions-hint">{t('p10.sessions.hint')}</p>
-
-          {sessions.isLoading && (
-            <p className="muted" role="status">
-              {t('common.loading')}
-            </p>
-          )}
-          {sessions.isFetching && !sessions.isLoading && (
-            <p className="muted au-sessions-updating" role="status">
-              {t('common.loading')}
-            </p>
-          )}
-          {sessions.isError && (
-            <div className="au-sessions-error" role="alert">
-              <p className="error">{sessionsErrorText(sessions.error)}</p>
-              <button
-                type="button"
-                className="btn btn-sm"
-                onClick={() => void sessions.refetch()}
-              >
-                {t('common.retry')}
-              </button>
-            </div>
-          )}
-          {sessions.data && sessionsItems.length === 0 && !sessions.isFetching && (
-            <p className="muted">{t('p10.sessions.empty')}</p>
-          )}
-          {sessionsItems.length > 0 && (
-            <>
-              <p className="muted au-sessions-count">
-                {t('p10.sessions.count')}: {sessionsItems.length}
-              </p>
-              <ul className="au-details-list au-sessions-list" aria-live="polite">
-                {sessionsItems.map((session) => (
-                  <li key={session.id}>
-                    <span className="au-details-item-name au-sessions-id">{session.id}</span>
-                    <span className="muted au-details-item-meta">
-                      {t('p10.sessions.createdAt')}: {formatDate(session.createdAt)}
-                    </span>
-                    <span className="muted au-details-item-meta">
-                      {t('p10.sessions.expiresAt')}: {formatDate(session.expiresAt)}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            </>
-          )}
-
-          {sessionsItems.length > 0 && (
-            <div className="au-sessions-actions">
-              {confirmRevoke ? (
-                <>
-                  <span className="au-confirm">{t('p10.sessions.confirmRevokeAll')}</span>
-                  <button
-                    type="button"
-                    className="btn btn-sm au-btn--danger"
-                    disabled={revokeSessions.isPending}
-                    onClick={() => revokeSessions.mutate()}
-                  >
-                    {revokeSessions.isPending ? t('common.loading') : t('common.confirm')}
-                  </button>
-                  <button
-                    type="button"
-                    className="btn btn-sm"
-                    disabled={revokeSessions.isPending}
-                    onClick={() => setConfirmRevoke(false)}
-                  >
-                    {t('common.cancel')}
-                  </button>
-                </>
-              ) : (
-                <button
-                  type="button"
-                  className="btn btn-sm au-btn--danger"
-                  onClick={() => {
-                    setSessionsNotice('');
-                    revokeSessions.reset();
-                    setConfirmRevoke(true);
-                  }}
-                >
-                  {t('p10.sessions.revokeAll')}
-                </button>
-              )}
-            </div>
-          )}
-
-          {sessionsNotice && (
-            <p className="au-notice au-sessions-notice" role="status" aria-live="polite">
-              {sessionsNotice}
-            </p>
-          )}
-          {revokeSessions.isError && (
-            <p className="error au-sessions-error" role="alert">
-              {sessionsErrorText(revokeSessions.error)}
-            </p>
-          )}
-        </section>
       </div>
     </div>
   );
@@ -505,7 +281,6 @@ function UserDetails({
 // ---------- Страница ----------
 
 export default function AdminUsers(): JSX.Element {
-  useSeo(`${t('adminUsers.title')} — ${t('cabinet.adminTitle')} — Edu Platform`);
   const qc = useQueryClient();
 
   // ---- Состояние фильтров и пагинации (локальное, без URL-параметров) ----
@@ -546,13 +321,6 @@ export default function AdminUsers(): JSX.Element {
   const [confirm, setConfirm] = useState<PendingConfirm | null>(null);
   // T52: пользователь, открытый в карточке «Профиль» (null — окно закрыто).
   const [detailsUser, setDetailsUser] = useState<AdminUserRow | null>(null);
-  // T94: карточку открыли действием «Принудительный выход» — сразу к сессиям.
-  const [detailsFocusSessions, setDetailsFocusSessions] = useState(false);
-
-  function openDetails(user: AdminUserRow, focusSessions: boolean): void {
-    setDetailsFocusSessions(focusSessions);
-    setDetailsUser(user);
-  }
 
   function setRowError(id: string, text: string): void {
     setRowErrors((prev) => ({ ...prev, [id]: text }));
@@ -814,13 +582,6 @@ export default function AdminUsers(): JSX.Element {
                 <span className="sr-only">{t('common.loading')}</span>
               </div>
             )}
-            {/* Фоновое обновление после мутации/инвалидации: таблица остаётся
-                на месте, но пользователь видит, что данные ещё обновляются. */}
-            {users.isFetching && !users.isLoading && (
-              <p className="muted" role="status" aria-live="polite">
-                Обновление…
-              </p>
-            )}
 
             {users.isError && (
               <div className="au-error" role="alert">
@@ -840,7 +601,6 @@ export default function AdminUsers(): JSX.Element {
                 role="region"
                 aria-label={t('adminUsers.title')}
                 tabIndex={0}
-                aria-busy={users.isFetching || undefined}
               >
                 <table className="au-table">
                   <thead>
@@ -931,16 +691,9 @@ export default function AdminUsers(): JSX.Element {
                                   <button
                                     type="button"
                                     className="btn btn-sm"
-                                    onClick={() => openDetails(u, false)}
+                                    onClick={() => setDetailsUser(u)}
                                   >
                                     {t('adminUsers.open')}
-                                  </button>
-                                  <button
-                                    type="button"
-                                    className="btn btn-sm"
-                                    onClick={() => openDetails(u, true)}
-                                  >
-                                    {t('p10.sessions.forceLogout')}
                                   </button>
                                   <button
                                     type="button"
@@ -1004,16 +757,7 @@ export default function AdminUsers(): JSX.Element {
           </section>
 
           {/* ---------- Карточка «Профиль пользователя» (T52) ---------- */}
-          {detailsUser && (
-            <UserDetails
-              user={detailsUser}
-              focusSessions={detailsFocusSessions}
-              onClose={() => {
-                setDetailsUser(null);
-                setDetailsFocusSessions(false);
-              }}
-            />
-          )}
+          {detailsUser && <UserDetails user={detailsUser} onClose={() => setDetailsUser(null)} />}
         </main>
       </div>
     </div>

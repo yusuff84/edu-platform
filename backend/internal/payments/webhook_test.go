@@ -9,6 +9,7 @@ import (
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -167,6 +168,28 @@ func TestMockVerifyWebhook(t *testing.T) {
 	tampered.Header.Set("X-Mock-Signature", sig)
 	if err := m.VerifyWebhook(tampered, secret); err == nil {
 		t.Fatal("подделанное тело прошло проверку")
+	}
+}
+
+// Mock: секрет из env (без явного аргумента) тоже включает обязательную
+// подпись. Без заголовка — ErrUnauthorized; с корректной подписью — проходит.
+func TestMockVerifyWebhookEnvSecret(t *testing.T) {
+	const secret = "env-mock-secret"
+	t.Setenv("MOCK_WEBHOOK_SECRET", secret)
+
+	m := NewMockProvider()
+	body := []byte(`{"providerPaymentId":"mock_env","status":"succeeded"}`)
+	r := httptest.NewRequest(http.MethodPost, "/api/v1/payments/webhook/mock", bytes.NewReader(body))
+	if err := m.VerifyWebhook(r, nil); !errors.Is(err, ErrUnauthorized) {
+		t.Fatalf("без подписи при заданном env-секрете: err=%v, ждали ErrUnauthorized", err)
+	}
+
+	mac := hmac.New(sha256.New, []byte(secret))
+	mac.Write(body)
+	r = httptest.NewRequest(http.MethodPost, "/api/v1/payments/webhook/mock", bytes.NewReader(body))
+	r.Header.Set("X-Mock-Signature", "sha256="+hex.EncodeToString(mac.Sum(nil)))
+	if err := m.VerifyWebhook(r, nil); err != nil {
+		t.Fatalf("валидная env-подпись отклонена: %v", err)
 	}
 }
 
