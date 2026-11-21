@@ -8,8 +8,8 @@ import { SupportIllustration } from './SupportIllustrations';
 
 function CheckIcon(): JSX.Element {
   return (
-    <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true">
-      <circle cx="12" cy="12" r="10" fill="#141414" />
+    <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true">
+      <circle cx="12" cy="12" r="11" fill="#1F9D55" />
       <path
         d="M8 12.5l2.7 2.7L16.5 9"
         fill="none"
@@ -299,6 +299,28 @@ const CONTACTS = [
   { key: 'max', label: 'В MAX', bg: '#7B5CFF', glyph: 'M' },
 ];
 
+/** Иллюстрация «консультация» — в стиле иконок сайта: облака диалога, галочка, искорка, тень. */
+function LeadIllustration(): JSX.Element {
+  return (
+    <svg className="lead-illu" viewBox="0 0 240 150" aria-hidden="true">
+      <ellipse cx="120" cy="140" rx="84" ry="8" fill="#141414" opacity=".1" />
+      {/* вопрос ученика */}
+      <path d="M40 18h96a16 16 0 0 1 16 16v34a16 16 0 0 1-16 16H82l-22 18V84H40a16 16 0 0 1-16-16V34a16 16 0 0 1 16-16Z" fill="#3B5BFF" />
+      <rect x="44" y="38" width="76" height="7" rx="3.5" fill="#fff" />
+      <rect x="44" y="54" width="52" height="7" rx="3.5" fill="#fff" opacity=".55" />
+      {/* ответ консультанта */}
+      <path d="M118 64h86a14 14 0 0 1 14 14v28a14 14 0 0 1-14 14h-8v16l-19-16h-59a14 14 0 0 1-14-14V78a14 14 0 0 1 14-14Z" fill="#fff" stroke="#E2DDD1" strokeWidth="2.5" strokeLinejoin="round" />
+      <rect x="122" y="82" width="62" height="6" rx="3" fill="#ECEAE4" />
+      <rect x="122" y="96" width="44" height="6" rx="3" fill="#ECEAE4" />
+      <circle cx="200" cy="64" r="16" fill="#1F9D55" stroke="#fff" strokeWidth="4" />
+      <path d="M192 64l5.5 5.5 11-11" stroke="#fff" strokeWidth="3.5" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+      {/* искорки */}
+      <path d="M176 14l3 7.2 7.2 3-7.2 3-3 7.2-3-7.2-7.2-3 7.2-3z" fill="#FEC466" />
+      <circle cx="20" cy="104" r="6" fill="#E63223" />
+    </svg>
+  );
+}
+
 /** Иконки способов связи в форме заявки — в стиле остальных иконок сайта. */
 function ContactIcon({ kind }: { kind: string }): JSX.Element {
   if (kind === 'phone') {
@@ -382,6 +404,7 @@ export function LeadBlock(): JSX.Element {
               <span>Ответим на вопросы до начала обучения</span>
             </li>
           </ul>
+          <LeadIllustration />
         </div>
         <form className="lead-form" onSubmit={onSubmit} noValidate={false}>
           <input

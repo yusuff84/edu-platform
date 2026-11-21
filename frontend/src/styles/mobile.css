@@ -1178,3 +1178,18 @@ video {
   width: 18px;
   height: 18px;
 }
+
+/* Иллюстрация в блоке заявки — заполняет пустое место под списком. */
+.lead-illu {
+  display: block;
+  width: min(100%, 300px);
+  height: auto;
+  margin-top: 28px;
+}
+
+/* На телефоне форма важнее картинки — иллюстрацию не показываем. */
+@media (max-width: 760px) {
+  .lead-illu {
+    display: none;
+  }
+}

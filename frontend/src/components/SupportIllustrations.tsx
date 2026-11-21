@@ -19,25 +19,16 @@ export function SupportIllustration({ kind }: { kind: Kind }): JSX.Element {
       <Shadow />
       {kind === 'lessons' && (
         <>
-          {/* экран с видео */}
-          <rect x="14" y="12" width="74" height="52" rx="10" fill="#141414" />
-          <rect x="14" y="12" width="74" height="52" rx="10" fill="url(#svisScreen)" opacity=".35" />
-          <circle cx="51" cy="35" r="13" fill="#E63223" />
-          <path d="M47 28.5v13l11-6.5z" fill="#fff" />
-          <rect x="22" y="54" width="58" height="4" rx="2" fill="#fff" opacity=".25" />
-          <rect x="22" y="54" width="30" height="4" rx="2" fill="#FEC466" />
-          {/* конспект */}
-          <rect x="66" y="38" width="40" height="48" rx="7" fill="#fff" stroke="#E2DDD1" strokeWidth="2" />
-          <rect x="73" y="47" width="26" height="4" rx="2" fill="#3B5BFF" />
-          <rect x="73" y="56" width="26" height="4" rx="2" fill="#ECEAE4" />
-          <rect x="73" y="64" width="20" height="4" rx="2" fill="#ECEAE4" />
-          <rect x="73" y="72" width="23" height="4" rx="2" fill="#ECEAE4" />
-          <defs>
-            <linearGradient id="svisScreen" x1="0" y1="0" x2="1" y2="1">
-              <stop offset="0" stopColor="#3B5BFF" />
-              <stop offset="1" stopColor="#141414" />
-            </linearGradient>
-          </defs>
+          {/* Карточка урока: синий экран с видео сверху, конспект снизу, галочка «прогресс сохранён». */}
+          <rect x="24" y="12" width="72" height="68" rx="11" fill="#fff" stroke="#E2DDD1" strokeWidth="2" />
+          <path d="M24 23a11 11 0 0 1 11-11h50a11 11 0 0 1 11 11v26H24z" fill="#3B5BFF" />
+          <circle cx="60" cy="31" r="10.5" fill="#fff" />
+          <path d="M57 25.5v11l9-5.5z" fill="#E63223" />
+          <rect x="32" y="43" width="56" height="3" rx="1.5" fill="#fff" opacity=".35" />
+          <rect x="32" y="43" width="26" height="3" rx="1.5" fill="#FEC466" />
+          <rect x="32" y="56" width="40" height="4" rx="2" fill="#ECEAE4" />
+          <rect x="32" y="64" width="28" height="4" rx="2" fill="#ECEAE4" />
+          <Check cx={89} cy={73} />
         </>
       )}
       {kind === 'tests' && (
