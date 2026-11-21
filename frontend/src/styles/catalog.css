@@ -314,3 +314,161 @@
   .course-overview-hero-art { display: none; }
   .course-overview-hero p { font-size: 15px; }
 }
+
+/* ---------- Страница курса: мобильная версия ---------- */
+.course-overview-hero-cta {
+  margin-top: 22px;
+}
+
+.course-overview-hero-cta:empty {
+  display: none;
+}
+
+.course-overview-free {
+  background: #fff !important;
+  color: #14663a;
+  font-weight: 800;
+}
+
+.buybox .buybox-cta {
+  width: 100%;
+}
+
+.buybox-hint {
+  margin: 12px 0 0;
+  font-size: 14px;
+}
+
+/* Описание и URL в нём не распирают колонку (горизонтальный скролл на 360–414px). */
+.course-overview .panel p,
+.course-overview-hero p {
+  overflow-wrap: anywhere;
+}
+
+/* Нижняя панель «цена + действие» — только на телефоне/планшете. */
+.course-sticky-cta {
+  display: none;
+}
+
+@media (max-width: 960px) {
+  /* 1fr = minmax(auto, 1fr): колонка росла по самому длинному слову. */
+  .course-overview-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  /* Описание полностью — в блоке «О курсе», в hero хватает 4 строк. */
+  .course-overview-hero p {
+    display: -webkit-box;
+    -webkit-line-clamp: 4;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  /* Обложка уже в «О курсе» — третья копия в карточке покупки лишняя. */
+  .buybox .cover-buy,
+  .buybox > .cover {
+    display: none;
+  }
+
+  /* Кнопка в карточке дублирует нижнюю панель. */
+  .buybox .buybox-cta {
+    display: none;
+  }
+
+  .course-sticky-cta {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 800;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 16px calc(10px + var(--safe-b, 0px));
+    background: rgba(255, 255, 255, 0.96);
+    -webkit-backdrop-filter: blur(12px);
+    backdrop-filter: blur(12px);
+    border-top: 1px solid var(--line);
+    box-shadow: 0 -8px 24px -12px rgba(20, 20, 20, 0.18);
+  }
+
+  .course-sticky-cta:not(:has(.btn)) {
+    display: none;
+  }
+
+  .course-sticky-price {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    line-height: 1.25;
+  }
+
+  .course-sticky-price b {
+    font-size: 17px;
+  }
+
+  .course-sticky-price span {
+    color: var(--muted);
+    font-size: 12.5px;
+  }
+
+  .course-sticky-cta .btn {
+    flex: 1;
+    max-width: 260px;
+    margin-left: auto;
+  }
+
+  /* Место под нижнюю панель, чтобы она не закрывала футер. */
+  .course-overview {
+    padding-bottom: 96px;
+  }
+}
+
+@media (max-width: 620px) {
+  .course-overview-hero {
+    padding: 22px 20px 24px;
+    border-radius: 22px;
+  }
+
+  .course-overview-hero h1 {
+    font-size: 30px;
+  }
+
+  .course-overview-program .mod-head {
+    padding: 16px 2px;
+    font-size: 16px;
+    min-height: 56px;
+  }
+
+  .course-overview-program .lesson-link {
+    padding: 12px 2px;
+    font-size: 14.5px;
+  }
+}
+
+@media (max-width: 960px) {
+  /* Внутренняя колонка (описание, программа, отзывы, похожие курсы) —
+     тоже grid с колонкой auto: похожие курсы распирали её до 406px. */
+  .course-overview-grid > div {
+    min-width: 0;
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 620px) {
+  /* Строка урока: название на всю ширину, метки — строкой ниже
+     (раньше метка «Видео + текст» обрезалась у края). */
+  .course-overview-program .lesson-link {
+    flex-wrap: wrap;
+    row-gap: 6px;
+  }
+
+  .course-overview-program .lesson-link > span:first-child {
+    flex: 1 1 100%;
+  }
+
+  .course-overview-program .lesson-link .preview-watch {
+    flex: 1 1 100%;
+    min-height: 44px;
+  }
+}

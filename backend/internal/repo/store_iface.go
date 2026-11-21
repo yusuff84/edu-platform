@@ -327,6 +327,15 @@ type StoreAPI interface {
 	// запрос на страницу вместо проверки каждой карточки. Никогда не nil.
 	FavoriteCourseIDs(userID string) map[string]bool
 
+	// --- Заявки на консультацию с главной (018_leads.sql) ---
+
+	// CreateLead сохраняет заявку «Поможем подобрать курс».
+	CreateLead(l Lead) (*Lead, error)
+	// ListLeads — заявки, новые первыми, не больше limit. Никогда не nil.
+	ListLeads(limit int) []*Lead
+	// SetLeadStatus меняет статус заявки (new/done); ErrNotFound — нет заявки.
+	SetLeadStatus(id, status string) error
+
 	// ---- T77: аналитика учителя ----
 
 	// TeacherOverview — сводка преподавателя одним вызовом: курсы по

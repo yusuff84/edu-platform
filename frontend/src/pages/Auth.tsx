@@ -83,12 +83,28 @@ function resolveRedirectFrom(state: unknown): string | null {
   return path;
 }
 
+/** Кнопка «показать/скрыть пароль» внутри поля (на телефоне пароль легко опечатать). */
+function PasswordToggle({ shown, onToggle }: { shown: boolean; onToggle: () => void }): JSX.Element {
+  return (
+    <button
+      type="button"
+      className="pw-toggle"
+      onClick={onToggle}
+      aria-pressed={shown}
+      aria-label={shown ? 'Скрыть пароль' : 'Показать пароль'}
+    >
+      {shown ? 'Скрыть' : 'Показать'}
+    </button>
+  );
+}
+
 export function Login(): JSX.Element {
   useSeo('Вход — skillex.space', 'Войдите в skillex.space, чтобы продолжить обучение.');
   const navigate = useNavigate();
   const location = useLocation();
   const qc = useQueryClient();
   const [serverError, setServerError] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   // Куда вернуться после входа; невалидный/подделанный from → null → уйдём на '/'.
   const fromPath = resolveRedirectFrom(location.state);
   // Уже вошедший не должен видеть форму входа. Используем ОБЩИЕ опции
@@ -140,13 +156,16 @@ export function Login(): JSX.Element {
               </div>
               <div className="field">
                 <label htmlFor="login-password">{t('auth.password')}</label>
-                <input
-                  id="login-password"
-                  className="input"
-                  type="password"
-                  autoComplete="current-password"
-                  {...rf('password')}
-                />
+                <div className="pw-wrap">
+                  <input
+                    id="login-password"
+                    className="input"
+                    type={showPassword ? 'text' : 'password'}
+                    autoComplete="current-password"
+                    {...rf('password')}
+                  />
+                  <PasswordToggle shown={showPassword} onToggle={() => setShowPassword((v) => !v)} />
+                </div>
                 {errors.password && <span className="err">{errors.password.message}</span>}
               </div>
               <div>
@@ -160,18 +179,20 @@ export function Login(): JSX.Element {
                 {serverError}
               </p>
             )}
-            <p>
-              {/* Пробрасываем state, чтобы from не потерялся при переходе Login ↔ Register. */}
-              <Link to="/register" state={location.state}>{t('auth.noAccount')}</Link>
-              {' · '}<Link to="/forgot-password">Забыли пароль?</Link>
-            </p>
+            {/* Пробрасываем state, чтобы from не потерялся при переходе Login ↔ Register. */}
+            <div className="auth-links">
+              <Link to="/forgot-password">Забыли пароль?</Link>
+              <span>
+                Нет аккаунта? <Link to="/register" state={location.state}>Зарегистрироваться</Link>
+              </span>
+            </div>
           </div>
           <div className="panel panel-dark">
             <h2>Почему skillex.space</h2>
             <ul className="checklist">
               <li>Практика с автопроверкой</li>
-              <li>Живые разборы</li>
-              <li>Доступ навсегда</li>
+              <li>Видеоуроки и конспекты</li>
+              <li>Учитесь в своём темпе</li>
             </ul>
           </div>
         </div>
@@ -194,6 +215,7 @@ export function Register(): JSX.Element {
   // читался только из поля формы, ссылка открывала обычную регистрацию
   // без роли teacher и приглашение не потреблялось.
   const inviteFromUrl = searchParams.get('inviteToken')?.trim() ?? '';
+  const [showPassword, setShowPassword] = useState(false);
   // Уже зарегистрированный (сессия есть) — уводим со страницы регистрации.
   // Общие опции query ['me']: дедупликация по ключу, второго запроса нет.
   const meQuery = useQuery(meQueryOptions);
@@ -269,21 +291,29 @@ export function Register(): JSX.Element {
               </div>
               <div className="field">
                 <label htmlFor="register-password">{t('auth.password')}</label>
-                <input
-                  id="register-password"
-                  className="input"
-                  type="password"
-                  autoComplete="new-password"
-                  {...rf('password')}
-                  aria-describedby="pw-hint"
-                />
+                <div className="pw-wrap">
+                  <input
+                    id="register-password"
+                    className="input"
+                    type={showPassword ? 'text' : 'password'}
+                    autoComplete="new-password"
+                    {...rf('password')}
+                    aria-describedby="pw-hint"
+                  />
+                  <PasswordToggle shown={showPassword} onToggle={() => setShowPassword((v) => !v)} />
+                </div>
                 <small id="pw-hint">{t('auth.passwordHint')}</small>
                 {errors.password && <span className="err">{errors.password.message}</span>}
               </div>
-              <div className="field">
-                <label htmlFor="register-invite">{t('auth.inviteToken')}</label>
-                <input id="register-invite" className="input" type="text" {...rf('inviteToken')} />
-              </div>
+              {/* Код приглашения нужен только преподавателям: ученику поле не
+                  мешает — оно свёрнуто, если код не пришёл в ссылке. */}
+              <details className="invite-details" open={Boolean(inviteFromUrl)}>
+                <summary>У меня есть код приглашения преподавателя</summary>
+                <div className="field">
+                  <label htmlFor="register-invite">{t('auth.inviteToken')}</label>
+                  <input id="register-invite" className="input" type="text" autoComplete="off" {...rf('inviteToken')} />
+                </div>
+              </details>
               <div>
                 <button className="btn btn-primary" type="submit" disabled={mutation.isPending}>
                   {t('auth.submitRegister')}
@@ -295,18 +325,20 @@ export function Register(): JSX.Element {
                 {serverError}
               </p>
             )}
-            <p>
-              {/* Пробрасываем state, чтобы from не потерялся при переходе Register ↔ Login. */}
-              <Link to="/login" state={location.state}>{t('auth.haveAccount')}</Link>
-            </p>
+            {/* Пробрасываем state, чтобы from не потерялся при переходе Register ↔ Login. */}
+            <div className="auth-links">
+              <span>
+                Уже есть аккаунт? <Link to="/login" state={location.state}>Войти</Link>
+              </span>
+            </div>
           </div>
           <div className="panel panel-sun">
             <h2>Что вы получите</h2>
             <ul className="checklist">
-              <li>Бесплатный модуль «Старт»</li>
-              <li>Проверка кода</li>
-              <li>Эфиры по четвергам</li>
-              <li>Сертификат</li>
+              <li>Бесплатные курсы</li>
+              <li>Тесты с автопроверкой</li>
+              <li>Вопросы преподавателю под уроком</li>
+              <li>Сертификат о прохождении</li>
             </ul>
           </div>
         </div>

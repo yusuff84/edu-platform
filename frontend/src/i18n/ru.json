@@ -10,7 +10,7 @@
   "nav.logout": "Выйти",
 
   "catalog.title": "Каталог курсов",
-  "catalog.searchPlaceholder": "Поиск по названию или описанию…",
+  "catalog.searchPlaceholder": "Найти курс…",
   "catalog.searchButton": "Найти",
   "catalog.empty": "Ничего не найдено. Попробуйте изменить запрос.",
   "catalog.emptySearchReset": "Сбросить поиск",

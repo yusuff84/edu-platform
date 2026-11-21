@@ -20,6 +20,7 @@ import {
 // T51: список/отзыв приглашений и возврат платежа — отдельный модуль,
 // чтобы не трогать client.ts (правило волны P6).
 import { listInvites, refundPayment, revokeInvite } from '../api/adminActions';
+import { AdminLeads } from '../components/AdminLeads';
 import type { AdminInviteRow, AdminInviteStatus } from '../api/adminActions';
 import type {
   Course,
@@ -609,6 +610,7 @@ export default function Admin(): JSX.Element {
       <h1>{t('cabinet.adminTitle')}</h1>
 
       <nav className="admin-nav" aria-label={t('cabinet.adminTitle')}>
+        <a href="#leads">Заявки</a>
         <a href="#queue">{t('admin.reviewQueue')}</a>
         <a href="#journal">{t('admin.journal')}</a>
         <a href="#settings">{t('admin.settingsTitle')}</a>
@@ -623,6 +625,9 @@ export default function Admin(): JSX.Element {
         <Link to="/admin/courses">{t('adminCourses.title')}</Link>
         <Link to="/admin/enrollments">{t('adminEnrollments.title')}</Link>
       </nav>
+
+      {/* ---------- 0. Заявки с главной («Поможем подобрать курс») ---------- */}
+      <AdminLeads />
 
       {/* ---------- 1. Очередь модерации ---------- */}
       <section id="queue" className="admin-section panel">

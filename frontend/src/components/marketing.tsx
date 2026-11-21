@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import type { FormEvent } from 'react';
-import { Link } from 'react-router-dom';
+import { useMutation } from '@tanstack/react-query';
+import { createLead } from '../api/leads';
+import type { LeadContactMethod } from '../api/leads';
 
 function CheckIcon(): JSX.Element {
   return (
@@ -18,85 +20,57 @@ function CheckIcon(): JSX.Element {
   );
 }
 
-type SupportKey = 'curators' | 'career' | 'practice' | 'community';
+type SupportKey = 'lessons' | 'tests' | 'questions' | 'certificate';
 
 const SUPPORT_TABS: Array<{ key: SupportKey; label: string }> = [
-  { key: 'curators', label: 'Опытные кураторы' },
-  { key: 'career', label: 'Центр карьеры' },
-  { key: 'practice', label: 'Практика и проекты' },
-  { key: 'community', label: 'Сообщество' },
+  { key: 'lessons', label: 'Видео и конспекты' },
+  { key: 'tests', label: 'Проверка знаний' },
+  { key: 'questions', label: 'Вопросы к уроку' },
+  { key: 'certificate', label: 'Сертификат' },
 ];
 
-const SUPPORT_TEXT: Record<SupportKey, { title: string; text: string; btn: string }> = {
-  curators: {
-    title: 'Даём подробную обратную связь',
-    text: 'Каждую вашу работу проверит куратор-эксперт. Это практикующий специалист с опытом от 5 лет. Он расскажет, что улучшить, и объяснит сложное простыми словами.',
-    btn: 'Примеры обратной связи',
+// Только то, что платформа действительно умеет сегодня (без выдуманных
+// кураторов, цифр, «центра карьеры» и трудоустройства).
+const SUPPORT_TEXT: Record<
+  SupportKey,
+  { title: string; text: string; icon: string; card: string; cardSmall: string }
+> = {
+  lessons: {
+    title: 'Короткие уроки, которые удобно смотреть',
+    text: 'Каждая тема — видеоурок и текстовый конспект. Смотрите с телефона или компьютера, возвращайтесь к материалам в любой момент.',
+    icon: '▶',
+    card: 'Видеоурок + конспект',
+    cardSmall: 'Прогресс сохраняется автоматически',
   },
-  career: {
-    title: 'Доводим до оффера',
-    text: 'Центр карьеры поможет с резюме, портфолио и собеседованиями. Готовим к техническим интервью и сопровождаем до выхода на работу.',
-    btn: 'Как мы трудоустраиваем',
+  tests: {
+    title: 'Тесты с автоматической проверкой',
+    text: 'После тем — тесты. Ответы проверяются сразу: видно, что усвоено, а что стоит повторить. Пересдать можно в любой момент.',
+    icon: '✓',
+    card: 'Зачтено',
+    cardSmall: 'Результат — сразу после отправки',
   },
-  practice: {
-    title: 'Учим на реальных проектах',
-    text: 'Каждый модуль заканчивается проектом в портфолио: парсер, лендинг, дашборд. Код-ревью обязателен — как в настоящей команде.',
-    btn: 'Проекты студентов',
+  questions: {
+    title: 'Можно спросить, если непонятно',
+    text: 'Под каждым уроком есть раздел вопросов и ответов: спросите преподавателя или помогите другим ученикам.',
+    icon: '?',
+    card: 'Вопросы и ответы',
+    cardSmall: 'Под каждым уроком курса',
   },
-  community: {
-    title: 'Вы не одни',
-    text: 'Чаты потоков, живые эфиры по четвергам и наставник, который отвечает в течение дня. Новички поддерживают друг друга.',
-    btn: 'Познакомиться',
+  certificate: {
+    title: 'Сертификат о прохождении курса',
+    text: 'Пройдите все уроки и тесты — платформа выдаст именной сертификат с номером и публичной страницей для проверки.',
+    icon: '★',
+    card: 'Сертификат',
+    cardSmall: 'С номером и ссылкой для проверки',
   },
 };
 
-function CheckGreen(): JSX.Element {
-  return (
-    <svg width="11" height="11" viewBox="0 0 24 24" aria-hidden="true">
-      <path
-        d="M4 12.5l5 5L20 6.5"
-        fill="none"
-        stroke="#14663A"
-        strokeWidth="3"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-}
-
-function CheckLight(): JSX.Element {
-  return (
-    <svg width="11" height="11" viewBox="0 0 24 24" aria-hidden="true">
-      <path
-        d="M4 12.5l5 5L20 6.5"
-        fill="none"
-        stroke="#7EE2A8"
-        strokeWidth="3"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-}
-
-function StarSmall(): JSX.Element {
-  return (
-    <svg width="12" height="12" viewBox="0 0 24 24" aria-hidden="true">
-      <path
-        fill="currentColor"
-        d="M12 2.6l2.9 5.9 6.5.9-4.7 4.6 1.1 6.5L12 17.4l-5.8 3.1 1.1-6.5L2.6 9.4l6.5-.9z"
-      />
-    </svg>
-  );
-}
-
 export function SupportBlock(): JSX.Element {
-  const [tab, setTab] = useState<SupportKey>('curators');
+  const [tab, setTab] = useState<SupportKey>('lessons');
   const s = SUPPORT_TEXT[tab];
   return (
     <div className="support">
-      <h2>Создаём опору на всём пути</h2>
+      <h2>Как устроено обучение</h2>
       <div className="support-card">
         <div className="seg" role="tablist">
           {SUPPORT_TABS.map((t) => (
@@ -116,171 +90,12 @@ export function SupportBlock(): JSX.Element {
           <div>
             <h3>{s.title}</h3>
             <p>{s.text}</p>
-            <Link className="btn" to="/">
-              {s.btn}
-            </Link>
           </div>
-          <div className="support-visual" aria-hidden="true">
-            <div className={`svis svis-curators${tab === 'curators' ? ' active' : ''}`}>
-              <div className="sv-card sv-dark" style={{ left: 26, top: 26, width: 264 }}>
-                <div className="sv-row" style={{ marginBottom: 10 }}>
-                  <span style={{ display: 'flex', gap: 6 }}>
-                    <i style={{ width: 10, height: 10, borderRadius: '50%', background: '#FF5F57' }} />
-                    <i style={{ width: 10, height: 10, borderRadius: '50%', background: '#FEBC2E' }} />
-                    <i style={{ width: 10, height: 10, borderRadius: '50%', background: '#28C840' }} />
-                  </span>
-                  <span className="sv-small" style={{ margin: '0 0 0 10px' }}>
-                    review.py
-                  </span>
-                </div>
-                <div className="sv-code">
-                  <span className="sv-dim">12&nbsp;&nbsp;if user.is_ready():</span>
-                  <br />
-                  <span className="sv-add">13 +&nbsp;&nbsp;&nbsp;&nbsp;ship_lesson(user)</span>
-                  <br />
-                  <span className="sv-del">13 -&nbsp;&nbsp;&nbsp;&nbsp;pass&nbsp;&nbsp;# заглушка</span>
-                </div>
-                <div style={{ marginTop: 12 }}>
-                  <span className="sv-pill sv-ok">
-                    <CheckGreen />
-                    Принято
-                  </span>
-                </div>
-              </div>
-              <div
-                className="sv-ava"
-                style={{
-                  right: 36,
-                  top: 30,
-                  width: 76,
-                  height: 76,
-                  background: 'linear-gradient(140deg,#8A6FA8,#4A3566)',
-                  fontSize: 22,
-                }}
-              >
-                АШ
-              </div>
-              <div className="sv-card" style={{ right: 24, top: 122, maxWidth: 232 }}>
-                <p className="sv-title">Айдар Ш. · куратор, 6 лет в Python</p>
-                <p className="sv-small">
-                  «Отличный разбор ветвлений. Дальше — циклы, заодно докрутим твой парсер».
-                </p>
-              </div>
-              <div className="sv-card" style={{ left: 26, bottom: 26 }}>
-                <span className="sv-pill" style={{ background: '#141414', color: '#fff' }}>
-                  <StarSmall />
-                  4,9 · 212 ревью за месяц
-                </span>
-                <p className="sv-small">Отвечает в течение дня</p>
-              </div>
-            </div>
-            <div className={`svis svis-career${tab === 'career' ? ' active' : ''}`}>
-              <div className="sv-card" style={{ left: 26, top: 28, width: 272 }}>
-                <span className="sv-pill sv-ok">Оффер</span>
-                <p className="sv-title" style={{ fontSize: 17, marginTop: 10 }}>
-                  Junior Python-разработчик
-                </p>
-                <p className="sv-small">120 000 ₽ · удалённо · финтех</p>
-                <div style={{ marginTop: 12 }}>
-                  <span className="sv-pill" style={{ background: 'var(--brand)', color: '#fff' }}>
-                    Принять оффер
-                  </span>
-                </div>
-              </div>
-              <div
-                className="sv-ava"
-                style={{ right: 40, top: 32, width: 64, height: 64, background: '#141414', fontSize: 12 }}
-              >
-                HR
-              </div>
-              <div className="sv-card" style={{ right: 24, bottom: 26, maxWidth: 252 }}>
-                <p className="sv-title">Путь до оффера</p>
-                <p className="sv-small">Резюме → 12 откликов → 4 интервью</p>
-                <div className="sv-bar">
-                  <i style={{ width: '82%' }} />
-                </div>
-                <p className="sv-small">Средний срок — 3 недели после защиты</p>
-              </div>
-              <div className="sv-card" style={{ left: 26, bottom: 26 }}>
-                <p className="sv-title" style={{ fontSize: 22 }}>
-                  +38%
-                </p>
-                <p className="sv-small">к зарплате выпускников</p>
-              </div>
-            </div>
-            <div className={`svis svis-practice${tab === 'practice' ? ' active' : ''}`}>
-              <div className="sv-card sv-dark" style={{ left: 26, top: 26, width: 272 }}>
-                <p className="sv-title" style={{ color: '#fff' }}>
-                  $ pytest tests/
-                </p>
-                <div className="sv-code" style={{ marginTop: 8 }}>
-                  <span className="sv-add">
-                    <CheckLight /> test_parser PASSED
-                  </span>
-                  <br />
-                  <span className="sv-add">
-                    <CheckLight /> test_quiz PASSED
-                  </span>
-                  <br />
-                  <span className="sv-add">
-                    <CheckLight /> test_deploy PASSED
-                  </span>
-                  <br />
-                  <span className="sv-dim">3 passed in 0.42s</span>
-                </div>
-              </div>
-              <div className="sv-card" style={{ right: 24, top: 28, maxWidth: 196 }}>
-                <span className="sv-pill" style={{ background: '#141414', color: '#fff' }}>
-                  3 проекта
-                </span>
-                <p className="sv-small">Парсер, лендинг и дашборд — в портфолио на GitHub</p>
-              </div>
-              <div
-                className="sv-card sv-dark"
-                style={{ left: 26, bottom: 26, right: 24, maxWidth: 'none' }}
-              >
-                {['main.py', 'quiz.py', 'README.md'].map((f) => (
-                  <div className="sv-file" key={f}>
-                    <span className="sv-check">
-                      <CheckGreen />
-                    </span>
-                    {f}
-                  </div>
-                ))}
-              </div>
-            </div>
-            <div className={`svis svis-community${tab === 'community' ? ' active' : ''}`}>
-              <div
-                style={{
-                  position: 'absolute',
-                  left: 26,
-                  top: 30,
-                  display: 'grid',
-                  gap: 10,
-                  justifyItems: 'start',
-                }}
-              >
-                <div className="sv-msg in">Кто-нибудь разобрал flex-раскладку?</div>
-                <div className="sv-msg out" style={{ justifySelf: 'end' }}>
-                  Я! Скину разбор вечером
-                </div>
-                <div className="sv-msg in">А эфир по портфолио будет?</div>
-              </div>
-              <div className="sv-card" style={{ right: 24, top: 28, maxWidth: 208 }}>
-                <div className="sv-stack">
-                  <span style={{ background: '#E63223' }}>МК</span>
-                  <span style={{ background: '#1F9D55' }}>ДО</span>
-                  <span style={{ background: '#141414' }}>+9</span>
-                </div>
-                <p className="sv-small">1 240 человек в чате потока</p>
-              </div>
-              <div className="sv-card" style={{ right: 24, bottom: 26 }}>
-                <span className="sv-pill" style={{ border: '1.5px solid var(--line)' }}>
-                  <span className="sv-live-dot" />
-                  эфир · чт 19:00
-                </span>
-                <p className="sv-small">Разбор проектов вживую</p>
-              </div>
+          <div className="support-visual support-visual--simple" aria-hidden="true">
+            <div className="svis-simple" key={tab}>
+              <span className="svis-simple-icon">{s.icon}</span>
+              <p className="sv-title">{s.card}</p>
+              <p className="sv-small">{s.cardSmall}</p>
             </div>
           </div>
         </div>
@@ -373,34 +188,8 @@ export function PerksBlock(): JSX.Element {
             />
           </svg>
         </div>
-        <b>Вернём деньги, если не найдёте работу</b>
-        <p>
-          Это зафиксировано юридически. Подробнее в <Link to="/">Условиях возврата</Link>.
-        </p>
-      </div>
-    </div>
-  );
-}
-
-const DREAMS: Array<{ cls: string; hot?: boolean; n: string; text: string }> = [
-  { cls: 'dream-1', n: '12 курсов', text: 'Ни от кого не зависеть и работать на себя' },
-  { cls: 'dream-2', n: '22 курса', text: 'Стартовать в IT без программирования' },
-  { cls: 'dream-3', hot: true, n: '27 курсов', text: 'Работать на фрилансе из любой точки мира' },
-  { cls: 'dream-4', n: '5 курсов', text: 'Зарабатывать на креативном контенте' },
-  { cls: 'dream-5', n: '5 курсов', text: 'Научиться грамотно инвестировать и тратить' },
-];
-
-export function DreamsBlock(): JSX.Element {
-  return (
-    <div className="dreams">
-      <h2>Сделайте первый шаг к жизни вашей мечты</h2>
-      <div className="dreams-row">
-        {DREAMS.map((d) => (
-          <Link key={d.text} className={`dream ${d.cls}${d.hot ? ' hot' : ''}`} to="/">
-            <span className="n">{d.n}</span>
-            <p>{d.text}</p>
-          </Link>
-        ))}
+        <b>Бесплатный старт</b>
+        <p>Начните с бесплатного курса — без оплаты и привязки карты.</p>
       </div>
     </div>
   );
@@ -410,34 +199,20 @@ export function DiplomaBlock(): JSX.Element {
   return (
     <div className="diploma">
       <div>
-        <h2>Выдаём дипломы и&nbsp;сертификаты</h2>
+        <h2>Сертификат о&nbsp;прохождении курса</h2>
         <p>
-          После окончания курса вы получите диплом о&nbsp;профессиональной переподготовке или
-          сертификат установленного образца — тип документа можно уточнить у&nbsp;консультанта.
-          Мы обучаем по&nbsp;государственной лицензии — её номер подскажет{' '}
-          <a href="#lead">консультант</a>.
+          Пройдите все уроки и&nbsp;тесты курса — платформа выдаст именной сертификат.
+          У&nbsp;каждого сертификата есть номер и&nbsp;публичная страница: ссылку можно отправить
+          работодателю или приложить к&nbsp;резюме.
         </p>
       </div>
       <div className="diploma-visual" aria-hidden="true">
-        <div className="doc doc-dipl">
-          <h4>Диплом · переподготовка</h4>
-          <div className="doc-name" style={{ fontSize: 15 }}>
-            Python-разработчик
-          </div>
-          <div className="doc-line" style={{ width: '92%' }} />
-          <div className="doc-line" style={{ width: '78%' }} />
-          <div className="doc-line" style={{ width: '85%' }} />
-          <div className="doc-line" style={{ width: '60%' }} />
-          <div className="doc-seal">2026</div>
-        </div>
         <div className="doc doc-cert">
           <h4>Сертификат</h4>
-          <div className="doc-name">Иван Петров</div>
+          <div className="doc-name">Ваше имя</div>
           <div className="doc-line" style={{ width: '70%' }} />
           <p className="doc-prof">
-            Профессия
-            <br />
-            Python-разработчик
+            О прохождении курса
           </p>
           <div className="doc-sign">подпись</div>
           <div className="doc-seal">EP</div>
@@ -485,7 +260,7 @@ export function FinalCta({ onChoose }: { onChoose: () => void }): JSX.Element {
         />
       </svg>
       <h2>Сделайте первый шаг к&nbsp;жизни, которую хотите</h2>
-      <p>Подберём курс под вашу цель — от первой профессии до фриланса.</p>
+      <p>Начните с бесплатного курса — регистрация займёт минуту.</p>
       <button type="button" className="btn btn-blue" onClick={onChoose}>
         Выбрать курс
       </button>
@@ -501,10 +276,22 @@ const CONTACTS = [
 ];
 
 export function LeadBlock(): JSX.Element {
-  const [sent, setSent] = useState(false);
+  const [form, setForm] = useState({
+    name: '',
+    phone: '',
+    email: '',
+    contactMethod: 'phone' as LeadContactMethod,
+    consent: false,
+    website: '',
+  });
+  const mutation = useMutation({ mutationFn: createLead });
+  const sent = mutation.isSuccess;
+  const set = <K extends keyof typeof form>(key: K, value: (typeof form)[K]): void =>
+    setForm((prev) => ({ ...prev, [key]: value }));
   function onSubmit(e: FormEvent): void {
     e.preventDefault();
-    setSent(true);
+    if (mutation.isPending || sent) return;
+    mutation.mutate(form);
   }
   return (
     <div className="lead-zone" id="lead">
@@ -512,50 +299,85 @@ export function LeadBlock(): JSX.Element {
         <div>
           <h2>Поможем подобрать онлайн-курс под ваши цели</h2>
           <p className="lead-sub">
-            Оставьте заявку, получите консультацию и подборку курсов, которые подойдут именно
-            вам: от программирования до дизайна и аналитики.
+            Оставьте заявку — свяжемся, ответим на вопросы и поможем выбрать курс под ваш
+            уровень и цели.
           </p>
           <ul className="lead-list">
             <li>
               <CheckIcon />
-              <span>Проведём бесплатную карьерную консультацию</span>
+              <span>Бесплатно проконсультируем по обучению</span>
             </li>
             <li>
               <CheckIcon />
-              <span>Расскажем об условиях обучения и помощи с трудоустройством</span>
+              <span>Расскажем, как устроены курсы и проверка знаний</span>
             </li>
             <li>
               <CheckIcon />
-              <span>Поможем выбрать программу с дипломом или сертификатом</span>
+              <span>Подберём курс под ваш уровень</span>
             </li>
             <li>
               <CheckIcon />
-              <span>Покажем кейсы и отзывы наших студентов</span>
+              <span>Ответим на вопросы до начала обучения</span>
             </li>
           </ul>
         </div>
-        <form className="lead-form" onSubmit={onSubmit}>
-          <input className="input" required placeholder="Имя" autoComplete="name" aria-label="Имя" />
+        <form className="lead-form" onSubmit={onSubmit} noValidate={false}>
           <input
             className="input"
             required
+            minLength={2}
+            maxLength={100}
+            placeholder="Имя"
+            autoComplete="name"
+            aria-label="Имя"
+            value={form.name}
+            onChange={(e) => set('name', e.target.value)}
+            disabled={sent}
+          />
+          <input
+            className="input"
+            required
+            type="tel"
             placeholder="Телефон"
             inputMode="tel"
             autoComplete="tel"
             aria-label="Телефон"
+            value={form.phone}
+            onChange={(e) => set('phone', e.target.value)}
+            disabled={sent}
           />
           <input
             className="input"
             type="email"
-            placeholder="Электронная почта"
+            placeholder="Электронная почта (необязательно)"
             autoComplete="email"
             aria-label="Электронная почта"
+            value={form.email}
+            onChange={(e) => set('email', e.target.value)}
+            disabled={sent}
+          />
+          {/* Ловушка для ботов: людям не видна и недоступна с клавиатуры. */}
+          <input
+            className="lead-hp"
+            type="text"
+            name="website"
+            tabIndex={-1}
+            autoComplete="off"
+            aria-hidden="true"
+            value={form.website}
+            onChange={(e) => set('website', e.target.value)}
           />
           <p className="sv-title">Как с вами связаться?</p>
           <div className="contact-grid">
-            {CONTACTS.map((c, i) => (
+            {CONTACTS.map((c) => (
               <label className="contact" key={c.key}>
-                <input type="radio" name="cm" defaultChecked={i === 0} />
+                <input
+                  type="radio"
+                  name="cm"
+                  checked={form.contactMethod === c.key}
+                  onChange={() => set('contactMethod', c.key as LeadContactMethod)}
+                  disabled={sent}
+                />
                 <span className="cm" style={{ background: c.bg }}>
                   {c.glyph}
                 </span>
@@ -564,15 +386,26 @@ export function LeadBlock(): JSX.Element {
             ))}
           </div>
           <label className="consent">
-            <input type="checkbox" required />
+            <input
+              type="checkbox"
+              required
+              checked={form.consent}
+              onChange={(e) => set('consent', e.target.checked)}
+              disabled={sent}
+            />
             <span>Я соглашаюсь на обработку персональных данных</span>
           </label>
-          <button className="btn btn-primary" type="submit" disabled={sent}>
-            {sent ? 'Заявка отправлена' : 'Получить консультацию'}
+          <button className="btn btn-primary" type="submit" disabled={sent || mutation.isPending}>
+            {sent ? 'Заявка отправлена' : mutation.isPending ? 'Отправляем…' : 'Получить консультацию'}
           </button>
+          {mutation.isError && (
+            <p className="error" role="alert">
+              {mutation.error instanceof Error ? mutation.error.message : 'Не удалось отправить заявку'}
+            </p>
+          )}
           {sent && (
-            <p className="sv-small" style={{ color: '#14663A', fontWeight: 800 }}>
-              Заявка отправлена! Перезвоним в течение дня.
+            <p className="sv-small" role="status" style={{ color: '#14663A', fontWeight: 800 }}>
+              Заявка отправлена! Свяжемся с вами в ближайшее время.
             </p>
           )}
         </form>

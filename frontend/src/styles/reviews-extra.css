@@ -235,3 +235,15 @@
     border-bottom: 1px solid var(--line-soft);
   }
 }
+
+@media (max-width: 640px) {
+  /* Строки гистограммы — фильтры по оценке: зона нажатия ≥40px. */
+  .reviews-hist-row {
+    min-height: 40px;
+  }
+
+  .reviews-reset {
+    min-height: 36px;
+    padding: 6px 10px;
+  }
+}

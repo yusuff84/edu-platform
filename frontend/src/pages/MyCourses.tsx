@@ -109,7 +109,7 @@ export default function MyCourses(): JSX.Element {
           <div className="learning-dashboard-intro">
             <span className="learning-dashboard-kicker">Ваше обучение</span>
             <h1>Рады видеть{meQuery.data?.displayName ? `, ${meQuery.data.displayName}` : ' вас'}!</h1>
-            <p>Продолжайте с того места, где остановились. Даже один урок сегодня — шаг вперёд.</p>
+            <p>Продолжайте с того места, где остановились. Даже один урок сегодня — шаг вперёд.</p>
             <Link className="learning-dashboard-all" to="/">Посмотреть каталог <span aria-hidden="true">↗</span></Link>
           </div>
           <div className="learning-dashboard-continue">
@@ -122,7 +122,7 @@ export default function MyCourses(): JSX.Element {
                   <Link className="learning-dashboard-tile" key={item.course.id} to={href}>
                     <span className={`learning-dashboard-tile-art ${coverFor(item.course.slug || item.course.id)}`} aria-hidden="true">▶</span>
                     <span className="learning-dashboard-tile-name">{item.course.title}</span>
-                    <strong>{progress.data ? `${progress.data.percent}% пройдено` : t('common.loading')}</strong>
+                    <strong>{progress.data ? `${progress.data.percent}% пройдено` : t('common.loading')}</strong>
                   </Link>
                 );
               })}

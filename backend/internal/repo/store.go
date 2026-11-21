@@ -60,6 +60,8 @@ type Store struct {
 	// карта удаляет избранное пользователя одной операцией; при удалении
 	// курса его пары вычищаются обходом (зеркало ON DELETE CASCADE).
 	favorites map[string]map[string]time.Time
+	// Заявки на консультацию с главной (leads.go).
+	leads []*Lead
 
 	// lastCreatedAt — источник монотонного времени создания в in-memory
 	// режиме: см. nextCreatedAt.

@@ -11,7 +11,6 @@ import type {
 import CourseCard from '../components/CourseCard';
 import {
   DiplomaBlock,
-  DreamsBlock,
   FinalCta,
   LeadBlock,
   PerksBlock,
@@ -21,6 +20,15 @@ import { t } from '../i18n/t';
 import type { RuKey } from '../i18n/t';
 import { useSeo } from '../app/useSeo';
 import '../styles/catalog.css';
+
+/** Русское склонение после числа: 1 курс, 2 курса, 5 курсов. */
+function pluralWord(n: number, one: string, few: string, many: string): string {
+  const m10 = n % 10;
+  const m100 = n % 100;
+  if (m10 === 1 && m100 !== 11) return one;
+  if (m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14)) return few;
+  return many;
+}
 import '../styles/catalog-filters.css';
 
 /** Размер страницы каталога (контракт: limit по умолч. 20, максимум 100). */
@@ -272,10 +280,10 @@ export default function Catalog(): JSX.Element {
       <section className="hero">
         <div className="hero-card">
           <span className="eyebrow">Маркетплейс IT-курсов · для новичков</span>
-          <h1>Понятные IT-курсы с нуля — с практикой и наставником</h1>
+          <h1>Понятные онлайн-курсы с нуля — в своём темпе</h1>
           <p className="lead">
-            Выберите трек: Python, веб, данные или дизайн. Все программы — с живыми разборами,
-            квизами и кодовыми задачами. Оплата в рублях, возврат в первые 7 дней.
+            Короткие видеоуроки, конспекты и тесты с автоматической проверкой. Учитесь с телефона
+            или компьютера и получайте сертификат по итогам курса.
           </p>
           <div className="hero-cta">
             <button type="button" className="btn btn-primary" onClick={scrollToCards}>
@@ -288,19 +296,25 @@ export default function Catalog(): JSX.Element {
               </Link>
             )}
           </div>
+          {/* Показываем только содержательные цифры: «— средняя оценка» и
+              «0 отзывов» на витрине работают против доверия. */}
           <div className="stats">
             <div>
               <b>{total}</b>
-              <span>курсов в каталоге</span>
+              <span>{pluralWord(total, 'курс', 'курса', 'курсов')} в каталоге</span>
             </div>
-            <div>
-              <b>{avgRating > 0 ? avgRating.toFixed(1).replace('.', ',') : '—'}</b>
-              <span>средняя оценка</span>
-            </div>
-            <div>
-              <b>{totalReviews}</b>
-              <span>отзывов студентов</span>
-            </div>
+            {avgRating > 0 && (
+              <div>
+                <b>{avgRating.toFixed(1).replace('.', ',')}</b>
+                <span>средняя оценка</span>
+              </div>
+            )}
+            {totalReviews > 0 && (
+              <div>
+                <b>{totalReviews}</b>
+                <span>{pluralWord(totalReviews, 'отзыв', 'отзыва', 'отзывов')} студентов</span>
+              </div>
+            )}
           </div>
           <div className="cats">
             <a
@@ -602,7 +616,6 @@ export default function Catalog(): JSX.Element {
 
         <SupportBlock />
         <PerksBlock />
-        <DreamsBlock />
         <DiplomaBlock />
         <FinalCta onChoose={scrollToCards} />
       </div>

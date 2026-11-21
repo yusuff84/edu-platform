@@ -429,3 +429,347 @@
 @media (prefers-reduced-motion: reduce) {
   .quiz-option-card { scroll-behavior: auto; }
 }
+
+/* =====================================================================
+   Мобильный UX обучения: «Продолжить», компактная программа, нижняя
+   панель шагов, единый акцент вместо зелёного/красного разнобоя.
+   ===================================================================== */
+
+/* Один цвет прогресса во всём обучении (было: красный в уроке, синий в карточке). */
+.study-page .progress-bar,
+.study-page .progress i {
+  background: var(--accent, #4635ff);
+}
+
+.study-course-card-percent {
+  color: var(--muted);
+  font-size: 13.5px;
+}
+
+.study-continue {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  width: 100%;
+  margin-top: 6px;
+  text-align: left;
+  white-space: normal;
+}
+
+.study-continue small {
+  font-weight: 600;
+  font-size: 12.5px;
+  opacity: 0.85;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+/* Кнопка «Следующий урок» под уроком: заголовок + название шага. */
+.study-lesson .learn-next-link {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  width: 100%;
+}
+
+.study-lesson .learn-next-link small {
+  color: var(--muted);
+  font-weight: 600;
+}
+
+/* Статус «Урок пройден» вместо повторной кнопки. */
+.lesson-done-note {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 0 0;
+  padding: 10px 16px;
+  border-radius: 999px;
+  background: #e4f5ea;
+  color: #14663a;
+  font-weight: 700;
+}
+
+/* Квиз — акцент сайта вместо зелёного «материального» цвета. */
+.quiz-question-number.is-answered { border-color: var(--accent, #4635ff); }
+.quiz-question-number.is-current { outline-color: var(--accent, #4635ff); }
+.quiz-option-card:hover { border-color: #b9b4ff; }
+.quiz-option-card.is-selected { border-color: var(--accent, #4635ff); background: var(--accent-soft, #eeedff); }
+.quiz-option-card input { accent-color: var(--accent, #4635ff); width: 20px; height: 20px; }
+.quiz-option-card:has(input:focus-visible),
+.learn-link:focus-visible,
+.lesson-pane a:focus-visible,
+.lesson-pane button:focus-visible,
+.lesson-pane textarea:focus-visible,
+.lesson-pane input:focus-visible { outline-color: var(--accent, #4635ff); }
+.quiz-option-card { border-radius: 14px; }
+/* Один вопрос — навигация по номерам не нужна. */
+.quiz-question-nav:has(> :only-child) { display: none; }
+.quiz-controls button:disabled:first-child { visibility: hidden; }
+
+/* Нижняя панель шагов — только на телефоне/планшете. */
+.lesson-bottom-bar {
+  display: none;
+}
+
+@media (max-width: 960px) {
+  /* --- Программа курса: список вместо больших карточек 16:9 ---
+     83 карточки по ~290px давали ~24 000px прокрутки. */
+  .study-overview > h1 {
+    margin-bottom: 18px;
+    font-size: 28px;
+  }
+
+  .study-overview .study-course-card strong {
+    display: none; /* название уже в заголовке страницы */
+  }
+
+  .study-overview .study-course-card {
+    padding: 20px;
+    gap: 10px;
+  }
+
+  .study-overview-module {
+    margin-bottom: 12px;
+  }
+
+  .study-module-toggle {
+    min-height: 60px;
+    padding: 12px 0;
+  }
+
+  .study-overview-cards {
+    grid-template-columns: 1fr !important;
+    gap: 0;
+  }
+
+  .study-overview-lesson {
+    display: grid;
+    grid-template-columns: 56px minmax(0, 1fr);
+    grid-template-areas: 'thumb title' 'thumb kind';
+    align-items: center;
+    column-gap: 14px;
+    row-gap: 2px;
+    padding: 10px 4px;
+    border-radius: 14px;
+    border-bottom: 1px solid var(--line-soft);
+  }
+
+  .study-overview-lesson:hover {
+    transform: none;
+    background: #f7f7f8;
+  }
+
+  .study-overview-visual {
+    grid-area: thumb;
+    width: 56px;
+    height: 56px;
+    aspect-ratio: auto;
+    border-radius: 14px;
+  }
+
+  .study-overview-visual-symbol {
+    font-size: 22px !important;
+  }
+
+  .study-overview-visual.has-video .study-overview-visual-symbol {
+    width: 30px;
+    height: 30px;
+    font-size: 12px !important;
+    padding-left: 2px;
+  }
+
+  .study-overview-done {
+    top: auto;
+    left: auto;
+    right: -4px;
+    bottom: -4px;
+    width: 22px;
+    height: 22px;
+    font-size: 12px;
+    border: 2px solid #fff;
+  }
+
+  .study-overview-lesson strong {
+    grid-area: title;
+    font-size: 14.5px;
+    line-height: 1.35;
+    align-self: end;
+  }
+
+  .study-overview-lesson-kind {
+    grid-area: kind;
+    align-self: start;
+  }
+
+  /* --- Урок --- */
+  .study-lesson .study-page-top {
+    margin-bottom: 14px;
+  }
+
+  .study-lesson > h1 {
+    font-size: 23px;
+    margin-bottom: 12px;
+  }
+
+  .study-lesson .learn-progress {
+    display: none; /* прогресс — в нижней панели */
+  }
+
+  .study-lesson .lesson-pane .panel {
+    padding: 18px 16px 22px;
+    border-radius: 20px;
+  }
+
+  /* Видео — на всю ширину панели, без «рамки в рамке». */
+  .study-lesson .lesson-pane video {
+    width: calc(100% + 32px);
+    max-width: none;
+    margin: 0 -16px 18px;
+    border-radius: 0;
+    max-height: none;
+  }
+
+  .study-lesson .lesson-pane .md {
+    margin: 10px 0 18px;
+    line-height: 1.7;
+  }
+
+  .study-lesson .lesson-pane .md h4 {
+    font-size: 18px;
+    margin: 22px 0 6px;
+  }
+
+  .lesson-complete-btn {
+    width: 100%;
+  }
+
+  /* Квиз: без вложенной рамки вокруг вопроса — ширина под варианты. */
+  .quiz fieldset {
+    border: 0;
+    padding: 0;
+    margin: 0.5rem 0;
+  }
+
+  .quiz legend {
+    font-size: 17px;
+    line-height: 1.4;
+    margin-bottom: 4px;
+  }
+
+  .quiz-option-card {
+    min-height: 52px;
+    padding: 14px;
+    align-items: center;
+  }
+
+  .quiz-controls .btn {
+    flex: 1;
+  }
+
+  /* Карточка курса под уроком дублирует нижнюю панель. */
+  .study-lesson .side-nav {
+    display: none;
+  }
+
+  .lesson-bottom-bar {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 800;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 12px calc(8px + var(--safe-b, 0px));
+    background: rgba(255, 255, 255, 0.96);
+    -webkit-backdrop-filter: blur(12px);
+    backdrop-filter: blur(12px);
+    border-top: 1px solid var(--line);
+  }
+
+  .lbb-btn {
+    display: grid;
+    place-items: center;
+    flex: none;
+    width: 48px;
+    height: 48px;
+    border-radius: 16px;
+    background: #f0f0f3;
+    color: var(--fg);
+    font-size: 22px;
+    font-weight: 700;
+  }
+
+  .lbb-next {
+    background: var(--accent, #4635ff);
+    color: #fff !important;
+  }
+
+  .lbb-btn.is-disabled {
+    opacity: 0.35;
+  }
+
+  .lbb-center {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--fg);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .lbb-progress {
+    display: block;
+    width: 100%;
+    max-width: 200px;
+    height: 5px;
+    border-radius: 999px;
+    background: #ececf0;
+    overflow: hidden;
+  }
+
+  .lbb-progress i {
+    display: block;
+    height: 100%;
+    background: var(--accent, #4635ff);
+    border-radius: inherit;
+  }
+
+  /* Футер в уроке скрыт (app--lesson), но место под панель нужно. */
+  .study-lesson {
+    padding-bottom: 92px;
+  }
+}
+
+@media (max-width: 960px) {
+  .app--lesson .footer {
+    display: none;
+  }
+}
+
+@media (max-width: 960px) {
+  /* inline style={{ maxWidth: '100%' }} у <video> перебивал полноширинный вид. */
+  .study-lesson .lesson-pane video {
+    max-width: none !important;
+  }
+
+  /* Пустая live-область вердикта не должна давать «дыру» под уроком
+     (сама область остаётся в DOM — скринридер объявит результат). */
+  .learn-verdict:empty {
+    min-height: 0;
+    margin: 0;
+  }
+
+  .study-lesson .lesson-pane > p {
+    margin: 14px 0;
+  }
+}

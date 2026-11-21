@@ -300,3 +300,65 @@
     max-width: none;
   }
 }
+
+/* Телефон: таблица курсов — карточками (data-label уже есть у ячеек).
+   Раньше min-width: 760px давал горизонтальный скролл всей страницы. */
+@media (max-width: 720px) {
+  .tstats-table-wrap {
+    border: 0;
+    background: transparent;
+    overflow: visible;
+  }
+
+  .tstats-table,
+  .tstats-table tbody,
+  .tstats-table tr,
+  .tstats-table td {
+    display: block;
+    min-width: 0;
+    width: 100%;
+  }
+
+  .tstats-table thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+  }
+
+  .tstats-table tr {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--r-md);
+    padding: 6px 14px;
+    margin-bottom: 10px;
+  }
+
+  .tstats-table td {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    padding: 9px 0;
+    border-bottom: 1px solid var(--line-soft);
+    text-align: right;
+  }
+
+  .tstats-table tr td:last-child {
+    border-bottom: 0;
+  }
+
+  .tstats-table td::before {
+    content: attr(data-label);
+    color: var(--muted);
+    font-size: 13px;
+    font-weight: 600;
+    text-align: left;
+  }
+
+  .tstats-table td.tstats-td-title {
+    font-weight: 800;
+    font-size: 15.5px;
+  }
+}

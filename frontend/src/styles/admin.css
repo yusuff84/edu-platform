@@ -577,3 +577,90 @@ main.admin {
     gap: 0.1rem;
   }
 }
+
+/* ---------- Заявки на консультацию ---------- */
+.admin-leads-head {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px 16px;
+}
+
+.admin-leads-badge {
+  display: inline-block;
+  vertical-align: middle;
+  margin-left: 6px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: var(--brand);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0;
+}
+
+.admin-leads-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.admin-leads-list {
+  list-style: none;
+  margin: 14px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+}
+
+.admin-lead {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 8px 16px;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+}
+
+.admin-lead.is-done {
+  opacity: 0.6;
+}
+
+.admin-lead-main {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.admin-lead-main a {
+  color: var(--accent, #4635ff);
+  font-weight: 700;
+}
+
+.admin-lead-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+}
+
+@media (max-width: 720px) {
+  .admin-lead {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-lead-main {
+    flex-direction: column;
+  }
+
+  .admin-lead .btn {
+    width: 100%;
+  }
+}

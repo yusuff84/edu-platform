@@ -213,7 +213,9 @@ export default function Reviews({
     <section aria-label={t('reviews.title')} className="panel reviews">
       <h2>{t('reviews.title')}</h2>
 
-      {stats && (
+      {/* Без оценок сводка «0.0 ☆☆☆☆☆ + гистограмма из нулей» занимала
+          пол-экрана телефона и ничего не сообщала — показываем её с первой оценки. */}
+      {stats && ratingsCount > 0 && (
         <div className="reviews-stats">
           <div className="reviews-summary">
             <div className="reviews-avg">{stats.avgRating.toFixed(1)}</div>

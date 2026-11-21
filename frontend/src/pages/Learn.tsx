@@ -317,6 +317,10 @@ export default function Learn(): JSX.Element {
   }
 
   const showLessonNotFound = Boolean(lessonId) && !lessonFromUrl;
+  const continueLesson: FlatLesson | undefined =
+    (serverNextLessonId ? flatLessons.find((l) => l.id === serverNextLessonId) : undefined) ??
+    flatLessons.find((l) => !completedIds.has(l.id)) ??
+    flatLessons[0];
 
   // После ранних return уроки гарантированно есть — activeLesson определён.
   const currentLesson: FlatLesson = activeLesson ?? flatLessons[0];
@@ -337,11 +341,17 @@ export default function Learn(): JSX.Element {
             <aside className="study-course-card">
               <span className="study-course-card-label">Курс</span>
               <strong>{title}</strong>
-              <span>{progress ? `${progress.completedLessons}/${progress.totalLessons} уроков` : t('common.loading')}</span>
+              <span>{progress ? `Пройдено ${progress.completedLessons} из ${progress.totalLessons} уроков` : t('common.loading')}</span>
               <div className="progress" role="progressbar" aria-label={t('learn.progress')} aria-valuemin={0} aria-valuemax={100} aria-valuenow={progress ? percent : undefined} aria-valuetext={progress ? `${percent}%` : t('common.loading')}>
                 <div className="progress-bar" style={{ width: `${percent}%` }} />
               </div>
-              <span>{progress ? `${percent}% пройдено` : t('common.loading')}</span>
+              <span className="study-course-card-percent">{progress ? `${percent}%` : ''}</span>
+              {continueLesson && (
+                <Link className="btn btn-primary study-continue" to={`/learn/${courseId}/${continueLesson.id}`}>
+                  <span>{progress && progress.completedLessons > 0 ? 'Продолжить' : 'Начать обучение'}</span>
+                  <small>{continueLesson.title}</small>
+                </Link>
+              )}
             </aside>
             <div className="study-overview-modules">
               {modules.map((module, moduleIndex) => (
@@ -361,7 +371,7 @@ export default function Learn(): JSX.Element {
                             <span className="study-overview-visual-symbol">{lesson.videoUrl ? '▶' : lesson.kind === 'quiz' ? '?' : '≡'}</span>
                             {done && <span className="study-overview-done">✓</span>}
                           </span>
-                          <span className="study-overview-lesson-kind">{lesson.videoUrl ? 'Видеоурок' : lesson.kind === 'video_text' ? (lesson.bodyMd?.includes('Самостоятельное задание') ? 'Практика' : 'Материал') : t(`kind.${lesson.kind}`)}{done ? ' · Пройдено' : lesson.id === serverNextLessonId ? ' · Следующий урок' : ''}</span>
+                          <span className="study-overview-lesson-kind">{lesson.videoUrl ? 'Видеоурок' : lesson.kind === 'video_text' ? (lesson.bodyMd?.includes('Самостоятельное задание') ? 'Практика' : 'Материал') : t(`kind.${lesson.kind}`)}{done ? ' · Пройдено' : lesson.id === serverNextLessonId ? ' · Следующий урок' : ''}</span>
                           <strong>{lesson.title}</strong>
                         </Link>
                       );
@@ -384,9 +394,9 @@ export default function Learn(): JSX.Element {
         <div className="study-page-top">
           <Link to={`/learn/${courseId}`} className="study-page-back"><span aria-hidden="true">←</span> К программе</Link>
           <nav className="study-lesson-pager" aria-label="Навигация по урокам">
-            {activeIndex > 0 && <Link to={`/learn/${courseId}/${flatLessons[activeIndex - 1].id}`} aria-label="Предыдущий урок" title="Предыдущий урок">←</Link>}
+            {activeIndex > 0 && <Link to={`/learn/${courseId}/${flatLessons[activeIndex - 1].id}`} aria-label="Предыдущий урок" title="Предыдущий урок">←</Link>}
             <span>{activeIndex >= 0 ? `${activeIndex + 1} / ${flatLessons.length}` : '—'}</span>
-            {flatNext && <Link to={`/learn/${courseId}/${flatNext.id}`} aria-label="Следующий урок" title="Следующий урок">→</Link>}
+            {flatNext && <Link to={`/learn/${courseId}/${flatNext.id}`} aria-label="Следующий урок" title="Следующий урок">→</Link>}
           </nav>
         </div>
         <h1>{currentLesson.title}</h1>
@@ -520,6 +530,7 @@ export default function Learn(): JSX.Element {
                   key={currentLesson.id}
                   lesson={currentLesson}
                   completing={mutation.isPending}
+                  done={completedIds.has(currentLesson.id)}
                   onComplete={(payload) => mutation.mutate(payload)}
                 />
 
@@ -562,14 +573,15 @@ export default function Learn(): JSX.Element {
                       className="btn learn-next-link"
                       to={`/learn/${courseId}/${flatNext.id}`}
                     >
-                      {t('learn.continue')}: {flatNext.title}
+                      <span>{t('learn.nextLesson')} →</span>
+                      <small>{flatNext.title}</small>
                     </Link>
                   </p>
                 )}
 
                 {/* T72: Q&A под уроком, после навигации «Отметить пройденным». */}
                 <Questions
-                  key={currentLesson.id}
+                  key={`questions-${currentLesson.id}`}
                   courseId={courseId}
                   lessonId={currentLesson.id}
                   enrolled={Boolean(meCourse)}
@@ -578,6 +590,29 @@ export default function Learn(): JSX.Element {
             )}
           </div>
         </div>
+        {/* Телефон: навигация по шагам всегда под пальцем. */}
+        <nav className="lesson-bottom-bar" aria-label="Навигация по шагам курса">
+          {activeIndex > 0 ? (
+            <Link to={`/learn/${courseId}/${flatLessons[activeIndex - 1].id}`} className="lbb-btn" aria-label="Предыдущий урок">
+              ←
+            </Link>
+          ) : (
+            <span className="lbb-btn is-disabled" aria-hidden="true">←</span>
+          )}
+          <Link to={`/learn/${courseId}`} className="lbb-center" aria-label="К программе курса">
+            <span>{activeIndex >= 0 ? `Шаг ${activeIndex + 1} из ${flatLessons.length}` : 'Программа'}</span>
+            <span className="lbb-progress" aria-hidden="true">
+              <i style={{ width: `${percent}%` }} />
+            </span>
+          </Link>
+          {flatNext ? (
+            <Link to={`/learn/${courseId}/${flatNext.id}`} className="lbb-btn lbb-next" aria-label="Следующий урок">
+              →
+            </Link>
+          ) : (
+            <span className="lbb-btn is-disabled" aria-hidden="true">→</span>
+          )}
+        </nav>
       </main>
     </div>
   );

@@ -381,3 +381,67 @@
   .learning-dashboard-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .learning-dashboard-course { min-height: 270px; }
 }
+
+/* ---------- «Мои курсы» на телефоне ---------- */
+@media (max-width: 620px) {
+  /* Три показателя в один ряд (было 2 + 1 одиночная плитка). */
+  .learning-dashboard .cab-stats {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .learning-dashboard .cab-stats > div {
+    padding: 14px 12px;
+  }
+
+  .learning-dashboard .cab-stats b {
+    font-size: 22px;
+  }
+
+  .learning-dashboard .cab-stats span {
+    font-size: 12px;
+    line-height: 1.3;
+  }
+
+  /* «Продолжить обучение»: плитка — строкой на всю ширину. */
+  .learning-dashboard-tiles {
+    grid-template-columns: 1fr !important;
+  }
+
+  .learning-dashboard-tile {
+    display: grid !important;
+    grid-template-columns: 96px minmax(0, 1fr);
+    grid-template-areas: 'art name' 'art meta';
+    align-items: center;
+    column-gap: 14px;
+    padding: 10px;
+    border-radius: 18px;
+    background: #fff;
+    border: 1px solid var(--line);
+  }
+
+  .learning-dashboard-tile-art {
+    grid-area: art;
+    width: 96px !important;
+    height: 64px !important;
+    aspect-ratio: auto !important;
+    border-radius: 12px;
+  }
+
+  .learning-dashboard-tile-name {
+    grid-area: name;
+    align-self: end;
+    font-weight: 800;
+    font-size: 15px;
+    color: var(--fg);
+  }
+
+  .learning-dashboard-tile > :nth-child(3) {
+    grid-area: meta;
+    align-self: start;
+  }
+
+  .learning-dashboard-course .btn-row .btn {
+    flex: 1;
+  }
+}

@@ -5,7 +5,7 @@ import { useEffect } from 'react';
 
 export const DEFAULT_TITLE = 'skillex.space — IT-курсы для начинающих';
 export const DEFAULT_DESCRIPTION =
-  'Маркетплейс IT-курсов для начинающих: Python, веб, данные и дизайн. Практика, живые разборы, квизы и кодовые задачи. Оплата в рублях, возврат в течение 7 дней.';
+  'Онлайн-курсы для начинающих: короткие видеоуроки, конспекты и тесты с автоматической проверкой. Учитесь в своём темпе и получайте сертификат о прохождении курса.';
 
 function setMetaDescription(content: string): void {
   let meta = document.head.querySelector<HTMLMetaElement>('meta[name="description"]');

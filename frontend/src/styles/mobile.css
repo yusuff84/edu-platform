@@ -1,0 +1,725 @@
+/* Мобильный слой каркаса (подключается последним из main.tsx).
+   Здесь — то, что общее для всех страниц: шапка в одну строку и меню-«бургер»,
+   промо-полоса, футер, поля ввода (16px — iOS не зумит страницу при фокусе),
+   зоны нажатия ≥44px, различимые текстовые ссылки, safe-area для «чёлки».
+   Правки конкретных экранов лежат в их собственных css-файлах. */
+
+:root {
+  --tap: 44px; /* минимальная зона нажатия (Apple HIG / WCAG 2.5.5) */
+  --accent: #4635ff; /* акцент учебных экранов и логотипа (уже используется в шапке) */
+  --accent-soft: #eeedff;
+  --safe-b: env(safe-area-inset-bottom, 0px);
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+body {
+  -webkit-tap-highlight-color: rgba(70, 53, 255, 0.12);
+}
+
+img,
+video {
+  max-width: 100%;
+}
+
+/* ---------- Текстовые ссылки ----------
+   Глобально ссылки «как текст» (решение дизайна). Но ссылка-действие внутри
+   абзаца/подсказки должна быть видна: даём ей цвет акцента и вес. */
+.page p a:not(.btn),
+.page li a:not(.btn),
+.auth-links a,
+.shell-center p a,
+.form-links a,
+.crumbs a {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.page p a:not(.btn):hover,
+.page li a:not(.btn):hover,
+.crumbs a:hover {
+  color: #2f1fe0;
+}
+
+/* Подписи в «хлебных крошках» и цене — не ссылки, остаются нейтральными. */
+.crumbs {
+  color: var(--muted);
+}
+
+/* ---------- Промо-полоса ---------- */
+.promo {
+  position: relative;
+  padding-right: 48px;
+}
+
+.promo-close {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: var(--tap);
+  height: var(--tap);
+  border: 0;
+  background: transparent;
+  color: #141414;
+  font-size: 24px;
+  line-height: 1;
+  border-radius: 50%;
+  cursor: pointer;
+}
+
+.promo-close:hover {
+  background: rgba(0, 0, 0, 0.08);
+}
+
+/* ---------- Кнопка меню («бургер») и панель ---------- */
+.mnav-toggle {
+  display: none;
+  position: relative;
+  width: var(--tap);
+  height: var(--tap);
+  flex: none;
+  border: 1px solid #e5e5e5;
+  border-radius: 14px;
+  background: #fff;
+  cursor: pointer;
+  padding: 0;
+}
+
+.mnav-toggle span {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--fg);
+  transition: transform 0.2s, opacity 0.2s, top 0.2s;
+}
+
+.mnav-toggle span:nth-child(1) { top: 14px; }
+.mnav-toggle span:nth-child(2) { top: 20.5px; }
+.mnav-toggle span:nth-child(3) { top: 27px; }
+.mnav-toggle.is-open span:nth-child(1) { top: 20.5px; transform: rotate(45deg); }
+.mnav-toggle.is-open span:nth-child(2) { opacity: 0; }
+.mnav-toggle.is-open span:nth-child(3) { top: 20.5px; transform: rotate(-45deg); }
+
+.mnav-backdrop {
+  display: none;
+}
+
+.mnav-panel[hidden] {
+  display: none !important;
+}
+
+@media (max-width: 960px) {
+  .mnav-toggle {
+    display: inline-block;
+  }
+
+  /* Шапка — одна строка: логотип слева, справа «Войти» (гость) и меню. */
+  .topbar-in {
+    flex-wrap: nowrap;
+    min-height: 60px;
+    gap: 10px;
+  }
+
+  .topbar .logo {
+    font-size: 20px;
+    gap: 9px;
+    min-width: 0;
+  }
+
+  .topbar .logo-mark {
+    width: 34px;
+    height: 34px;
+    font-size: 18px;
+  }
+
+  .top-actions {
+    gap: 8px;
+  }
+
+  /* Email/«Выйти»/«Начать учиться» переезжают в меню. */
+  .top-actions .user-email,
+  .top-actions .top-logout,
+  .top-actions .top-start {
+    display: none;
+  }
+
+  .top-actions .top-login {
+    min-height: var(--tap);
+    padding: 0 16px;
+  }
+
+  .topbar {
+    position: sticky;
+    top: 0;
+    z-index: 900;
+  }
+
+  .mnav-backdrop.is-open {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 950;
+    background: rgba(20, 20, 20, 0.38);
+    animation: mnav-fade 0.18s ease-out;
+  }
+
+  .mnav-panel.is-open {
+    position: fixed;
+    z-index: 960;
+    top: 8px;
+    right: 8px;
+    left: 8px;
+    max-height: calc(100dvh - 16px);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    background: #fff;
+    border-radius: 22px;
+    box-shadow: 0 24px 60px -12px rgba(20, 20, 20, 0.35);
+    padding: 12px 12px calc(16px + var(--safe-b));
+    animation: mnav-in 0.2s ease-out;
+  }
+
+  .mnav-user {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 10px 14px;
+    margin-bottom: 6px;
+    border-bottom: 1px solid #eee;
+    min-width: 0;
+    padding-right: 56px; /* место под крестик-бургер, который остаётся сверху */
+  }
+
+  .mnav-avatar {
+    display: grid;
+    place-items: center;
+    flex: none;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background: var(--accent);
+    color: #fff;
+    font-weight: 800;
+  }
+
+  .mnav-user-text {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    font-size: 14px;
+    line-height: 1.35;
+  }
+
+  .mnav-user-text span {
+    color: var(--muted);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .mnav-panel nav {
+    display: grid;
+    gap: 2px;
+  }
+
+  .mnav-link {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    min-height: 52px;
+    padding: 0 12px;
+    border-radius: 14px;
+    font-weight: 700;
+    font-size: 16px;
+    color: var(--fg);
+  }
+
+  .mnav-link:hover,
+  .mnav-link:focus-visible {
+    background: #f4f4f6;
+  }
+
+  .mnav-link.active {
+    background: var(--accent-soft);
+    color: var(--accent);
+  }
+
+  .mnav-icon {
+    display: grid;
+    place-items: center;
+    width: 32px;
+    height: 32px;
+    border-radius: 10px;
+    background: #f2f2f4;
+    font-size: 15px;
+    flex: none;
+  }
+
+  .mnav-link.active .mnav-icon {
+    background: #fff;
+  }
+
+  .mnav-actions {
+    display: grid;
+    gap: 8px;
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid #eee;
+  }
+
+  .mnav-actions .btn {
+    width: 100%;
+  }
+
+  .mnav-close {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    width: var(--tap);
+    height: var(--tap);
+    border: 0;
+    border-radius: 50%;
+    background: #f2f2f4;
+    color: var(--fg);
+    font-size: 26px;
+    line-height: 1;
+    cursor: pointer;
+  }
+
+  .mnav-panel.is-open nav {
+    margin-top: 4px;
+  }
+
+  /* У гостя нет блока учётки — отступ под крестик даёт сама навигация. */
+  .mnav-panel.is-open > nav:nth-child(2) {
+    padding-top: 52px;
+  }
+
+  /* Промо: одна компактная строка, ссылка-«пилюля» справа. */
+  .promo {
+    flex-wrap: nowrap;
+    justify-content: flex-start;
+    text-align: left;
+    gap: 10px;
+    font-size: 13px;
+    padding: 8px 48px 8px 16px;
+    line-height: 1.3;
+  }
+
+  .promo a {
+    flex: none;
+    padding: 7px 12px;
+    font-size: 12.5px;
+  }
+}
+
+@media (max-width: 380px) {
+  .promo a {
+    display: none;
+  }
+}
+
+@keyframes mnav-fade {
+  from { opacity: 0; }
+}
+
+@keyframes mnav-in {
+  from { opacity: 0; transform: translateY(-8px) scale(0.98); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mnav-panel.is-open,
+  .mnav-backdrop.is-open,
+  .mnav-toggle span {
+    animation: none;
+    transition: none;
+  }
+}
+
+/* ---------- Футер ----------
+   Баг: .footer-in { padding: 44px 0 40px } перебивал боковые отступы .wrap —
+   на телефоне текст футера прилипал к краю экрана. */
+.footer-in {
+  padding-left: 28px;
+  padding-right: 28px;
+}
+
+.footer .contact-line a {
+  display: inline;
+  padding: 0;
+}
+
+.footer .contact-line small,
+.footer .contact-line b {
+  display: block;
+}
+
+@media (max-width: 960px) {
+  .footer-in {
+    grid-template-columns: 1fr 1fr;
+    gap: 28px 20px;
+  }
+
+  .footer-brand {
+    grid-column: 1 / -1;
+  }
+
+  .footer-brand p {
+    max-width: 46ch;
+  }
+}
+
+@media (max-width: 560px) {
+  .footer-in {
+    padding: 32px 16px calc(28px + var(--safe-b));
+  }
+
+  /* Ссылки футера — полноценные зоны нажатия. */
+  .footer a {
+    padding: 10px 0;
+    font-size: 15px;
+  }
+
+  .footer b {
+    margin-bottom: 4px;
+  }
+}
+
+/* ---------- Поля ввода и контролы ---------- */
+@media (max-width: 960px) {
+  /* 16px — порог, ниже которого iOS Safari зумит страницу при фокусе. */
+  input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='file']),
+  select,
+  textarea,
+  .input {
+    font-size: 16px !important;
+  }
+
+  input[type='checkbox'],
+  input[type='radio'] {
+    width: 20px;
+    height: 20px;
+    flex: none;
+  }
+}
+
+/* ---------- Мелочи каркаса ---------- */
+@media (max-width: 960px) {
+  .crumbs {
+    font-size: 13.5px;
+    overflow-wrap: anywhere;
+  }
+
+  .crumbs a {
+    display: inline-block;
+    padding: 10px 0;
+  }
+
+  /* Ховер-подъём кнопок на тач-экранах «залипает» после тапа. */
+  .btn:hover {
+    transform: none;
+  }
+}
+
+@media (hover: none) {
+  .btn:hover {
+    transform: none;
+    box-shadow: none;
+  }
+
+  .btn-primary:hover {
+    box-shadow: 0 10px 22px -8px rgba(230, 50, 35, 0.55);
+  }
+}
+
+/* ---------- Формы входа/регистрации ---------- */
+.page .panel > h1 + .form-grid,
+.page .panel > h1 + p,
+.page .panel > h1 + form {
+  margin-top: 18px;
+}
+
+.pw-wrap {
+  position: relative;
+}
+
+.pw-wrap .input {
+  width: 100%;
+  padding-right: 96px;
+}
+
+.pw-toggle {
+  position: absolute;
+  right: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  min-height: 40px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--accent);
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.pw-toggle:hover {
+  background: var(--accent-soft);
+}
+
+.auth-links {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 6px 16px;
+  margin-top: 18px;
+  font-size: 14.5px;
+  color: var(--muted);
+}
+
+.auth-links a {
+  display: inline-block;
+  padding: 6px 0;
+}
+
+.invite-details {
+  border-radius: 14px;
+}
+
+.invite-details > summary {
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 600;
+  padding: 10px 0;
+  list-style-position: inside;
+}
+
+.invite-details[open] > summary {
+  margin-bottom: 6px;
+}
+
+@media (max-width: 960px) {
+  .form-grid .btn[type='submit'],
+  .form-grid button[type='submit'] {
+    width: 100%;
+  }
+
+  .auth-links {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}
+
+/* Логотип в футере: глобальное `.footer a { display:block }` ломало флекс —
+   знак «S» уезжал над названием. */
+.footer a.logo {
+  display: inline-flex;
+  padding: 0;
+  margin-bottom: 4px;
+}
+
+/* ---------- Главная (лендинг + каталог) ---------- */
+@media (max-width: 620px) {
+  .hero .eyebrow {
+    font-size: 11px;
+    letter-spacing: 0.04em;
+    padding: 8px 14px;
+  }
+
+  .hero h1 {
+    font-size: 32px !important;
+  }
+
+  .hero .lead {
+    font-size: 15.5px;
+  }
+
+  .hero .stats {
+    gap: 22px;
+  }
+
+  /* Вкладки «Создаём опору»: вертикальная стопка в «пилюле» превращалась
+     в овал. На телефоне — горизонтальная лента с прокруткой. */
+  .support-card {
+    padding: 22px 16px 26px;
+    border-radius: 24px;
+  }
+
+  .support-card .seg {
+    display: flex;
+    flex-wrap: nowrap;
+    justify-content: flex-start;
+    overflow-x: auto;
+    scrollbar-width: none;
+    border-radius: 999px;
+    max-width: 100%;
+    margin-top: 0;
+    scroll-snap-type: x proximity;
+  }
+
+  .support-card .seg::-webkit-scrollbar {
+    display: none;
+  }
+
+  .support-card .seg button {
+    flex: none;
+    padding: 11px 18px;
+    font-size: 14px;
+    white-space: nowrap;
+    scroll-snap-align: start;
+  }
+
+  /* «Сделайте первый шаг…» — 5–6 огромных карточек подряд (по 340px)
+     давали лишние экраны прокрутки: на телефоне — лента с прокруткой вбок. */
+  .dreams-row {
+    display: flex !important;
+    gap: 12px;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    margin: 24px -16px 0;
+    padding: 0 16px 8px;
+    scrollbar-width: none;
+  }
+
+  .dreams-row::-webkit-scrollbar {
+    display: none;
+  }
+
+  .dreams-row > * {
+    flex: 0 0 72%;
+    scroll-snap-align: center;
+  }
+
+  .dream,
+  .dream.hot {
+    min-height: 260px !important;
+  }
+
+  /* Финальный призыв: декоративные картинки наезжали на заголовок. */
+  .cta {
+    padding: 56px 16px 64px;
+  }
+
+  .cta-f1,
+  .cta-f2 {
+    display: none;
+  }
+
+  .cta-f3 {
+    width: 52px !important;
+    left: 4% !important;
+    bottom: 4%;
+    top: auto;
+    opacity: 0.8;
+  }
+
+  .cta h2 {
+    font-size: 30px;
+  }
+
+  .lead-card {
+    padding: 26px 18px !important;
+  }
+
+  .search-row .input {
+    min-width: 0;
+  }
+}
+
+/* .btn-ghost (белый текст) рассчитан на цветной фон. На светлых страницах
+   (кабинет преподавателя, сертификат, отзывы) кнопка была почти невидимой. */
+.page .btn-ghost {
+  background: #fff;
+  border-color: #e2e0da;
+  color: var(--fg);
+}
+
+.page .btn-ghost:hover {
+  background: #f6f5f1;
+  border-color: #cfccc4;
+  color: var(--fg);
+}
+
+.page .hero .btn-ghost {
+  background: rgba(255, 255, 255, 0.16);
+  border-color: rgba(255, 255, 255, 0.55);
+  color: #fff;
+}
+
+@media (max-width: 400px) {
+  .ac-sort {
+    flex-wrap: wrap;
+  }
+}
+
+/* Поле-ловушка формы заявки: недоступно людям, видно только ботам. */
+.lead-hp {
+  position: absolute !important;
+  left: -10000px !important;
+  width: 1px !important;
+  height: 1px !important;
+  opacity: 0 !important;
+}
+
+/* «Как устроено обучение»: простая карточка вместо макета с выдуманными
+   кураторами, рейтингами и офферами. */
+.support-visual--simple {
+  display: grid;
+  place-items: center;
+  min-height: 260px;
+  border-radius: 24px;
+  background: linear-gradient(135deg, #eeedff, #f6f1ff);
+}
+
+.svis-simple {
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+  padding: 28px 32px;
+  border-radius: 22px;
+  background: #fff;
+  box-shadow: var(--shadow);
+  text-align: center;
+  animation: svis-in 0.25s ease-out;
+}
+
+.svis-simple .sv-title,
+.svis-simple .sv-small {
+  margin: 0;
+}
+
+.svis-simple-icon {
+  display: grid;
+  place-items: center;
+  width: 56px;
+  height: 56px;
+  margin-bottom: 6px;
+  border-radius: 18px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 24px;
+  font-weight: 800;
+}
+
+@keyframes svis-in {
+  from { opacity: 0; transform: translateY(6px); }
+}
+
+@media (max-width: 620px) {
+  .support-visual--simple {
+    min-height: 180px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .svis-simple { animation: none; }
+}

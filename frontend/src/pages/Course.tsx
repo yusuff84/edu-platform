@@ -51,6 +51,15 @@ function coverFor(key: string): string {
 
 const ALL_CLOSED = '__closed';
 
+/** Тип шага для программы: «Видео + текст» на текстовом шаге вводил в заблуждение. */
+function lessonKindLabel(l: Lesson): string {
+  if (l.kind === 'video_text') {
+    if (l.videoUrl) return 'Видео';
+    if (l.bodyMd) return 'Текст';
+  }
+  return t(`kind.${l.kind}`);
+}
+
 export default function Course(): JSX.Element {
   // slug — человекоприятный слаг из URL, не UUID; контракт: GET /courses/{slug}.
   const { slug = '' } = useParams();
@@ -279,6 +288,57 @@ export default function Course(): JSX.Element {
   const showPromo =
     Boolean(user) && !owned && !myQuery.isLoading && course.priceCents > 0;
 
+  const isFree = course.priceCents === 0;
+  const ratingsCount = course.ratingsCount ?? 0;
+  /**
+   * Основное действие страницы — одно и то же в hero, в карточке покупки и
+   * в нижней панели на телефоне: гость → регистрация (с возвратом сюда),
+   * вошедший без записи → запись/покупка, записанный → к обучению.
+   */
+  const renderCta = (extraClass = ''): JSX.Element | null => {
+    const cls = `btn btn-primary${extraClass ? ` ${extraClass}` : ''}`;
+    if (owned) {
+      return (
+        <Link className={cls} to={`/learn/${course.id}`}>
+          {t('course.openLearn')}
+        </Link>
+      );
+    }
+    if (!user) {
+      if (meQuery.isLoading) return null;
+      return (
+        <Link className={cls} to="/register" state={{ from: `/courses/${course.slug}` }}>
+          {isFree ? t('course.enrollFree') : t('course.buy')}
+        </Link>
+      );
+    }
+    if (myQuery.isLoading) return null;
+    return (
+      <button
+        type="button"
+        className={cls}
+        onClick={() =>
+          buyMutation.mutate({
+            courseId: course.id,
+            promoCode: promoValidation?.code,
+          })
+        }
+        disabled={buyMutation.isPending}
+      >
+        {buyMutation.isPending
+          ? t('course.buying')
+          : isFree
+            ? t('course.enrollFree')
+            : promoValidation
+              ? `${t('p8.checkout.buyFor')} ${formatMoney(promoValidation.finalPriceCents)}`
+              : t('course.buy')}
+      </button>
+    );
+  };
+  const priceLabel = promoValidation
+    ? formatPrice(promoValidation.finalPriceCents)
+    : formatPrice(course.priceCents);
+
   return (
     <div className="wrap">
       <main className="page course-overview">
@@ -291,9 +351,12 @@ export default function Course(): JSX.Element {
             <h1>{course.title}</h1>
             <p>{course.description}</p>
             <div className="course-overview-hero-meta">
+              {isFree && <span className="course-overview-free">Бесплатно</span>}
               <span>{modulesCount} {pluralRu(modulesCount, t('plural.module.one'), t('plural.module.few'), t('plural.module.many'))}</span>
               <span>{lessonsCount} {pluralRu(lessonsCount, t('plural.lesson.one'), t('plural.lesson.few'), t('plural.lesson.many'))}</span>
+              {ratingsCount > 0 && <span>★ {(course.avgRating ?? 0).toFixed(1)} · {ratingsCount}</span>}
             </div>
+            <div className="course-overview-hero-cta">{renderCta()}</div>
           </div>
           <div className="course-overview-hero-art" aria-hidden="true">{coverSrc ? <img src={coverSrc} alt="" /> : <span>✦</span>}</div>
         </section>
@@ -324,7 +387,7 @@ export default function Course(): JSX.Element {
                 <span className="pill">Курс</span>
               </div>
               {coverSrc && (
-                <img className="cover-hero" src={coverSrc} alt={t('p7.cover.alt')} />
+                <img className="cover-hero" src={coverSrc} alt={t('p7.cover.alt')} loading="lazy" />
               )}
               <h2 className="course-overview-details-title">О курсе</h2>
               <p className="muted">{course.description}</p>
@@ -333,8 +396,12 @@ export default function Course(): JSX.Element {
                 <Link to={`/teachers/${course.teacherId}`}>{t('p9.teacher.openProfile')}</Link>
               </p>
               <div className="meta">
-                <span className="rating">★ {(course.avgRating ?? 0).toFixed(1)}</span>
-                <span>({course.ratingsCount ?? 0})</span>
+                {ratingsCount > 0 && (
+                  <>
+                    <span className="rating">★ {(course.avgRating ?? 0).toFixed(1)}</span>
+                    <span>({ratingsCount})</span>
+                  </>
+                )}
                 <span>
                   {lessonsCount}{' '}
                   {pluralRu(
@@ -404,7 +471,7 @@ export default function Course(): JSX.Element {
                                 {l.isPreview && (
                                   <span className="preview-badge">{t('p9.preview.badge')}</span>
                                 )}
-                                <span className="pill">{t(`kind.${l.kind}`)}</span>
+                                <span className="pill">{lessonKindLabel(l)}</span>
                               </Link>
                             ) : (
                               <div key={l.id} className="lesson-link preview-lesson-row">
@@ -412,7 +479,7 @@ export default function Course(): JSX.Element {
                                 {l.isPreview && (
                                   <span className="preview-badge">{t('p9.preview.badge')}</span>
                                 )}
-                                <span className="pill">{t(`kind.${l.kind}`)}</span>
+                                <span className="pill">{lessonKindLabel(l)}</span>
                                 {l.isPreview && (
                                   <button
                                     type="button"
@@ -433,6 +500,7 @@ export default function Course(): JSX.Element {
               </div>
             </section>
 
+            {course.category === 'programming' && (
             <section className="panel">
               <h2>Чему вы научитесь</h2>
               <div className="outcomes">
@@ -442,6 +510,7 @@ export default function Course(): JSX.Element {
                 <div>✓ Задавать вопросы куратору</div>
               </div>
             </section>
+            )}
 
             <Reviews courseId={course.id} canReply={isAuthor || isAdmin} />
 
@@ -536,42 +605,30 @@ export default function Course(): JSX.Element {
               </div>
             )}
 
+            {renderCta('buybox-cta')}
             {!user && !meQuery.isLoading && (
-              <p className="muted">{t('course.loginToBuy')}</p>
-            )}
-            {user && !owned && !myQuery.isLoading && (
-              <button
-                type="button"
-                className="btn btn-primary"
-                onClick={() =>
-                  buyMutation.mutate({
-                    courseId: course.id,
-                    promoCode: promoValidation?.code,
-                  })
-                }
-                disabled={buyMutation.isPending}
-              >
-                {buyMutation.isPending
-                  ? t('course.buying')
-                  : course.priceCents === 0
-                    ? t('course.enrollFree')
-                    : promoValidation
-                      ? `${t('p8.checkout.buyFor')} ${formatMoney(promoValidation.finalPriceCents)}`
-                      : t('course.buy')}
-              </button>
-            )}
-            {owned && (
-              <Link className="btn btn-primary" to={`/learn/${course.id}`}>
-                {t('course.openLearn')}
-              </Link>
+              <p className="muted buybox-hint">
+                {isFree ? 'Создайте аккаунт за минуту — и начинайте сразу.' : t('course.loginToBuy')}
+              </p>
             )}
             {message && (
               <p role="status" aria-live="polite">
                 {message}
               </p>
             )}
-            <p className="notice">Возврат в течение 7 дней без лишних вопросов.</p>
+            {!isFree && <p className="notice">Возврат в течение 7 дней без лишних вопросов.</p>}
           </aside>
+        </div>
+
+        {/* Телефон: цена и основное действие всегда под пальцем. */}
+        <div className="course-sticky-cta" role="region" aria-label="Запись на курс">
+          <div className="course-sticky-price">
+            <b>{owned ? 'Вы записаны' : priceLabel}</b>
+            <span>
+              {lessonsCount} {pluralRu(lessonsCount, t('plural.lesson.one'), t('plural.lesson.few'), t('plural.lesson.many'))}
+            </span>
+          </div>
+          {renderCta()}
         </div>
 
         {/* T76: модалка публичного превью урока. Закрытие — крестик, фон или
@@ -637,7 +694,7 @@ export default function Course(): JSX.Element {
                 <div className="preview-body">
                   <div className="preview-meta">
                     <span className="preview-badge">{t('p9.preview.badge')}</span>
-                    <span className="pill">{t(`kind.${previewQuery.data.lesson.kind}`)}</span>
+                    <span className="pill">{lessonKindLabel(previewQuery.data.lesson)}</span>
                   </div>
                   <h3 className="preview-lesson-title">{previewQuery.data.lesson.title}</h3>
                   <p className="preview-hint">{t('p9.preview.hint')}</p>
@@ -646,6 +703,7 @@ export default function Course(): JSX.Element {
                     <video
                       className="preview-video"
                       controls
+                      playsInline
                       preload="metadata"
                       src={previewQuery.data.lesson.videoUrl}
                     >

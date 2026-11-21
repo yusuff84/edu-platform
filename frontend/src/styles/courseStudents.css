@@ -339,3 +339,10 @@
     min-width: 8rem;
   }
 }
+
+/* Полоса прогресса в карточке ученика схлопывалась до нуля
+   (flex-колонка с align-items: flex-end и без ширины у .progress). */
+.cs-progress .progress {
+  width: 100%;
+  align-self: stretch;
+}

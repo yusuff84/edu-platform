@@ -245,6 +245,9 @@ func NewRouter(app *App) http.Handler {
 		// T73: избранные курсы — PUT/DELETE /me/favorites/{courseId},
 		// GET /me/favorites (handler/favorites.go).
 		app.RegisterFavoritesRoutes(r)
+		// Заявки «Поможем подобрать курс»: POST /leads (публично, с лимитом),
+		// GET /admin/leads и POST /admin/leads/{id}/status (handler/leads.go).
+		app.RegisterLeadsRoutes(r)
 	})
 	return r
 }

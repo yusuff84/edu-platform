@@ -1,4 +1,4 @@
-import { Suspense, lazy, useCallback, useEffect } from 'react';
+import { Suspense, lazy, useCallback, useEffect, useState } from 'react';
 import { Link, NavLink, Navigate, Outlet, createBrowserRouter, useLocation } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { getPublicSettings, logout } from '../api/client';
@@ -14,6 +14,9 @@ const VerifyEmail = lazy(() => import('../pages/AccountRecovery').then(module =>
 import { ErrorBoundary, RouteError } from '../components/ErrorBoundary';
 import { RequireAuth, RequireRole, meQueryOptions } from '../components/RouteGuards';
 import '../styles/shell.css';
+import { MobileNav, navItems } from '../components/MobileNav';
+
+const PROMO_DISMISS_KEY = 'skx-promo-dismissed';
 
 // T18: route-based code splitting. Каталог, страница курса и вход остаются
 // статическими — это первый экран анонимного посетителя, он не должен ждать
@@ -80,6 +83,7 @@ function Layout(): JSX.Element {
   // используют общие meQueryOptions — без второго запроса и «моргания».
   const meQuery = useQuery(meQueryOptions);
   const user = meQuery.data;
+  const location = useLocation();
 
   // Пост-P7: промо-баннер — тогл из админки, поэтому спрашиваем бэкенд, а не
   // рендерим всегда. Флаг публичный (доступен без сессии); пока не ответил —
@@ -98,65 +102,70 @@ function Layout(): JSX.Element {
     await setSessionUser(qc, null);
   }, [qc]);
 
+  // Промо-полоса: закрывается крестиком (запоминаем в браузере) и не
+  // показывается там, где мешает фокусу — в уроке и на экранах входа.
+  const [promoDismissed, setPromoDismissed] = useState<boolean>(() => {
+    try {
+      return window.localStorage.getItem(PROMO_DISMISS_KEY) === '1';
+    } catch {
+      return false;
+    }
+  });
+  const hidePromoHere = /^\/(learn|login|register|forgot-password|reset-password|verify-email)(\/|$)/.test(
+    location.pathname,
+  );
+  const showPromo = Boolean(promoQuery.data?.promoBarEnabled) && !promoDismissed && !hidePromoHere;
+  const dismissPromo = (): void => {
+    setPromoDismissed(true);
+    try {
+      window.localStorage.setItem(PROMO_DISMISS_KEY, '1');
+    } catch {
+      /* приватный режим — просто скрываем до перезагрузки */
+    }
+  };
+  // В уроке футер не нужен: ниже урока — нижняя панель навигации по шагам.
+  const isLesson = /^\/learn\/[^/]+\/[^/]+/.test(location.pathname);
+  const isAuthor = user?.role === 'teacher' || user?.role === 'admin';
+
   return (
-    <div>
+    <div className={isLesson ? 'app app--lesson' : 'app'}>
       <ScrollToTop />
       <a href="#content" className="sr-only">
         {t('a11y.skipToContent')}
       </a>
-      {promoQuery.data?.promoBarEnabled && (
+      {showPromo && (
         <div className="promo">
-          <span>Первый курс со скидкой 20% для новых студентов</span>
+          <span>Начните учиться бесплатно — регистрация займёт минуту</span>
           <Link to="/">Выбрать курс</Link>
+          <button type="button" className="promo-close" aria-label="Скрыть предложение" onClick={dismissPromo}>
+            ×
+          </button>
         </div>
       )}
       <header className="topbar">
         <div className="wrap topbar-in">
-          <Link className="logo" to="/">
+          <Link className="logo" to="/" aria-label="skillex.space — на главную">
             <span className="logo-mark" aria-hidden="true">S</span>skillex.space
           </Link>
-          <nav className="nav" aria-label={t('nav.catalog')}>
-            <NavLink to="/" end className={({ isActive }) => (isActive ? 'active' : '')}>
-              {t('nav.catalog')}
-            </NavLink>
-            {/* «Мои курсы» (/me) — за гвардом RequireAuth: гостю ссылку не показываем. */}
-            {user && (
-              <NavLink to="/me" className={({ isActive }) => (isActive ? 'active' : '')}>
-                {t('nav.myCourses')}
-              </NavLink>
-            )}
-            {/* T74: «Избранное» — рядом с «Мои курсы», только вошедшим. */}
-            {user && (
+          <nav className="nav" aria-label="Основная навигация">
+            {navItems(user).map((item) => (
               <NavLink
-                to="/me/favorites"
+                key={item.to}
+                to={item.to}
+                end={item.end}
                 className={({ isActive }) => (isActive ? 'active' : '')}
               >
-                {t('p9.fav.title')}
+                {item.label}
               </NavLink>
-            )}
-            {user && (
-              <NavLink to="/profile" className={({ isActive }) => (isActive ? 'active' : '')}>
-                {t('nav.profile')}
-              </NavLink>
-            )}
-            {(user?.role === 'teacher' || user?.role === 'admin') && (
-              <NavLink to="/teach" className={({ isActive }) => (isActive ? 'active' : '')}>
-                {t('nav.teach')}
-              </NavLink>
-            )}
-            {user?.role === 'admin' && (
-              <NavLink to="/admin" className={({ isActive }) => (isActive ? 'active' : '')}>
-                {t('nav.admin')}
-              </NavLink>
-            )}
+            ))}
           </nav>
           <div className="top-actions">
             {user ? (
               <>
-                <span className="user-email">{user.email}</span>{' '}
+                <span className="user-email" title={user.email}>{user.email}</span>{' '}
                 <button
                   type="button"
-                  className="btn btn-ghost btn-sm"
+                  className="btn btn-ghost btn-sm top-logout"
                   onClick={() => void onLogout()}
                 >
                   {t('nav.logout')}
@@ -164,14 +173,15 @@ function Layout(): JSX.Element {
               </>
             ) : (
               <>
-                <Link className="btn btn-ghost btn-sm" to="/login">
+                <Link className="btn btn-ghost btn-sm top-login" to="/login">
                   {t('nav.login')}
                 </Link>
-                <Link className="btn btn-primary btn-sm" to="/register">
+                <Link className="btn btn-primary btn-sm top-start" to="/register">
                   Начать учиться
                 </Link>
               </>
             )}
+            <MobileNav user={user} onLogout={onLogout} />
           </div>
         </div>
       </header>
@@ -187,7 +197,7 @@ function Layout(): JSX.Element {
       </div>
       <footer className="footer">
         <div className="wrap footer-in">
-          <div>
+          <div className="footer-brand">
             <Link className="logo" to="/">
               <span className="logo-mark" aria-hidden="true">S</span>skillex.space
             </Link>
@@ -198,19 +208,19 @@ function Layout(): JSX.Element {
               </small>
             </p>
             <p className="contact-line">
-              <b>8 (800) 600-78-47</b>
-              <br />
-              <small>hello@edu-platform.ru · Москва</small>
+              <a href="tel:88006007847"><b>8 (800) 600-78-47</b></a>
+              <a href="mailto:hello@edu-platform.ru"><small>hello@edu-platform.ru</small></a>
+              <small>Москва</small>
             </p>
             <small>© skillex.space, 2026</small>
           </div>
           <div>
             <b>Направления</b>
-            <Link to="/">Программирование</Link>
-            <Link to="/">Дизайн</Link>
-            <Link to="/">Данные</Link>
-            <Link to="/">Маркетинг</Link>
-            <Link to="/">Нейросети</Link>
+            <Link to="/?category=programming">Программирование</Link>
+            <Link to="/?category=design">Дизайн</Link>
+            <Link to="/?category=data">Данные</Link>
+            <Link to="/?category=marketing">Маркетинг</Link>
+            <Link to="/?category=ai">Нейросети</Link>
             <Link to="/">Все курсы</Link>
           </div>
           <div>
@@ -218,7 +228,10 @@ function Layout(): JSX.Element {
             <Link to="/">Каталог</Link>
             {/* Авторизационные ссылки — по состоянию сессии, как в шапке. */}
             {user ? (
-              <Link to="/me">Мои курсы</Link>
+              <>
+                <Link to="/me">Мои курсы</Link>
+                <Link to="/profile">Профиль</Link>
+              </>
             ) : (
               <>
                 <Link to="/login">Вход</Link>
@@ -226,12 +239,14 @@ function Layout(): JSX.Element {
               </>
             )}
           </div>
-          <div>
-            <b>Авторам</b>
-            <Link to="/teach">Конструктор курса</Link>
-            <Link to="/admin">Модерация</Link>
-            <Link to="/admin">Приглашения</Link>
-          </div>
+          {isAuthor && (
+            <div>
+              <b>Авторам</b>
+              <Link to="/teach">Конструктор курса</Link>
+              {user?.role === 'admin' && <Link to="/admin">Модерация</Link>}
+              {user?.role === 'admin' && <Link to="/admin">Приглашения</Link>}
+            </div>
+          )}
         </div>
       </footer>
     </div>

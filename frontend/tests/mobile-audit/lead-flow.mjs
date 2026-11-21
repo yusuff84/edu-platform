@@ -1,0 +1,35 @@
+// Заявка с главной на телефоне → появляется в админке.
+import { chromium, devices } from '@playwright/test';
+const base = process.argv[2] ?? 'http://127.0.0.1:3000';
+const out = process.argv[3];
+const browser = await chromium.launch(process.env.AUDIT_CHANNEL ? { channel: process.env.AUDIT_CHANNEL } : {});
+const ctx = await browser.newContext({ ...devices['iPhone 13'], locale: 'ru-RU' });
+const page = await ctx.newPage();
+const name = 'Тест ' + Date.now().toString().slice(-5);
+await page.goto(base + '/');
+const form = page.locator('.lead-form');
+await form.scrollIntoViewIfNeeded();
+await form.locator('[aria-label="Имя"]').fill(name);
+await form.locator('[aria-label="Телефон"]').fill('+7 (999) 123-45-67');
+await form.locator('.contact').nth(1).click();
+await form.locator('button[type=submit]').click();
+// без согласия браузер не отправит форму (required) — ставим и отправляем
+await form.locator('.consent input').check();
+await form.locator('button[type=submit]').click();
+await form.locator('[role=status]').waitFor();
+console.log('✓ форма:', await form.locator('[role=status]').innerText());
+if (out) await page.screenshot({ path: out + '/lead-sent.png' });
+await page.goto(base + '/login');
+await page.fill('input[type=email]', process.env.AUDIT_ADMIN_EMAIL);
+await page.fill('input[type=password]', process.env.AUDIT_ADMIN_PASSWORD);
+await page.click('form button[type=submit]');
+await page.waitForTimeout(800);
+await page.goto(base + '/admin');
+const row = page.locator('.admin-lead', { hasText: name });
+await row.waitFor();
+console.log('✓ админка:', (await row.innerText()).replace(/\s+/g, ' '));
+if (out) await page.screenshot({ path: out + '/lead-admin.png' });
+await row.locator('button').click();
+await page.locator('.admin-lead', { hasText: name }).waitFor({ state: 'detached' });
+console.log('✓ «Обработана» убирает заявку из новых');
+await browser.close();

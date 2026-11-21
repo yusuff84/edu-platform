@@ -20,6 +20,30 @@ interface Props {
   onComplete: (payload: CompleteLessonInput) => void | Promise<void>;
   /** Идёт отправка/проверка на сервере (кнопки заблокированы). */
   completing: boolean;
+  /** Урок уже засчитан — вместо кнопки «Отметить пройденным» показываем статус. */
+  done?: boolean;
+}
+
+/** Кнопка завершения урока (видео/текст/эфир) или статус «пройдено». */
+function CompleteAction({ lesson, done, completing, onComplete }: Props): JSX.Element {
+  if (done) {
+    return (
+      <p className="lesson-done-note" role="status">
+        <span aria-hidden="true">✓</span> {t('learn.completed')}
+      </p>
+    );
+  }
+  return (
+    <button
+      type="button"
+      className="btn btn-primary lesson-complete-btn"
+      onClick={() => void onComplete({})}
+      disabled={completing}
+      aria-label={`${t('learn.complete')}: ${lesson.title}`}
+    >
+      {completing ? t('learn.completing') : t('learn.complete')}
+    </button>
+  );
 }
 
 // ---------- Безопасный markdown-рендер ----------
@@ -107,7 +131,7 @@ function parseBlocks(src: string): MdBlock[] {
 }
 
 // **жирный**, *курсив*, `код` — без интерпретации HTML (текст рендерится как текст).
-const RE_INLINE = /(!?\[[^\]\n]*\]\([^\s)]+\)|\*\*[^*]+\*\*|`[^`]+`|\*[^*\n]+\*)/g;
+const RE_INLINE = /(!?\[[^\]\n]*\]\([^\s)]+\)|\*\*\*[^*\n]+\*\*\*|\*\*[^*\n]+\*\*|`[^`]+`|\*(?:[^*\n]|\*\*[^*\n]+\*\*)+\*)/g;
 
 function safeMarkdownUrl(value: string): string | null {
   if (value.startsWith('/') && !value.startsWith('//') && !value.includes('\\')) return value;
@@ -133,7 +157,14 @@ function renderInline(text: string, keyBase: string): ReactNode[] {
           ? <img key={key} src={url} alt={media[2]} loading="lazy" style={{ maxWidth: '100%', height: 'auto' }} />
           : <a key={key} href={url} target="_blank" rel="noopener noreferrer">{media[2]}</a>;
       }
-      if (part.length > 4 && part.startsWith('**') && part.endsWith('**')) {
+      if (part.length > 6 && part.startsWith('***') && part.endsWith('***')) {
+        return (
+          <strong key={key}>
+            <em>{part.slice(3, -3)}</em>
+          </strong>
+        );
+      }
+      if (part.length > 4 && part.startsWith('**') && part.endsWith('**') && !part.slice(2, -2).includes('*')) {
         return <strong key={key}>{part.slice(2, -2)}</strong>;
       }
       if (part.length > 2 && part.startsWith('`') && part.endsWith('`')) {
@@ -142,7 +173,8 @@ function renderInline(text: string, keyBase: string): ReactNode[] {
         );
       }
       if (part.length > 2 && part.startsWith('*') && part.endsWith('*')) {
-        return <em key={key}>{part.slice(1, -1)}</em>;
+        // Курсив может содержать **жирный** внутри («***Термин** — определение.*»).
+        return <em key={key}>{renderInline(part.slice(1, -1), key)}</em>;
       }
       return part;
     });
@@ -293,7 +325,7 @@ export function QuizForm({
         )}
       </div>
       {!allAnswered && current === questions.length - 1 && (
-        <p className="quiz-required" role="status">Ответьте на каждый вопрос перед отправкой.</p>
+        <p className="quiz-required" role="status">Ответьте на каждый вопрос перед отправкой.</p>
       )}
     </form>
   );
@@ -361,7 +393,7 @@ export function CodeEditor({
 
 // ---------- Урок ----------
 
-export default function LessonView({ lesson, onComplete, completing }: Props): JSX.Element {
+export default function LessonView({ lesson, onComplete, completing, done }: Props): JSX.Element {
   if (lesson.kind === 'live') {
     const startsAt = lesson.startsAt;
     const inFuture = startsAt ? new Date(startsAt).getTime() > Date.now() : false;
@@ -385,15 +417,7 @@ export default function LessonView({ lesson, onComplete, completing }: Props): J
             </a>
           </p>
         )}
-        <button
-          type="button"
-          className="btn btn-primary"
-          onClick={() => void onComplete({})}
-          disabled={completing}
-          aria-label={`${t('learn.complete')}: ${lesson.title}`}
-        >
-          {completing ? t('learn.completing') : t('learn.complete')}
-        </button>
+        <CompleteAction lesson={lesson} done={done} completing={completing} onComplete={onComplete} />
       </section>
     );
   }
@@ -454,18 +478,18 @@ export default function LessonView({ lesson, onComplete, completing }: Props): J
     <section className="panel">
       <h3>{lesson.title}</h3>
       {lesson.videoUrl && (
-        <video className="lesson-video" src={lesson.videoUrl} controls style={{ maxWidth: '100%' }} />
+        // playsInline: без него iPhone открывает видео только на весь экран.
+        <video
+          className="lesson-video"
+          src={lesson.videoUrl}
+          controls
+          playsInline
+          preload="metadata"
+          style={{ maxWidth: '100%' }}
+        />
       )}
       {lesson.bodyMd && <Markdown source={lesson.bodyMd} />}
-      <button
-        type="button"
-        className="btn btn-primary"
-        onClick={() => void onComplete({})}
-        disabled={completing}
-        aria-label={`${t('learn.complete')}: ${lesson.title}`}
-      >
-        {completing ? t('learn.completing') : t('learn.complete')}
-      </button>
+      <CompleteAction lesson={lesson} done={done} completing={completing} onComplete={onComplete} />
     </section>
   );
 }
