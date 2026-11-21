@@ -4,6 +4,7 @@ import { useMutation } from '@tanstack/react-query';
 import { createLead } from '../api/leads';
 import type { LeadContactMethod } from '../api/leads';
 import { CertificateDocument } from './CertificateDocument';
+import { SupportIllustration } from './SupportIllustrations';
 
 function CheckIcon(): JSX.Element {
   return (
@@ -94,7 +95,7 @@ export function SupportBlock(): JSX.Element {
           </div>
           <div className="support-visual support-visual--simple" aria-hidden="true">
             <div className="svis-simple" key={tab}>
-              <span className="svis-simple-icon">{s.icon}</span>
+              <SupportIllustration kind={tab} />
               <p className="sv-title">{s.card}</p>
               <p className="sv-small">{s.cardSmall}</p>
             </div>

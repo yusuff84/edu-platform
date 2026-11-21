@@ -1149,3 +1149,15 @@ video {
     padding: 7px 12px;
   }
 }
+
+/* Иллюстрации «Как устроено обучение» — в стиле иконок преимуществ. */
+.svis-simple .svis-illu {
+  display: block;
+  width: 150px;
+  height: 125px;
+  margin-bottom: 8px;
+}
+
+.svis-simple .sv-title {
+  color: var(--fg);
+}
