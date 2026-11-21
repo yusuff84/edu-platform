@@ -321,16 +321,65 @@ export default function Learn(): JSX.Element {
   const currentLesson: FlatLesson = activeLesson ?? flatLessons[0];
   const title = courseQuery.data.title;
 
+  // Without a lesson id, show the course syllabus first. Direct lesson links
+  // still open the focused lesson view, including bookmarked URLs.
+  if (!lessonId) {
+    return (
+      <div className="wrap">
+        <main className="page study-page study-overview">
+          <div className="study-page-top">
+            <Link to="/me" className="study-page-back"><span aria-hidden="true">←</span> Назад к курсам</Link>
+            <span className="study-page-top-label">Программа обучения</span>
+          </div>
+          <h1>{title}</h1>
+          <div className="lesson-shell">
+            <aside className="study-course-card">
+              <span className="study-course-card-label">Курс</span>
+              <strong>{title}</strong>
+              <span>{progress ? `${progress.completedLessons}/${progress.totalLessons} уроков` : t('common.loading')}</span>
+              <div className="progress" role="progressbar" aria-label={t('learn.progress')} aria-valuemin={0} aria-valuemax={100} aria-valuenow={progress ? percent : undefined} aria-valuetext={progress ? `${percent}%` : t('common.loading')}>
+                <div className="progress-bar" style={{ width: `${percent}%` }} />
+              </div>
+              <span>{progress ? `${percent}% пройдено` : t('common.loading')}</span>
+            </aside>
+            <div className="study-overview-modules">
+              {modules.map((module, moduleIndex) => (
+                <section className="study-overview-module" key={module.id}>
+                  <h2><span>{moduleIndex + 1}.</span> {module.title} <span className="study-overview-count">{module.lessons.length} уроков</span></h2>
+                  <div className="study-overview-cards">
+                    {module.lessons.map((lesson, lessonIndex) => {
+                      const done = completedIds.has(lesson.id);
+                      return (
+                        <Link key={lesson.id} className="study-overview-lesson" to={`/learn/${courseId}/${lesson.id}`}>
+                          <span className={`study-overview-visual ${lesson.videoUrl ? 'has-video' : ''}`} aria-hidden="true">
+                            <span className="study-overview-visual-symbol">{lesson.videoUrl ? '▶' : lesson.kind === 'quiz' ? '?' : '≡'}</span>
+                            {done && <span className="study-overview-done">✓</span>}
+                          </span>
+                          <span className="study-overview-lesson-kind">{t(`kind.${lesson.kind}`)}</span>
+                          <strong>{moduleIndex + 1}.{lessonIndex + 1} {lesson.title}</strong>
+                        </Link>
+                      );
+                    })}
+                  </div>
+                </section>
+              ))}
+            </div>
+          </div>
+        </main>
+      </div>
+    );
+  }
+
   // ---------- Рендер ----------
 
   return (
     <div className="wrap">
-      <main className="page study-page">
+      <main className="page study-page study-lesson">
         <div className="study-page-top">
-          <Link to="/me" className="study-page-back"><span aria-hidden="true">←</span> Назад к курсам</Link>
-          <span className="study-page-top-label">Обучение · skillex.space</span>
+          <Link to={`/learn/${courseId}`} className="study-page-back"><span aria-hidden="true">←</span> К программе</Link>
+          <span className="study-page-top-label">{title}</span>
         </div>
-        <h1>{title}</h1>
+        <h1>{currentLesson.title}</h1>
         <div className="learn-progress">
           <span className="muted">
             {t('learn.progress')}: {progress ? `${percent}%` : '—'}
