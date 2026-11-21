@@ -155,7 +155,6 @@ def main():
                     exercise_count += 1
                     body += '\n\n**' + exercise['instruction'] + '**\n\n' + markdown(exercise['contentHtml'], media)
                     body = '**Самостоятельное задание.** Автоматическая проверка пока не настроена: авторский ключ ответа отсутствует. Отметка о прохождении означает ознакомление с заданием.\n\n' + body
-                body += '\n\n[Источник: Stepik](' + step['sourceUrl'] + ')'
                 video = next((media[u] for u in step['videos'] if u in media), None)
                 if step['videos'] and not video:
                     raise ValueError('Video missing from local assets')

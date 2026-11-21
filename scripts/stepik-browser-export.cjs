@@ -125,7 +125,7 @@ async function main() {
     const manifest = {
       courseId, title: 'Цифровая гигиена', sourceUrl: 'https://stepik.org/course/' + courseId,
       method: 'Rendered browser DOM; no direct API requests',
-      attribution: 'Авторы: Александр Галимов, Илья Костенецкий. Дальневосточный федеральный университет. Источник: Stepik.',
+      attribution: 'Авторы: Александр Галимов, Илья Костенецкий. Дальневосточный федеральный университет. Материалы опубликованы на Stepik.',
       license: 'Check the course license and preserve attribution before redistribution.',
       expectedStepCount: null, expectedLessonCount: 23, capturedAt: new Date().toISOString(), modules,
       limitations: ['Hidden answer keys are unavailable in student pages.', 'Video and image URLs are references until downloaded; they may expire.'],
