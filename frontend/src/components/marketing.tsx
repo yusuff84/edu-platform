@@ -112,24 +112,17 @@ export function PerksBlock(): JSX.Element {
       <div className="perk perk-1">
         <div className="perk-ico" aria-hidden="true">
           <svg width="120" height="100" viewBox="0 0 120 100">
-            <ellipse cx="60" cy="90" rx="34" ry="6" fill="#141414" opacity=".12" />
-            <rect x="28" y="14" width="64" height="64" rx="10" fill="#fff" />
-            <path d="M28 24a10 10 0 0 1 10-10h44a10 10 0 0 1 10 10v10H28z" fill="#E63223" />
-            <rect x="40" y="8" width="6" height="15" rx="3" fill="#141414" />
-            <rect x="74" y="8" width="6" height="15" rx="3" fill="#141414" />
-            <rect x="37" y="44" width="13" height="13" rx="3.5" fill="#ECEAE4" />
-            <rect x="53.5" y="44" width="13" height="13" rx="3.5" fill="#ECEAE4" />
-            <rect x="70" y="44" width="13" height="13" rx="3.5" fill="#3B5BFF" />
-            <rect x="37" y="60" width="13" height="13" rx="3.5" fill="#FEC466" />
-            <circle cx="68" cy="68" r="13" fill="#1F9D55" stroke="#fff" strokeWidth="3" />
-            <path
-              d="M61.5 68l4.5 4.5 9-9"
-              stroke="#fff"
-              strokeWidth="3"
-              fill="none"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
+            <ellipse cx="60" cy="91" rx="32" ry="6" fill="#141414" opacity=".12" />
+            <circle cx="58" cy="48" r="34" fill="#fff" stroke="#E2DDD1" strokeWidth="3" />
+            <circle cx="58" cy="48" r="27" fill="none" stroke="#ECEAE4" strokeWidth="2" strokeDasharray="2 12.1" />
+            <rect x="56" y="18" width="4" height="8" rx="2" fill="#141414" />
+            <rect x="56" y="70" width="4" height="8" rx="2" fill="#ECEAE4" />
+            <rect x="28" y="46" width="8" height="4" rx="2" fill="#ECEAE4" />
+            <rect x="80" y="46" width="8" height="4" rx="2" fill="#ECEAE4" />
+            <path d="M58 48V30" stroke="#3B5BFF" strokeWidth="5" strokeLinecap="round" />
+            <path d="M58 48l13 9" stroke="#141414" strokeWidth="5" strokeLinecap="round" />
+            <circle cx="58" cy="48" r="5" fill="#E63223" stroke="#fff" strokeWidth="2" />
+            <path d="M96 12l2.8 6.7 6.7 2.8-6.7 2.8L96 31l-2.8-6.7-6.7-2.8 6.7-2.8z" fill="#FEC466" />
           </svg>
         </div>
         <b>Свободный график без дедлайнов</b>
@@ -137,21 +130,14 @@ export function PerksBlock(): JSX.Element {
       </div>
       <div className="perk perk-2">
         <div className="perk-ico" aria-hidden="true">
-          <svg width="136" height="76" viewBox="0 0 136 76">
-            <path
-              d="M32 46c-9-9-9-23 0-30 8-6 17-5 25 2l11 10 11-10c8-7 17-8 25-2 9 7 9 21 0 30-8 7-17 6-25-1l-11-9-11 9c-8 7-17 8-25 1z"
-              fill="none"
-              stroke="#141414"
-              strokeWidth="13"
-              strokeLinecap="round"
-            />
-            <path
-              d="M68 36l11-8c8-7 17-8 25-2 9 7 9 21 0 30-8 7-17 6-25-1l-11-9"
-              fill="none"
-              stroke="#3B5BFF"
-              strokeWidth="13"
-              strokeLinecap="round"
-            />
+          <svg width="120" height="100" viewBox="0 0 120 100">
+            <ellipse cx="60" cy="91" rx="32" ry="6" fill="#141414" opacity=".12" />
+            <path d="M44 46V30a16 16 0 0 1 31-5.5" stroke="#FEC466" strokeWidth="8" fill="none" strokeLinecap="round" />
+            <rect x="32" y="44" width="56" height="42" rx="11" fill="#3B5BFF" />
+            <circle cx="60" cy="61" r="6" fill="#fff" />
+            <rect x="57.5" y="62" width="5" height="12" rx="2.5" fill="#fff" />
+            <circle cx="88" cy="78" r="14" fill="#1F9D55" stroke="#fff" strokeWidth="3" />
+            <path d="M80.5 78c0-3 2-5 4.2-5 3.6 0 3.6 10 7.2 10 2.2 0 4.2-2 4.2-5s-2-5-4.2-5c-3.6 0-3.6 10-7.2 10-2.2 0-4.2-2-4.2-5Z" fill="none" stroke="#fff" strokeWidth="2.6" strokeLinejoin="round" />
           </svg>
         </div>
         <b>Бессрочный доступ к курсу и обновлениям</b>
@@ -159,35 +145,19 @@ export function PerksBlock(): JSX.Element {
       </div>
       <div className="perk dark">
         <div className="perk-ico" aria-hidden="true">
-          <svg width="128" height="100" viewBox="0 0 128 100">
-            <ellipse cx="64" cy="91" rx="38" ry="5" fill="#fff" opacity=".14" />
-            <ellipse cx="88" cy="52" rx="21" ry="7.5" fill="#FEC466" />
-            <path d="M67 52v22c0 4.1 9.4 7.5 21 7.5s21-3.4 21-7.5V52" fill="#D89A2B" />
-            <path
-              d="M67 63c0 4.1 9.4 7.5 21 7.5s21-3.4 21-7.5"
-              fill="none"
-              stroke="#A86F14"
-              strokeWidth="2"
-            />
-            <ellipse cx="88" cy="52" rx="21" ry="7.5" fill="#FEC466" />
-            <ellipse
-              cx="88"
-              cy="52"
-              rx="13.5"
-              ry="4.2"
-              fill="none"
-              stroke="#C9861A"
-              strokeWidth="2"
-            />
-            <path d="M16 28l25-9 25 9v21c0 18-10.5 29-25 36-14.5-7-25-18-25-36z" fill="#3B5BFF" />
-            <path
-              d="M28 48.5l9.5 9.5L55 40"
-              fill="none"
-              stroke="#fff"
-              strokeWidth="6"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
+          <svg width="120" height="100" viewBox="0 0 120 100">
+            <ellipse cx="60" cy="91" rx="30" ry="6" fill="#141414" opacity=".12" />
+            <g transform="rotate(35 60 50)">
+              <path d="M53 66h14l-7 18z" fill="#FEC466" />
+              <path d="M56 66h8l-4 10z" fill="#E63223" />
+              <path d="M46 52l-12 14 14-3z" fill="#E63223" />
+              <path d="M74 52l12 14-14-3z" fill="#E63223" />
+              <path d="M60 10c13 11 17 30 14 56H46c-3-26 1-45 14-56z" fill="#fff" stroke="#E2DDD1" strokeWidth="2.5" strokeLinejoin="round" />
+              <circle cx="60" cy="36" r="8" fill="#3B5BFF" stroke="#fff" strokeWidth="3" />
+              <rect x="50" y="56" width="20" height="5" rx="2.5" fill="#ECEAE4" />
+            </g>
+            <circle cx="24" cy="26" r="3.5" fill="#FEC466" />
+            <path d="M98 70l2.4 5.6 5.6 2.4-5.6 2.4L98 86l-2.4-5.6-5.6-2.4 5.6-2.4z" fill="#FEC466" />
           </svg>
         </div>
         <b>Бесплатный старт</b>
@@ -321,40 +291,51 @@ function LeadIllustration(): JSX.Element {
   );
 }
 
-/** Иконки способов связи в форме заявки — в стиле остальных иконок сайта. */
+/** Иконки способов связи — круглые, как иконки приложений: градиент, крупный знак. */
+const CONTACT_GRADIENT: Record<string, [string, string]> = {
+  phone: ['#34C759', '#1F9D55'],
+  telegram: ['#3EB4F0', '#1D8FD6'],
+  vk: ['#2E8BFF', '#0060E6'],
+  max: ['#9B7BFF', '#6A3DFF'],
+};
+
 function ContactIcon({ kind }: { kind: string }): JSX.Element {
-  if (kind === 'phone') {
-    return (
-      <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true">
+  const [from, to] = CONTACT_GRADIENT[kind] ?? CONTACT_GRADIENT.max;
+  const id = `cg-${kind}`;
+  return (
+    <svg width="36" height="36" viewBox="0 0 36 36" aria-hidden="true">
+      <defs>
+        <linearGradient id={id} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stopColor={from} />
+          <stop offset="1" stopColor={to} />
+        </linearGradient>
+      </defs>
+      <circle cx="18" cy="18" r="18" fill={`url(#${id})`} />
+      {kind === 'phone' && (
         <path
           fill="#fff"
-          d="M6.6 10.8a15.1 15.1 0 0 0 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1A17 17 0 0 1 3 4c0-.6.4-1 1-1h3.5c.6 0 1 .4 1 1 0 1.3.2 2.5.6 3.6.1.3 0 .7-.2 1z"
+          d="M13.2 9.6c.5-.5 1.3-.5 1.8 0l2.1 2.6c.4.5.4 1.2 0 1.7l-1.3 1.5a11.4 11.4 0 0 0 4.8 4.8l1.5-1.3c.5-.4 1.2-.4 1.7 0l2.6 2.1c.5.5.5 1.3 0 1.8l-1.4 1.6c-.8.9-2.1 1.2-3.2.8-5-1.9-8.8-5.7-10.7-10.7-.4-1.1-.1-2.4.8-3.2z"
         />
-      </svg>
-    );
-  }
-  if (kind === 'telegram') {
-    return (
-      <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true">
-        <path fill="#fff" d="M21.4 3.6 2.9 10.7c-1 .4-1 1.8 0 2.1l4.6 1.5 1.8 5.6c.2.7 1.1.9 1.6.4l2.6-2.4 4.6 3.4c.6.4 1.4.1 1.6-.6l3.1-15.6c.2-.9-.6-1.6-1.4-1.3Zm-3.6 4.3-7.9 7.2-.3 3.2-1.4-4.4 9.2-6.3c.3-.2.6.1.4.3Z" />
-      </svg>
-    );
-  }
-  if (kind === 'vk') {
-    return (
-      <svg width="20" height="16" viewBox="0 0 20 16" aria-hidden="true">
-        <text x="10" y="12" textAnchor="middle" fontSize="11" fontWeight="800" fill="#fff" fontFamily="inherit" letterSpacing="-0.3">
+      )}
+      {kind === 'telegram' && (
+        <path
+          fill="#fff"
+          d="M25.6 10.3 8.9 16.8c-.9.3-.9 1.6 0 1.9l4.2 1.4 1.6 5.1c.2.6 1 .8 1.5.3l2.4-2.2 4.2 3.1c.5.4 1.3.1 1.5-.6l2.8-14.3c.2-.8-.6-1.5-1.5-1.2Zm-3.3 4-7.2 6.6-.3 2.9-1.3-4 8.4-5.8c.3-.2.6.1.4.3Z"
+        />
+      )}
+      {kind === 'vk' && (
+        <text x="18" y="22.5" textAnchor="middle" fontSize="12.5" fontWeight="800" fill="#fff" fontFamily="inherit" letterSpacing="-0.4">
           VK
         </text>
-      </svg>
-    );
-  }
-  return (
-    <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true">
-      <path fill="#fff" d="M12 3C6.5 3 2 6.8 2 11.5c0 2.4 1.2 4.6 3.1 6.1L4.5 21l3.8-1.9c1.2.4 2.4.6 3.7.6 5.5 0 10-3.8 10-8.5S17.5 3 12 3Z" />
-      <circle cx="8" cy="11.5" r="1.3" fill={'#7B5CFF'} />
-      <circle cx="12" cy="11.5" r="1.3" fill={'#7B5CFF'} />
-      <circle cx="16" cy="11.5" r="1.3" fill={'#7B5CFF'} />
+      )}
+      {kind === 'max' && (
+        <>
+          <path fill="#fff" d="M18 9.5c-5.2 0-9.4 3.5-9.4 7.9 0 2.3 1.1 4.3 2.9 5.7l-.6 3.4 3.6-1.8c1.1.4 2.3.6 3.5.6 5.2 0 9.4-3.5 9.4-7.9s-4.2-7.9-9.4-7.9Z" />
+          <circle cx="14" cy="17.4" r="1.4" fill={to} />
+          <circle cx="18" cy="17.4" r="1.4" fill={to} />
+          <circle cx="22" cy="17.4" r="1.4" fill={to} />
+        </>
+      )}
     </svg>
   );
 }
@@ -463,7 +444,7 @@ export function LeadBlock(): JSX.Element {
                   onChange={() => set('contactMethod', c.key as LeadContactMethod)}
                   disabled={sent}
                 />
-                <span className="cm" style={{ background: c.bg }}>
+                <span className="cm cm--round">
                   <ContactIcon kind={c.key} />
                 </span>
                 {c.label}

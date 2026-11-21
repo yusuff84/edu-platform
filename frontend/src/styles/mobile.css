@@ -1193,3 +1193,22 @@ video {
     display: none;
   }
 }
+
+/* Круглые иконки способов связи (сам круг с градиентом нарисован в SVG). */
+.contact .cm.cm--round {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: none;
+  box-shadow: 0 6px 14px -6px rgba(20, 20, 20, 0.45);
+}
+
+/* Иконки преимуществ — крупнее, под размер карточек. */
+.perk-ico {
+  height: 132px;
+}
+
+.perk-ico svg {
+  width: 150px;
+  height: 125px;
+}
