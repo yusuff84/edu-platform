@@ -9,8 +9,10 @@ import type {
   CourseSort,
 } from '../api/client';
 import CourseCard from '../components/CourseCard';
+import { FeaturedCourse } from '../components/FeaturedCourse';
 import {
   DiplomaBlock,
+  FaqBlock,
   FinalCta,
   LeadBlock,
   PerksBlock,
@@ -219,6 +221,9 @@ export default function Catalog(): JSX.Element {
   const filtersActive = Boolean(
     urlQ.trim() || category || price || minRating || sort !== DEFAULT_SORT,
   );
+  // Курс в центре внимания — первый в выдаче без фильтров (по умолчанию — популярные).
+  const featured = !filtersActive && page === 1 ? items[0] : undefined;
+
   const isEmpty = Boolean(data) && items.length === 0;
   // «Показано N из M»: сколько курсов пользователь уже увидел листанием.
   const shown = data ? Math.min(total, (page - 1) * LIMIT + items.length) : 0;
@@ -279,16 +284,22 @@ export default function Catalog(): JSX.Element {
     <main className="page catalog-page">
       <section className="hero">
         <div className="hero-card">
-          <span className="eyebrow">Маркетплейс IT-курсов · для новичков</span>
+          <span className="eyebrow">Онлайн-курсы · бесплатный старт</span>
           <h1>Понятные онлайн-курсы с нуля — в своём темпе</h1>
           <p className="lead">
             Короткие видеоуроки, конспекты и тесты с автоматической проверкой. Учитесь с телефона
             или компьютера и получайте сертификат по итогам курса.
           </p>
           <div className="hero-cta">
-            <button type="button" className="btn btn-primary" onClick={scrollToCards}>
-              Выбрать курс
-            </button>
+            {featured && !meQuery.data ? (
+              <Link className="btn btn-primary" to="/register" state={{ from: `/courses/${featured.slug}` }}>
+                Начать бесплатно
+              </Link>
+            ) : (
+              <button type="button" className="btn btn-primary" onClick={scrollToCards}>
+                Выбрать курс
+              </button>
+            )}
             {/* «Мои курсы» — только вошедшим: /me за гвардом RequireAuth. */}
             {meQuery.data && (
               <Link className="btn btn-ghost" to="/me">
@@ -296,26 +307,13 @@ export default function Catalog(): JSX.Element {
               </Link>
             )}
           </div>
-          {/* Показываем только содержательные цифры: «— средняя оценка» и
-              «0 отзывов» на витрине работают против доверия. */}
-          <div className="stats">
-            <div>
-              <b>{total}</b>
-              <span>{pluralWord(total, 'курс', 'курса', 'курсов')} в каталоге</span>
-            </div>
-            {avgRating > 0 && (
-              <div>
-                <b>{avgRating.toFixed(1).replace('.', ',')}</b>
-                <span>средняя оценка</span>
-              </div>
-            )}
-            {totalReviews > 0 && (
-              <div>
-                <b>{totalReviews}</b>
-                <span>{pluralWord(totalReviews, 'отзыв', 'отзыва', 'отзывов')} студентов</span>
-              </div>
-            )}
-          </div>
+          {/* Что получает ученик — вместо витринной статистики («1 курс в каталоге»). */}
+          <ul className="hero-trust" aria-label="Почему у нас удобно учиться">
+            <li>Бесплатный старт</li>
+            <li>Сертификат</li>
+            <li>С телефона</li>
+            <li>В своём темпе</li>
+          </ul>
           <div className="cats">
             <a
               className="cat dark"
@@ -325,18 +323,16 @@ export default function Catalog(): JSX.Element {
                 document.getElementById('lead')?.scrollIntoView({ behavior: 'smooth' });
               }}
             >
-              Помогите выбрать
+              Помогите с выбором
             </a>
           </div>
         </div>
       </section>
 
       <div className="wrap">
+        {featured && <FeaturedCourse course={featured} loggedIn={Boolean(meQuery.data)} />}
         <div className="mini-head">
-          <h2>
-            Курсы для карьеры
-            <br />и жизни
-          </h2>
+          <h2>Все курсы</h2>
           <form
             role="search"
             aria-label={t('a11y.searchLabel')}
@@ -616,7 +612,8 @@ export default function Catalog(): JSX.Element {
 
         <SupportBlock />
         <PerksBlock />
-        <DiplomaBlock />
+        <DiplomaBlock courseTitle={featured?.title} />
+        <FaqBlock />
         <FinalCta onChoose={scrollToCards} />
       </div>
       <LeadBlock />

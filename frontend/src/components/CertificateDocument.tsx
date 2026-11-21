@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import QRCode from 'qrcode';
+import '../styles/certdoc.css';
 
 export interface CertificateDocumentProps {
   number: string;

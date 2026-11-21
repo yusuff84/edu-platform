@@ -3,6 +3,7 @@ import type { FormEvent } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import { createLead } from '../api/leads';
 import type { LeadContactMethod } from '../api/leads';
+import { CertificateDocument } from './CertificateDocument';
 
 function CheckIcon(): JSX.Element {
   return (
@@ -195,30 +196,52 @@ export function PerksBlock(): JSX.Element {
   );
 }
 
-export function DiplomaBlock(): JSX.Element {
+export function DiplomaBlock({ courseTitle }: { courseTitle?: string }): JSX.Element {
   return (
-    <div className="diploma">
+    <div className="diploma diploma--real">
       <div>
         <h2>Сертификат о&nbsp;прохождении курса</h2>
         <p>
-          Пройдите все уроки и&nbsp;тесты курса — платформа выдаст именной сертификат.
-          У&nbsp;каждого сертификата есть номер и&nbsp;публичная страница: ссылку можно отправить
-          работодателю или приложить к&nbsp;резюме.
+          Пройдите все уроки и&nbsp;тесты — платформа сразу выдаст именной сертификат. У&nbsp;каждого
+          сертификата есть номер и&nbsp;QR-код: по&nbsp;нему любой может проверить подлинность.
+          Сертификат можно скачать в&nbsp;PDF, отправить работодателю или приложить к&nbsp;резюме.
         </p>
       </div>
-      <div className="diploma-visual" aria-hidden="true">
-        <div className="doc doc-cert">
-          <h4>Сертификат</h4>
-          <div className="doc-name">Ваше имя</div>
-          <div className="doc-line" style={{ width: '70%' }} />
-          <p className="doc-prof">
-            О прохождении курса
-          </p>
-          <div className="doc-sign">подпись</div>
-          <div className="doc-seal">EP</div>
-        </div>
+      <div className="diploma-preview" aria-hidden="true">
+        <CertificateDocument
+          number="EDU-2026-PREVIEW"
+          studentName="Ваше имя"
+          courseTitle={courseTitle || 'Название курса'}
+          issuedAt={new Date().toISOString()}
+          verifyUrl="https://skillex.space/certificates/EDU-2026-PREVIEW"
+        />
       </div>
     </div>
+  );
+}
+
+const FAQ: Array<{ q: string; a: string }> = [
+  { q: 'Это правда бесплатно?', a: 'Да. Бесплатные курсы открываются сразу после регистрации — без оплаты и без привязки карты.' },
+  { q: 'Нужна ли подготовка?', a: 'Нет. Курсы рассчитаны на начинающих: всё объясняется простым языком, с примерами из жизни.' },
+  { q: 'Сколько времени займёт обучение?', a: 'Учитесь в своём темпе: уроки короткие, прогресс сохраняется. Можно проходить по 15–20 минут в день.' },
+  { q: 'Можно учиться с телефона?', a: 'Да. Видео, конспекты и тесты удобно проходить со смартфона — и продолжить с компьютера с того же места.' },
+  { q: 'Как получить сертификат?', a: 'Пройдите все уроки и тесты курса — сертификат появится автоматически. Его можно скачать в PDF и поделиться ссылкой.' },
+  { q: 'Что если не получается пройти тест?', a: 'Количество попыток не ограничено. Вернитесь к материалам урока, а если что-то непонятно — задайте вопрос под уроком.' },
+];
+
+export function FaqBlock(): JSX.Element {
+  return (
+    <section className="faq" aria-labelledby="faq-title">
+      <h2 id="faq-title">Частые вопросы</h2>
+      <div className="faq-list">
+        {FAQ.map((item) => (
+          <details key={item.q} className="faq-item">
+            <summary>{item.q}</summary>
+            <p>{item.a}</p>
+          </details>
+        ))}
+      </div>
+    </section>
   );
 }
 
