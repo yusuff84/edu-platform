@@ -265,3 +265,52 @@
   height: 100%;
   object-fit: cover;
 }
+
+/* Course overview: blue study-track hero and clean syllabus rows. */
+.course-overview .crumbs { margin-bottom: 20px; }
+.course-overview-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(180px, 28%);
+  gap: 28px;
+  align-items: center;
+  padding: clamp(30px, 5vw, 68px);
+  min-height: 300px;
+  border-radius: 24px;
+  background: #65b0f9;
+  margin-bottom: 42px;
+  overflow: hidden;
+}
+.course-overview-eyebrow {
+  font-size: 14px;
+  font-weight: 700;
+}
+.course-overview-hero h1 {
+  font-size: clamp(32px, 4.4vw, 56px);
+  line-height: 1.08;
+  margin: 10px 0 18px;
+}
+.course-overview-hero p { font-size: 17px; max-width: 60ch; }
+.course-overview-hero-meta { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 24px; }
+.course-overview-hero-meta span {
+  padding: 9px 15px;
+  border-radius: 999px;
+  background: rgba(255,255,255,.54);
+  font-weight: 700;
+}
+.course-overview-hero-art { display: grid; place-items: center; min-width: 0; }
+.course-overview-hero-art img { width: 100%; max-height: 230px; object-fit: contain; border-radius: 15px; }
+.course-overview-hero-art span { color: #183e75; font-size: clamp(110px, 16vw, 210px); line-height: 1; }
+.course-overview-grid { grid-template-columns: minmax(0, 1fr) 330px; gap: 28px; }
+.course-overview-program .mod { border: 0; border-radius: 0; border-top: 1px solid var(--line); margin: 0; }
+.course-overview-program .mod-head { padding: 19px 4px; font-size: 17px; }
+.course-overview-program .mod-body { padding: 0 0 10px; }
+.course-overview-program .lesson-link { padding: 13px 6px; }
+.course-overview-details-title { margin-top: 10px; }
+@media (max-width: 960px) {
+  .course-overview-grid { grid-template-columns: 1fr; }
+}
+@media (max-width: 620px) {
+  .course-overview-hero { grid-template-columns: 1fr; padding: 28px; min-height: 0; }
+  .course-overview-hero-art { display: none; }
+  .course-overview-hero p { font-size: 15px; }
+}

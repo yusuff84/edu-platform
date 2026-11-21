@@ -325,9 +325,10 @@ export default function Learn(): JSX.Element {
 
   return (
     <div className="wrap">
-      <main className="page">
-        <div className="crumbs">
-          <Link to="/">{t('nav.catalog')}</Link> / <span>{title}</span>
+      <main className="page study-page">
+        <div className="study-page-top">
+          <Link to="/me" className="study-page-back"><span aria-hidden="true">←</span> Назад к курсам</Link>
+          <span className="study-page-top-label">Обучение · skillex.space</span>
         </div>
         <h1>{title}</h1>
         <div className="learn-progress">
@@ -391,10 +392,17 @@ export default function Learn(): JSX.Element {
 
         <div className="lesson-shell">
           <nav className="side-nav" aria-label={t('course.program')}>
-            {modules.map((m) => (
+            <div className="study-course-card">
+              <span className="study-course-card-label">Курс</span>
+              <strong>{title}</strong>
+              <span>{progress ? `${progress.completedLessons}/${progress.totalLessons} уроков` : t('common.loading')}</span>
+              <div className="progress" aria-hidden="true"><div className="progress-bar" style={{ width: `${percent}%` }} /></div>
+            </div>
+            <h2 className="study-outline-heading">Программа курса</h2>
+            {modules.map((m, moduleIndex) => (
               <div key={m.id}>
-                <span className="side-title">{m.title}</span>
-                {m.lessons.map((l) => {
+                <span className="side-title">{moduleIndex + 1}. {m.title}</span>
+                {m.lessons.map((l, lessonIndex) => {
                   const done = completedIds.has(l.id);
                   const isActive = l.id === currentLesson.id;
                   const isNext = l.id === serverNextLessonId;
@@ -414,8 +422,9 @@ export default function Learn(): JSX.Element {
                       aria-current={isActive ? 'true' : undefined}
                     >
                       <span className="learn-link-title">
-                        {done && <span className="learn-link-check" aria-hidden="true">✓ </span>}
-                        {l.title}
+                        <span className="study-lesson-number" aria-hidden="true">{lessonIndex + 1}.</span>
+                        <span>{l.title}</span>
+                        {done && <span className="learn-link-check" aria-hidden="true">✓</span>}
                       </span>
                       <span className="learn-link-meta">
                         <span className="learn-link-kind">{t(`kind.${l.kind}`)}</span>

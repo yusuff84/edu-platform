@@ -10,7 +10,7 @@
 
 import { Link } from 'react-router-dom';
 import { useQueries, useQuery } from '@tanstack/react-query';
-import { ApiError, myCourses } from '../api/client';
+import { ApiError, myCourses, me } from '../api/client';
 import { courseProgress } from '../api/meExtra';
 import { coverFor } from '../components/CourseCard';
 import { t } from '../i18n/t';
@@ -22,6 +22,7 @@ import '../styles/favorites.css';
 export default function MyCourses(): JSX.Element {
   useSeo('Мои курсы — skillex.space');
   const query = useQuery({ queryKey: ['my-courses'], queryFn: myCourses });
+  const meQuery = useQuery({ queryKey: ['me'], queryFn: me, retry: false });
   const items = query.data ?? [];
 
   // По одному запросу прогресса на курс — useQueries вместо хуков в цикле.
@@ -103,9 +104,33 @@ export default function MyCourses(): JSX.Element {
 
   return (
     <div className="wrap">
-      <main className="page">
+      <main className="page learning-dashboard">
+        <section className="learning-dashboard-hero">
+          <div className="learning-dashboard-intro">
+            <span className="learning-dashboard-kicker">Ваше обучение</span>
+            <h1>Рады видеть{meQuery.data?.displayName ? `, ${meQuery.data.displayName}` : ' вас'}!</h1>
+            <p>Продолжайте с того места, где остановились. Даже один урок сегодня — шаг вперёд.</p>
+            <Link className="learning-dashboard-all" to="/">Посмотреть каталог <span aria-hidden="true">↗</span></Link>
+          </div>
+          <div className="learning-dashboard-continue">
+            <h2>Продолжить обучение</h2>
+            <div className="learning-dashboard-tiles">
+              {items.map((item, i) => ({ item, progress: progressQueries[i] })).filter(({ progress }) => !(progress.error instanceof ApiError && progress.error.status === 403)).slice(0, 3).map(({ item, progress }) => {
+                const next = progress.data?.nextLessonId;
+                const href = next ? `/learn/${item.course.id}/${next}` : `/learn/${item.course.id}`;
+                return (
+                  <Link className="learning-dashboard-tile" key={item.course.id} to={href}>
+                    <span className={`learning-dashboard-tile-art ${coverFor(item.course.slug || item.course.id)}`} aria-hidden="true">▶</span>
+                    <span className="learning-dashboard-tile-name">{item.course.title}</span>
+                    <strong>{progress.data ? `${progress.data.percent}% пройдено` : t('common.loading')}</strong>
+                  </Link>
+                );
+              })}
+            </div>
+          </div>
+        </section>
         <div className="cab-head">
-          <h1>{t('cabinet.studentTitle')}</h1>
+          <h2>Ваши курсы</h2>
           <Link className="btn btn-sm" to="/me/favorites">
             {t('p9.fav.title')}
           </Link>
@@ -150,13 +175,14 @@ export default function MyCourses(): JSX.Element {
             const certificateNumber = item.certificateNumber?.trim() ?? '';
 
             return (
-              <div key={course.id} className="panel">
+              <div key={course.id} className="panel learning-dashboard-course">
                 <div
                   className={`cover ${coverFor(course.slug || course.id)} enrolled-cover`}
                   aria-hidden="true"
                 >
                   <span className="tag">Курс</span>
                 </div>
+                <span className="learning-dashboard-course-label">Курс</span>
                 <h3>
                   <Link to={href}>{course.title}</Link>
                 </h3>

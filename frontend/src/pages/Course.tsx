@@ -281,10 +281,22 @@ export default function Course(): JSX.Element {
 
   return (
     <div className="wrap">
-      <main className="page">
+      <main className="page course-overview">
         <div className="crumbs">
           <Link to="/">{t('catalog.title')}</Link> / {course.title}
         </div>
+        <section className="course-overview-hero">
+          <div className="course-overview-hero-copy">
+            <span className="course-overview-eyebrow">Курс · skillex.space</span>
+            <h1>{course.title}</h1>
+            <p>{course.description}</p>
+            <div className="course-overview-hero-meta">
+              <span>{modulesCount} {pluralRu(modulesCount, t('plural.module.one'), t('plural.module.few'), t('plural.module.many'))}</span>
+              <span>{lessonsCount} {pluralRu(lessonsCount, t('plural.lesson.one'), t('plural.lesson.few'), t('plural.lesson.many'))}</span>
+            </div>
+          </div>
+          <div className="course-overview-hero-art" aria-hidden="true">{coverSrc ? <img src={coverSrc} alt="" /> : <span>✦</span>}</div>
+        </section>
 
         {showBanner && (
           <section className="course-banner" aria-label={t('teach.status')}>
@@ -305,7 +317,7 @@ export default function Course(): JSX.Element {
           </section>
         )}
 
-        <div className="two">
+        <div className="two course-overview-grid">
           <div style={{ display: 'grid', gap: 22, alignContent: 'start' }}>
             <section className="panel">
               <div className="pill-row">
@@ -314,7 +326,7 @@ export default function Course(): JSX.Element {
               {coverSrc && (
                 <img className="cover-hero" src={coverSrc} alt={t('p7.cover.alt')} />
               )}
-              <h1 style={{ marginTop: 12 }}>{course.title}</h1>
+              <h2 className="course-overview-details-title">О курсе</h2>
               <p className="muted">{course.description}</p>
               {/* T82: публичный профиль автора курса (teacherId есть в Course). */}
               <p className="meta">
@@ -344,7 +356,7 @@ export default function Course(): JSX.Element {
               </div>
             </section>
 
-            <section className="panel">
+            <section className="panel course-overview-program">
               <h2>{t('course.program')}</h2>
               {modules.length === 0 && <p className="muted">{t('learn.noLessons')}</p>}
               <div style={{ marginTop: 12 }}>

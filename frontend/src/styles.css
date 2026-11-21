@@ -2400,3 +2400,18 @@ tr:last-child td {
     gap: 20px;
   }
 }
+
+/* Quiet, light navigation shared by the learning screens and catalog. */
+.topbar {
+  background: #fff;
+  border-bottom: 1px solid #ededed;
+}
+.topbar .logo { color: var(--fg); font-size: 24px; }
+.topbar .logo-mark { background: #4635ff; color: #fff; }
+.topbar .nav a { color: var(--fg); font-weight: 600; }
+.topbar .nav a.active,
+.topbar .nav a:hover { color: var(--fg); background: #f0f0f0; }
+.topbar .user-email { color: var(--fg); background: #f4f4f4; border-color: #eee; }
+.topbar .btn-ghost { color: var(--fg); border-color: #e5e5e5; background: #fff; }
+.topbar .btn-ghost:hover { background: #f4f4f4; border-color: #ccc; }
+.topbar :focus-visible { outline-color: var(--focus-ring-color); }
