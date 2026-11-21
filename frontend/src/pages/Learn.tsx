@@ -32,6 +32,7 @@ import { courseProgress } from '../api/meExtra';
 import LessonView from '../components/LessonView';
 import { meQueryOptions } from '../components/RouteGuards';
 import { VideoPoster } from '../components/VideoPoster';
+import { LessonKindIcon } from '../components/LessonKindIcon';
 import Questions from '../components/Questions';
 import { t } from '../i18n/t';
 import { useSeo } from '../app/useSeo';
@@ -372,7 +373,7 @@ export default function Learn(): JSX.Element {
                         <Link key={lesson.id} className="study-overview-lesson" to={`/learn/${courseId}/${lesson.id}`}>
                           <span className={`study-overview-visual ${lesson.videoUrl ? 'has-video' : ''}`} aria-hidden="true">
                             <VideoPoster videoUrl={lesson.videoUrl} />
-                            <span className="study-overview-visual-symbol">{lesson.videoUrl ? '▶' : lesson.kind === 'quiz' ? '?' : '≡'}</span>
+                            <span className="study-overview-visual-symbol">{lesson.videoUrl ? '▶' : <LessonKindIcon kind={lesson.kind === 'quiz' ? 'quiz' : 'text'} />}</span>
                             {done && <span className="study-overview-done">✓</span>}
                           </span>
                           <span className="study-overview-lesson-kind">{lesson.videoUrl ? 'Видеоурок' : lesson.kind === 'video_text' ? (lesson.bodyMd?.includes('Самостоятельное задание') ? 'Практика' : 'Материал') : t(`kind.${lesson.kind}`)}{done ? ' · Пройдено' : lesson.id === serverNextLessonId ? ' · Следующий урок' : ''}</span>

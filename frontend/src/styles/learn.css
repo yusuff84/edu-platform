@@ -801,3 +801,22 @@
   -webkit-backdrop-filter: blur(4px);
   backdrop-filter: blur(4px);
 }
+
+/* Иконки практикума и конспекта в карточках программы (вместо «?» и «≡»). */
+.study-overview-visual .lesson-kind-icon {
+  display: block;
+  width: clamp(40px, 4.5vw, 64px);
+  height: clamp(40px, 4.5vw, 64px);
+}
+
+.study-overview-visual:not(.has-video) {
+  background: #eeedff;
+  color: var(--accent, #4635ff);
+}
+
+@media (max-width: 960px) {
+  .study-overview-visual .lesson-kind-icon {
+    width: 26px;
+    height: 26px;
+  }
+}
