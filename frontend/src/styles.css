@@ -131,10 +131,17 @@ h3 {
   color: var(--muted);
 }
 
+/* Links without a component-specific style inherit the site's palette rather
+   than the browser's default blue/purple (including visited links). */
+a:where(:link, :visited) {
+  color: inherit;
+  text-decoration-color: currentColor;
+}
+
 .page p a:not(.btn),
 .page li a:not(.btn),
 .empty a:not(.btn) {
-  color: var(--cta-blue);
+  color: var(--brand-dark);
   text-decoration: underline;
   text-underline-offset: 2px;
 }
@@ -142,7 +149,7 @@ h3 {
 .page p a:not(.btn):hover,
 .page li a:not(.btn):hover,
 .empty a:not(.btn):hover {
-  color: #1f3ae0;
+  color: var(--brand);
 }
 
 .error {

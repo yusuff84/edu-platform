@@ -35,3 +35,5 @@ docker compose -p skillex --env-file /opt/skillex/.env \
 ```
 
 Существующие контейнеры и тома hamlion сохранены. Для возврата сначала остановить проект skillex, включить сохранённую конфигурацию nginx для hamlion и запустить `hamlion-postgres`, `hamlion-redis`, `hamlion-web`, `hamlion-worker`. Не удалять тома и не применять `down -v` при обновлении.
+
+WEB_RELEASE in /opt/skillex/.env overrides only the web image tag for a frontend-only rollout. Keep RELEASE unchanged for API and runner.

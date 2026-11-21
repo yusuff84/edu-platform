@@ -49,7 +49,7 @@ services:
       retries: 10
 
   web:
-    image: skillex-web:${RELEASE:?required}
+    image: skillex-web:${WEB_RELEASE:-${RELEASE:?required}}
     restart: unless-stopped
     mem_limit: 64m
     ports: ['127.0.0.1:13080:80']
