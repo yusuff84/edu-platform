@@ -413,16 +413,18 @@ export default function Learn(): JSX.Element {
                       }
                       aria-current={isActive ? 'true' : undefined}
                     >
-                      <span className="learn-link-check" aria-hidden="true">
-                        {done ? '✓ ' : ''}
+                      <span className="learn-link-title">
+                        {done && <span className="learn-link-check" aria-hidden="true">✓ </span>}
+                        {l.title}
                       </span>
-                      {l.title}
-                      <span className="learn-link-kind"> · {t(`kind.${l.kind}`)}</span>
+                      <span className="learn-link-meta">
+                        <span className="learn-link-kind">{t(`kind.${l.kind}`)}</span>
+                        {isNext && (
+                          <span className="learn-link-next">{t('learn.nextLesson')}</span>
+                        )}
+                      </span>
                       {done && (
                         <span className="sr-only"> — {t('learn.completed')}</span>
-                      )}
-                      {isNext && (
-                        <span className="learn-link-next"> — {t('learn.nextLesson')}</span>
                       )}
                     </NavLink>
                   );

@@ -17,8 +17,29 @@
 
 /* ---------- Боковой список уроков ---------- */
 
+/* Title and metadata are stacked so long lesson names cannot squeeze labels. */
+.side-nav a.learn-link {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+  min-width: 0;
+}
+
+.learn-link-title {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.learn-link-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
 .learn-link {
-  display: block;
   padding: 0.35rem 0.5rem;
   border-radius: 6px;
   color: inherit;
@@ -61,6 +82,11 @@
 .learn-link-next {
   color: #666;
   font-size: 0.85em;
+}
+
+.side-nav a.active .learn-link-kind,
+.side-nav a.active .learn-link-next {
+  color: rgba(255, 255, 255, 0.8);
 }
 
 /* ---------- Контент урока ---------- */
