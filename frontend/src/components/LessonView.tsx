@@ -225,53 +225,76 @@ export function QuizForm({
 }): JSX.Element {
   const questions = lesson.quiz?.questions ?? [];
   const [answers, setAnswers] = useState<Record<string, number>>({});
-  // Пояснения показываем только после отправки ответов на проверку.
-  const [answered, setAnswered] = useState(false);
-  // Отправка заблокирована, пока не выбраны ответы на все вопросы.
+  const [current, setCurrent] = useState(0);
   const allAnswered =
     questions.length > 0 && questions.every((q) => answers[q.id] !== undefined);
+  const question = questions[current];
+
   return (
     <form
       className="quiz"
       onSubmit={(e) => {
         e.preventDefault();
-        if (!disabled && allAnswered) {
-          setAnswered(true);
-          onSubmit(answers);
-        }
+        if (!disabled && allAnswered) onSubmit(answers);
       }}
     >
-      {questions.map((q, qi) => (
-        <fieldset key={q.id || `q${qi}`}>
-          <legend>{q.text}</legend>
-          {q.options.map((opt, oi) => (
-            <label key={oi} className="radio">
-              <input
-                type="radio"
-                name={`q-${q.id || qi}`}
-                checked={answers[q.id] === oi}
-                onChange={() => setAnswers((a) => ({ ...a, [q.id]: oi }))}
-                disabled={disabled}
-              />{' '}
-              {opt}
-            </label>
-          ))}
-          {/* Пояснение показываем после ответа (backend отдаёт explanation в публичном виде). */}
-          {answered && q.explanation && (
-            <p className="quiz-explanation">
-              <strong>{t('lesson.explanation')}:</strong> {q.explanation}
-            </p>
-          )}
+      <nav className="quiz-question-nav" aria-label="Навигация по вопросам">
+        {questions.map((q, index) => (
+          <button
+            key={q.id || `q${index}`}
+            type="button"
+            className={`quiz-question-number${current === index ? ' is-current' : ''}${answers[q.id] !== undefined ? ' is-answered' : ''}`}
+            aria-current={current === index ? 'step' : undefined}
+            aria-label={`Вопрос ${index + 1}${answers[q.id] !== undefined ? ', ответ выбран' : ', ответ не выбран'}`}
+            onClick={() => setCurrent(index)}
+            disabled={disabled}
+          >
+            {index + 1}
+          </button>
+        ))}
+      </nav>
+      <p className="quiz-progress" aria-live="polite">Вопрос {current + 1} из {questions.length}</p>
+      {question && (
+        <fieldset className="quiz-current-question" key={question.id || current}>
+          <legend>{question.text}</legend>
+          <div className="quiz-options">
+            {question.options.map((option, index) => {
+              const inputId = `quiz-${lesson.id}-${current}-${index}`;
+              return (
+                <label key={index} className={`quiz-option-card${answers[question.id] === index ? ' is-selected' : ''}`} htmlFor={inputId}>
+                  <input
+                    id={inputId}
+                    type="radio"
+                    name={`quiz-${lesson.id}-${question.id || current}`}
+                    value={index}
+                    checked={answers[question.id] === index}
+                    onChange={() => setAnswers((previous) => ({ ...previous, [question.id]: index }))}
+                    disabled={disabled}
+                  />
+                  <span>{option}</span>
+                </label>
+              );
+            })}
+          </div>
         </fieldset>
-      ))}
-      <button
-        type="submit"
-        className="btn btn-primary"
-        disabled={disabled || !allAnswered}
-        aria-label={t('lesson.quizSubmit')}
-      >
-        {disabled ? t('lesson.checking') : t('lesson.quizSubmit')}
-      </button>
+      )}
+      <div className="quiz-controls">
+        <button type="button" className="btn" onClick={() => setCurrent((index) => Math.max(0, index - 1))} disabled={disabled || current === 0}>
+          Назад
+        </button>
+        {current < questions.length - 1 ? (
+          <button type="button" className="btn btn-primary" onClick={() => setCurrent((index) => Math.min(questions.length - 1, index + 1))} disabled={disabled}>
+            Далее
+          </button>
+        ) : (
+          <button type="submit" className="btn btn-primary" disabled={disabled || !allAnswered} aria-label={t('lesson.quizSubmit')}>
+            {disabled ? t('lesson.checking') : t('lesson.quizSubmit')}
+          </button>
+        )}
+      </div>
+      {!allAnswered && current === questions.length - 1 && (
+        <p className="quiz-required" role="status">Ответьте на каждый вопрос перед отправкой.</p>
+      )}
     </form>
   );
 }
