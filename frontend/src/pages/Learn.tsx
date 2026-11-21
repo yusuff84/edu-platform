@@ -66,6 +66,7 @@ export default function Learn(): JSX.Element {
   useSeo('Обучение — skillex.space');
   const { courseId = '', lessonId } = useParams();
   const qc = useQueryClient();
+  const [collapsedModules, setCollapsedModules] = useState<Set<string>>(new Set());
 
   const [verdictState, setVerdictState] = useState<VerdictState | null>(null);
   const [errorState, setErrorState] = useState<ErrorState | null>(null);
@@ -345,9 +346,14 @@ export default function Learn(): JSX.Element {
             <div className="study-overview-modules">
               {modules.map((module, moduleIndex) => (
                 <section className="study-overview-module" key={module.id}>
-                  <h2><span>{moduleIndex + 1}.</span> {module.title} <span className="study-overview-count">{module.lessons.length} уроков</span></h2>
-                  <div className="study-overview-cards">
-                    {module.lessons.map((lesson, lessonIndex) => {
+                  <h2><button className="study-module-toggle" type="button" aria-expanded={!collapsedModules.has(module.id)} aria-controls={`module-${module.id}`} onClick={() => setCollapsedModules(previous => { const next = new Set(previous); if (next.has(module.id)) next.delete(module.id); else next.add(module.id); return next; })}>
+                    <span className="study-module-number">{moduleIndex + 1}</span>
+                    <span>{module.title.replace(/^\d+[.\s]+/, '')}</span>
+                    <span className="study-overview-count">{progress ? `${module.lessons.filter(l => completedIds.has(l.id)).length} / ` : ''}{module.lessons.length}</span>
+                    <span aria-hidden="true">{collapsedModules.has(module.id) ? '+' : '−'}</span>
+                  </button></h2>
+                  <div className="study-overview-cards" id={`module-${module.id}`} hidden={collapsedModules.has(module.id)}>
+                    {module.lessons.map((lesson) => {
                       const done = completedIds.has(lesson.id);
                       return (
                         <Link key={lesson.id} className="study-overview-lesson" to={`/learn/${courseId}/${lesson.id}`}>
@@ -355,8 +361,8 @@ export default function Learn(): JSX.Element {
                             <span className="study-overview-visual-symbol">{lesson.videoUrl ? '▶' : lesson.kind === 'quiz' ? '?' : '≡'}</span>
                             {done && <span className="study-overview-done">✓</span>}
                           </span>
-                          <span className="study-overview-lesson-kind">{t(`kind.${lesson.kind}`)}</span>
-                          <strong>{moduleIndex + 1}.{lessonIndex + 1} {lesson.title}</strong>
+                          <span className="study-overview-lesson-kind">{lesson.videoUrl ? 'Видеоурок' : lesson.kind === 'video_text' ? (lesson.bodyMd?.includes('Самостоятельное задание') ? 'Практика' : 'Материал') : t(`kind.${lesson.kind}`)}{done ? ' · Пройдено' : lesson.id === serverNextLessonId ? ' · Следующий урок' : ''}</span>
+                          <strong>{lesson.title}</strong>
                         </Link>
                       );
                     })}
@@ -377,7 +383,11 @@ export default function Learn(): JSX.Element {
       <main className="page study-page study-lesson">
         <div className="study-page-top">
           <Link to={`/learn/${courseId}`} className="study-page-back"><span aria-hidden="true">←</span> К программе</Link>
-          <span className="study-page-top-label">{title}</span>
+          <nav className="study-lesson-pager" aria-label="Навигация по урокам">
+            {activeIndex > 0 && <Link to={`/learn/${courseId}/${flatLessons[activeIndex - 1].id}`} aria-label="Предыдущий урок" title="Предыдущий урок">←</Link>}
+            <span>{activeIndex >= 0 ? `${activeIndex + 1} / ${flatLessons.length}` : '—'}</span>
+            {flatNext && <Link to={`/learn/${courseId}/${flatNext.id}`} aria-label="Следующий урок" title="Следующий урок">→</Link>}
+          </nav>
         </div>
         <h1>{currentLesson.title}</h1>
         <div className="learn-progress">

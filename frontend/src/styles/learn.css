@@ -354,3 +354,29 @@
   .study-overview-module h2 { flex-wrap: wrap; }
   .study-overview-count { margin-left: 0; }
 }
+
+/* Small usability refinements: accessible module disclosure and lesson navigation. */
+.study-overview-module h2 { padding: 0; }
+.study-module-toggle { display: flex; align-items: center; gap: 12px; width: 100%; padding: 18px 0; margin: 0; border: 0; border-radius: 0; background: transparent; color: var(--fg); text-align: left; font: inherit; cursor: pointer; }
+.study-module-toggle > span:nth-child(2) { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.study-module-toggle:hover { background: #f7f7f8; }
+.study-module-number { display: grid; place-items: center; flex: none; width: 34px; height: 34px; border-radius: 50%; background: #f0f1f3; font-size: 15px; }
+.study-overview-cards[hidden] { display: none; }
+.study-overview-lesson { border-radius: 16px; transition: transform .18s; }
+.study-overview-lesson:hover { transform: translateY(-3px); }
+.study-overview-lesson-kind { line-height: 1.5; }
+.study-lesson-pager { display: flex; align-items: center; gap: 12px; white-space: nowrap; }
+.study-lesson-pager > span { color: var(--muted); font-size: 13px; font-variant-numeric: tabular-nums; }
+.study-lesson-pager a { display: grid; place-items: center; width: 42px; height: 42px; border-radius: 50%; background: #efefef; font-size: 23px; }
+.study-lesson-pager a:hover { background: #dedee3; }
+.study-lesson .lesson-pane > .panel > h3:first-child { display: none; }
+@media (prefers-reduced-motion: reduce) {
+  .study-overview-lesson { transition: none; }
+  .study-overview-lesson:hover { transform: none; }
+}
+@media (max-width: 480px) {
+  .study-page-top { gap: 8px; }
+  .study-page-back { gap: 6px; font-size: 13px; }
+  .study-lesson-pager { gap: 7px; }
+  .study-lesson-pager a { width: 36px; height: 36px; }
+}
