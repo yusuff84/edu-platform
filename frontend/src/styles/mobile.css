@@ -723,3 +723,175 @@ video {
 @media (prefers-reduced-motion: reduce) {
   .svis-simple { animation: none; }
 }
+
+/* ---------- Расширенная админка: действия пользователя, сертификаты, тексты ---------- */
+.aua {
+  display: grid;
+  gap: 14px;
+  margin: 14px 0;
+}
+
+.aua-section {
+  display: grid;
+  gap: 10px;
+  padding: 14px 0;
+  border-top: 1px solid var(--line);
+}
+
+.panel.aua-section {
+  border-top: 1px solid var(--line);
+  padding: 20px;
+  margin-bottom: 16px;
+}
+
+.aua-section h2,
+.aua-section h3 {
+  margin: 0;
+}
+
+.aua-section h3 {
+  font-size: 16px;
+}
+
+.aua-courses {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+}
+
+.aua-course {
+  display: grid;
+  gap: 6px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: #fff;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.aua-course-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.aua-status {
+  font-size: 12.5px;
+  font-weight: 700;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: #eef0f3;
+}
+
+.aua-status--active { background: #e4f5ea; color: #14663a; }
+.aua-status--revoked,
+.aua-status--refunded { background: #fdecea; color: #b42318; }
+
+.aua-progress {
+  height: 6px;
+  border-radius: 999px;
+  background: #ececf0;
+  overflow: hidden;
+}
+
+.aua-progress i {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+}
+
+.aua-meta {
+  font-size: 13px;
+}
+
+.aua-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.aua-danger {
+  color: #b42318 !important;
+  border-color: #f3c3bd !important;
+}
+
+.aua-inline {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.aua-inline .input {
+  flex: 1 1 220px;
+  min-width: 0;
+}
+
+.aua-form {
+  display: grid;
+  gap: 10px;
+}
+
+.aua-form label {
+  display: grid;
+  gap: 4px;
+  font-size: 13.5px;
+  font-weight: 600;
+}
+
+.aua-form .btn {
+  justify-self: start;
+}
+
+.au-create {
+  margin-bottom: 16px;
+}
+
+.au-create-form {
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  align-items: end;
+  margin-top: 12px;
+}
+
+.au-create-form .btn {
+  justify-self: stretch;
+}
+
+.aua-note,
+.aua-password {
+  margin: 0;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: var(--accent-soft);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.aua-password code {
+  font-size: 15px;
+  padding: 2px 6px;
+  border-radius: 6px;
+  background: #fff;
+}
+
+.site-settings-form {
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+}
+
+.cert-finish-name {
+  margin: 0 0 8px;
+  font-size: 14px;
+}
+
+@media (max-width: 620px) {
+  .aua-actions .btn {
+    flex: 1 1 calc(50% - 6px);
+  }
+}

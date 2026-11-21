@@ -8,6 +8,7 @@ import { Link, useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { ApiError, getCertificate } from '../api/client';
 import { t } from '../i18n/t';
+import { CertificateDocument } from '../components/CertificateDocument';
 import { DEFAULT_DESCRIPTION, useSeo } from '../app/useSeo';
 import '../styles/certificate.css';
 
@@ -143,7 +144,7 @@ export default function Certificate(): JSX.Element {
   if (!cert) return <CertificateNotFound />;
 
   // ФИО может быть пустым (displayName не задан) — показываем нейтральное «Студент».
-  const studentName = cert.studentName?.trim() || t('p8.cert.student');
+  const studentName = cert.studentName?.trim() || 'Слушатель курса';
 
   return (
     <div className="wrap">
@@ -151,48 +152,49 @@ export default function Certificate(): JSX.Element {
         <div className="crumbs">
           <Link to="/">{t('nav.catalog')}</Link> / <span>{t('p8.cert.pageTitle')}</span>
         </div>
-        <article className="panel cert-card">
-          <div className="cert-seal" aria-hidden="true">
-            <span className="cert-seal-mark">S</span>
-            <span className="cert-seal-text">skillex.space</span>
-          </div>
-          <p className="cert-kicker">{t('p8.cert.awarded')}</p>
-          <h1 className="cert-title">{t('p8.cert.pageTitle')}</h1>
-          <dl className="cert-facts">
-            <div className="cert-fact">
-              <dt>{t('p8.cert.student')}</dt>
-              <dd>{studentName}</dd>
-            </div>
-            <div className="cert-fact">
-              <dt>{t('p8.cert.course')}</dt>
-              <dd>{cert.courseTitle}</dd>
-            </div>
-            <div className="cert-fact">
-              <dt>{t('p8.cert.issuedAt')}</dt>
-              <dd>{formatIssuedDate(cert.issuedAt)}</dd>
-            </div>
-            <div className="cert-fact">
-              <dt>{t('p8.cert.number')}</dt>
-              <dd>
-                <span className="cert-number">{cert.number}</span>
-              </dd>
-            </div>
-          </dl>
-          <div className="cert-actions">
-            <button type="button" className="btn btn-primary" onClick={() => void onCopy()}>
-              {t('p8.cert.copyLink')}
+        <CertificateDocument
+          number={cert.number}
+          studentName={studentName}
+          courseTitle={cert.courseTitle}
+          issuedAt={cert.issuedAt}
+          verifyUrl={`${window.location.origin}/certificates/${encodeURIComponent(cert.number)}`}
+        />
+        <div className="cert-actions certdoc-actions">
+          {/* Печать браузера = «Сохранить как PDF»: печатается только сертификат, A4 альбомно. */}
+          <button type="button" className="btn btn-primary" onClick={() => window.print()}>
+            Скачать PDF
+          </button>
+          {typeof navigator !== 'undefined' && 'share' in navigator && (
+            <button
+              type="button"
+              className="btn"
+              onClick={() =>
+                void navigator
+                  .share({
+                    title: `Сертификат ${cert.number}`,
+                    text: `Сертификат о прохождении курса «${cert.courseTitle}» на skillex.space`,
+                    url: `${window.location.origin}/certificates/${encodeURIComponent(cert.number)}`,
+                  })
+                  .catch(() => undefined)
+              }
+            >
+              Поделиться
             </button>
-            <Link className="btn" to={`/courses/${cert.courseSlug}`}>
-              {t('p8.cert.toCourse')}
-            </Link>
-            <Link className="btn btn-ghost" to="/">
-              {t('error.goCatalog')}
-            </Link>
-            <span className="cert-copied" role="status" aria-live="polite">
-              {copied ? t('p8.cert.copied') : ''}
-            </span>
-          </div>
-        </article>
+          )}
+          <button type="button" className="btn" onClick={() => void onCopy()}>
+            {t('p8.cert.copyLink')}
+          </button>
+          <Link className="btn" to={`/courses/${cert.courseSlug}`}>
+            {t('p8.cert.toCourse')}
+          </Link>
+          <span className="cert-copied" role="status" aria-live="polite">
+            {copied ? t('p8.cert.copied') : ''}
+          </span>
+        </div>
+        <p className="muted certdoc-hint">
+          Сертификат подтверждает прохождение курса на платформе skillex.space. Подлинность можно
+          проверить по номеру или QR-коду — откроется эта страница.
+        </p>
       </main>
     </div>
   );

@@ -496,6 +496,8 @@ export interface AdminSettings {
 export interface PublicSettings {
   /** Показывать ли гостевой промо-баннер сверху страниц. */
   promoBarEnabled: boolean;
+  /** Тексты промо-полосы и контакты, заданные в админке (незаданные ключи отсутствуют). */
+  site?: Partial<Record<'promo_text' | 'promo_link_text' | 'promo_link_url' | 'contact_phone' | 'contact_email' | 'contact_city' | 'footer_tagline', string>>;
 }
 
 // ---------- Входные формы запросов ----------

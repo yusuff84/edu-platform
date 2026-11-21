@@ -20,6 +20,7 @@ import type {
 import { t } from '../i18n/t';
 import type { RuKey } from '../i18n/t';
 import '../styles/adminCourseDetail.css';
+import { AdminCourseOps } from '../components/AdminCourseOps';
 
 /** Размер страницы списка записей (потолок контрактного limit — 100). */
 const ENROLLMENTS_LIMIT = 100;
@@ -197,6 +198,7 @@ export default function AdminCourseDetail(): JSX.Element {
 
           {data && stats && (
             <>
+              <AdminCourseOps courseId={data.course.id} status={data.course.status} />
               {/* ---------- Шапка: статус/цена/автор + быстрые ссылки ---------- */}
               <header className="acd-head">
                 <div className="acd-head__main">

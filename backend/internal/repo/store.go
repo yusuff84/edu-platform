@@ -62,6 +62,8 @@ type Store struct {
 	favorites map[string]map[string]time.Time
 	// Заявки на консультацию с главной (leads.go).
 	leads []*Lead
+	// Редактируемые тексты сайта (admin_ops.go).
+	siteSettings map[string]string
 
 	// lastCreatedAt — источник монотонного времени создания в in-memory
 	// режиме: см. nextCreatedAt.

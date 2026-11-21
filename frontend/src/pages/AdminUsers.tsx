@@ -28,6 +28,8 @@ import { t } from '../i18n/t';
 import type { RuKey } from '../i18n/t';
 import CsvExportButton, { csvDateStamp, exportTruncated } from '../components/CsvExportButton';
 import '../styles/adminUsers.css';
+import { AdminUserActions } from '../components/AdminUserActions';
+import { AdminCreateUser } from '../components/AdminCreateUser';
 
 // ---------- Константы ----------
 
@@ -147,7 +149,7 @@ function removeCachedUser(qc: QueryClient, id: string): void {
  * (GET /admin/payments?q=<email>&limit=10). Монтируется только при открытии —
  * запросы уходят по факту показа. Закрытие: Esc, кнопка «Закрыть», клик по фону.
  */
-function UserDetails({ user, onClose }: { user: AdminUserRow; onClose: () => void }): JSX.Element {
+function UserDetails({ user, onClose, onChanged }: { user: AdminUserRow; onClose: () => void; onChanged: () => void }): JSX.Element {
   // Esc закрывает окно, пока оно смонтировано.
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent): void {
@@ -209,6 +211,9 @@ function UserDetails({ user, onClose }: { user: AdminUserRow; onClose: () => voi
         </dl>
 
         {/* ----- Записи на курсы ----- */}
+        {/* Действия администратора: курсы, сертификаты, профиль, пароль, сеансы. */}
+        <AdminUserActions user={user} onChanged={onChanged} />
+
         <section className="au-details-section" aria-label={t('adminUsers.detailsEnrollments')}>
           <h3>{t('adminUsers.detailsEnrollments')}</h3>
           {enrollments.isLoading && (
@@ -500,6 +505,8 @@ export default function AdminUsers(): JSX.Element {
           </p>
           <h1>{t('adminUsers.title')}</h1>
 
+          <AdminCreateUser onCreated={() => void qc.invalidateQueries({ queryKey: LIST_KEY })} />
+
           <section className="panel">
             {/* ---------- Фильтры ---------- */}
             <div className="au-filters">
@@ -757,7 +764,13 @@ export default function AdminUsers(): JSX.Element {
           </section>
 
           {/* ---------- Карточка «Профиль пользователя» (T52) ---------- */}
-          {detailsUser && <UserDetails user={detailsUser} onClose={() => setDetailsUser(null)} />}
+          {detailsUser && (
+            <UserDetails
+              user={detailsUser}
+              onClose={() => setDetailsUser(null)}
+              onChanged={() => void qc.invalidateQueries({ queryKey: LIST_KEY })}
+            />
+          )}
         </main>
       </div>
     </div>

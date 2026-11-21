@@ -30,6 +30,7 @@ import {
 import type { CompleteLessonInput, CompleteResult, Lesson } from '../api/client';
 import { courseProgress } from '../api/meExtra';
 import LessonView from '../components/LessonView';
+import { meQueryOptions } from '../components/RouteGuards';
 import { VideoPoster } from '../components/VideoPoster';
 import Questions from '../components/Questions';
 import { t } from '../i18n/t';
@@ -74,6 +75,7 @@ export default function Learn(): JSX.Element {
 
   // Шарим кеш списка «моих курсов» с MyCourses.tsx (ключ в репозитории — 'my-courses').
   const myQuery = useQuery({ queryKey: ['my-courses'], queryFn: myCourses });
+  const meQuery = useQuery(meQueryOptions);
 
   // курс известен по id, API ждёт slug → находим slug в «моих курсах».
   const meCourse = (myQuery.data ?? []).find((m) => m.course.id === courseId);
@@ -439,6 +441,11 @@ export default function Learn(): JSX.Element {
                 только когда бэкенд уже вернул номер (иначе баннер без ссылки). */}
             <div className="cert-finish">
               <p className="cert-finish-title">{t('p8.cert.done')}</p>
+              {meQuery.data && !meQuery.data.displayName?.trim() && (
+                <p className="cert-finish-name">
+                  В сертификате будет ваше имя — <Link to="/profile">укажите его в профиле</Link>.
+                </p>
+              )}
               {certificateNumber && (
                 <Link
                   className="btn btn-primary"

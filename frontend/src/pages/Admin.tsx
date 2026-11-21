@@ -21,6 +21,7 @@ import {
 // чтобы не трогать client.ts (правило волны P6).
 import { listInvites, refundPayment, revokeInvite } from '../api/adminActions';
 import { AdminLeads } from '../components/AdminLeads';
+import { AdminSiteSettings } from '../components/AdminSiteSettings';
 import type { AdminInviteRow, AdminInviteStatus } from '../api/adminActions';
 import type {
   Course,
@@ -624,6 +625,7 @@ export default function Admin(): JSX.Element {
         <Link to="/admin/users">{t('adminUsers.title')}</Link>
         <Link to="/admin/courses">{t('adminCourses.title')}</Link>
         <Link to="/admin/enrollments">{t('adminEnrollments.title')}</Link>
+        <Link to="/admin/certificates">Сертификаты</Link>
       </nav>
 
       {/* ---------- 0. Заявки с главной («Поможем подобрать курс») ---------- */}
@@ -1034,6 +1036,7 @@ export default function Admin(): JSX.Element {
             </p>
           )}
         </div>
+        <AdminSiteSettings />
       </section>
 
       {/* ---------- 4. Приглашения ---------- */}

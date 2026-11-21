@@ -336,6 +336,22 @@ type StoreAPI interface {
 	// SetLeadStatus меняет статус заявки (new/done); ErrNotFound — нет заявки.
 	SetLeadStatus(id, status string) error
 
+	// --- Расширенные операции администратора (admin_ops.go) ---
+
+	// SetUserEmail меняет email; ErrAlreadyExists — занят, ErrNotFound — нет пользователя.
+	SetUserEmail(id, email string) error
+	// DeleteLessonProgress удаляет прогресс ученика по указанным урокам.
+	DeleteLessonProgress(studentID string, lessonIDs []string) int
+	// ListAllCertificates — сертификаты всех учеников с поиском, новые первыми.
+	ListAllCertificates(q string, limit int) []*AdminCertificateItem
+	// DeleteCertificate отзывает сертификат по номеру.
+	DeleteCertificate(number string) bool
+	// SetCourseTeacher передаёт курс другому преподавателю.
+	SetCourseTeacher(courseID, teacherID string) bool
+	// GetSiteSettings / SetSiteSettings — редактируемые тексты и контакты сайта.
+	GetSiteSettings() map[string]string
+	SetSiteSettings(kv map[string]string) error
+
 	// ---- T77: аналитика учителя ----
 
 	// TeacherOverview — сводка преподавателя одним вызовом: курсы по

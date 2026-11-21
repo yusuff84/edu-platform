@@ -38,6 +38,7 @@ const AdminStats = lazy(() => import('../pages/AdminStats'));
 const AdminCourseDetail = lazy(() => import('../pages/AdminCourseDetail'));
 // T49: экран «Записи на курсы» — отдельная страница подраздела.
 const AdminEnrollments = lazy(() => import('../pages/AdminEnrollments'));
+const AdminCertificates = lazy(() => import('../pages/AdminCertificates'));
 const CourseStudents = lazy(() => import('../pages/CourseStudents'));
 // T78: аналитика преподавателя — отдельный чанк подраздела кабинета.
 const TeacherStats = lazy(() => import('../pages/TeacherStats'));
@@ -126,6 +127,10 @@ function Layout(): JSX.Element {
   // В уроке футер не нужен: ниже урока — нижняя панель навигации по шагам.
   const isLesson = /^\/learn\/[^/]+\/[^/]+/.test(location.pathname);
   const isAuthor = user?.role === 'teacher' || user?.role === 'admin';
+  // Тексты промо-полосы и контакты — из админки (пустое — значения по умолчанию).
+  const site = promoQuery.data?.site ?? {};
+  const phone = site.contact_phone || '8 (800) 600-78-47';
+  const contactEmail = site.contact_email || 'hello@edu-platform.ru';
 
   return (
     <div className={isLesson ? 'app app--lesson' : 'app'}>
@@ -135,8 +140,12 @@ function Layout(): JSX.Element {
       </a>
       {showPromo && (
         <div className="promo">
-          <span>Начните учиться бесплатно — регистрация займёт минуту</span>
-          <Link to="/">Выбрать курс</Link>
+          <span>{site.promo_text || 'Начните учиться бесплатно — регистрация займёт минуту'}</span>
+          {/^https:\/\//.test(site.promo_link_url ?? '') ? (
+            <a href={site.promo_link_url} rel="noopener noreferrer">{site.promo_link_text || 'Выбрать курс'}</a>
+          ) : (
+            <Link to={site.promo_link_url || '/'}>{site.promo_link_text || 'Выбрать курс'}</Link>
+          )}
           <button type="button" className="promo-close" aria-label="Скрыть предложение" onClick={dismissPromo}>
             ×
           </button>
@@ -203,14 +212,14 @@ function Layout(): JSX.Element {
             </Link>
             <p>
               <small>
-                Маркетплейс IT-курсов для начинающих. Учим спокойно, проверяем честно,
-                поддерживаем на каждом шаге.
+                {site.footer_tagline ||
+                  'Маркетплейс IT-курсов для начинающих. Учим спокойно, проверяем честно, поддерживаем на каждом шаге.'}
               </small>
             </p>
             <p className="contact-line">
-              <a href="tel:88006007847"><b>8 (800) 600-78-47</b></a>
-              <a href="mailto:hello@edu-platform.ru"><small>hello@edu-platform.ru</small></a>
-              <small>Москва</small>
+              <a href={`tel:${phone.replace(/[^\d+]/g, '')}`}><b>{phone}</b></a>
+              <a href={`mailto:${contactEmail}`}><small>{contactEmail}</small></a>
+              <small>{site.contact_city || 'Москва'}</small>
             </p>
             <small>© skillex.space, 2026</small>
           </div>
@@ -290,6 +299,7 @@ export const router = createBrowserRouter([
       { path: '/admin/courses/:id', element: <RequireRole roles={['admin']}><AdminCourseDetail /></RequireRole> },
       { path: '/admin/stats', element: <RequireRole roles={['admin']}><AdminStats /></RequireRole> },
       { path: '/admin/enrollments', element: <RequireRole roles={['admin']}><AdminEnrollments /></RequireRole> },
+      { path: '/admin/certificates', element: <RequireRole roles={['admin']}><AdminCertificates /></RequireRole> },
       // Ученики конкретного курса — автору курса и админу.
       { path: '/teach/:id/students', element: <RequireRole roles={['teacher', 'admin']}><CourseStudents /></RequireRole> },
       // Личный кабинет ученика: профиль и история платежей.

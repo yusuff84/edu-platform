@@ -7,6 +7,8 @@ import "net/http"
 // управляет админка, а читает шапка публичных страниц (промо-баннер).
 type publicSettingsResponse struct {
 	PromoBarEnabled bool `json:"promoBarEnabled"`
+	// Site — тексты промо-полосы и контакты, заданные в админке (пустые ключи не приходят).
+	Site map[string]string `json:"site"`
 }
 
 // GetPublicSettings — GET /settings/public: настройки интерфейса без
@@ -16,5 +18,6 @@ type publicSettingsResponse struct {
 func (a *App) GetPublicSettings(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, publicSettingsResponse{
 		PromoBarEnabled: a.Store.GetPromoBarEnabled(),
+		Site:            a.Store.GetSiteSettings(),
 	})
 }

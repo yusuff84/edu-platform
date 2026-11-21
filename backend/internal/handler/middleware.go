@@ -248,6 +248,8 @@ func NewRouter(app *App) http.Handler {
 		// Заявки «Поможем подобрать курс»: POST /leads (публично, с лимитом),
 		// GET /admin/leads и POST /admin/leads/{id}/status (handler/leads.go).
 		app.RegisterLeadsRoutes(r)
+		// Расширенная админка: пользователи, прогресс, сертификаты, курсы, тексты сайта (handler/admin_ops.go).
+		app.RegisterAdminOpsRoutes(r)
 	})
 	return r
 }
