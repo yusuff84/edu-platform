@@ -1161,3 +1161,20 @@ video {
 .svis-simple .sv-title {
   color: var(--fg);
 }
+
+/* Иконки способов связи в форме заявки. */
+.contact .cm {
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  box-shadow: 0 4px 10px -4px rgba(20, 20, 20, 0.35);
+}
+
+.contact .cm svg {
+  display: block;
+}
+
+.contact input[type='radio'] {
+  width: 18px;
+  height: 18px;
+}

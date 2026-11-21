@@ -299,6 +299,44 @@ const CONTACTS = [
   { key: 'max', label: 'В MAX', bg: '#7B5CFF', glyph: 'M' },
 ];
 
+/** Иконки способов связи в форме заявки — в стиле остальных иконок сайта. */
+function ContactIcon({ kind }: { kind: string }): JSX.Element {
+  if (kind === 'phone') {
+    return (
+      <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true">
+        <path
+          fill="#fff"
+          d="M6.6 10.8a15.1 15.1 0 0 0 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1A17 17 0 0 1 3 4c0-.6.4-1 1-1h3.5c.6 0 1 .4 1 1 0 1.3.2 2.5.6 3.6.1.3 0 .7-.2 1z"
+        />
+      </svg>
+    );
+  }
+  if (kind === 'telegram') {
+    return (
+      <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true">
+        <path fill="#fff" d="M21.4 3.6 2.9 10.7c-1 .4-1 1.8 0 2.1l4.6 1.5 1.8 5.6c.2.7 1.1.9 1.6.4l2.6-2.4 4.6 3.4c.6.4 1.4.1 1.6-.6l3.1-15.6c.2-.9-.6-1.6-1.4-1.3Zm-3.6 4.3-7.9 7.2-.3 3.2-1.4-4.4 9.2-6.3c.3-.2.6.1.4.3Z" />
+      </svg>
+    );
+  }
+  if (kind === 'vk') {
+    return (
+      <svg width="20" height="16" viewBox="0 0 20 16" aria-hidden="true">
+        <text x="10" y="12" textAnchor="middle" fontSize="11" fontWeight="800" fill="#fff" fontFamily="inherit" letterSpacing="-0.3">
+          VK
+        </text>
+      </svg>
+    );
+  }
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true">
+      <path fill="#fff" d="M12 3C6.5 3 2 6.8 2 11.5c0 2.4 1.2 4.6 3.1 6.1L4.5 21l3.8-1.9c1.2.4 2.4.6 3.7.6 5.5 0 10-3.8 10-8.5S17.5 3 12 3Z" />
+      <circle cx="8" cy="11.5" r="1.3" fill={'#7B5CFF'} />
+      <circle cx="12" cy="11.5" r="1.3" fill={'#7B5CFF'} />
+      <circle cx="16" cy="11.5" r="1.3" fill={'#7B5CFF'} />
+    </svg>
+  );
+}
+
 export function LeadBlock(): JSX.Element {
   const [form, setForm] = useState({
     name: '',
@@ -403,7 +441,7 @@ export function LeadBlock(): JSX.Element {
                   disabled={sent}
                 />
                 <span className="cm" style={{ background: c.bg }}>
-                  {c.glyph}
+                  <ContactIcon kind={c.key} />
                 </span>
                 {c.label}
               </label>
