@@ -31,3 +31,5 @@ Skillbox*
 
 # Prebuilt production artifacts remain on the server; do not publish binaries.
 /artifacts/
+
+__pycache__/
