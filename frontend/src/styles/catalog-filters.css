@@ -163,3 +163,112 @@
     padding: 7px 12px;
   }
 }
+
+/* ---------- Десктоп: ровная панель фильтров ----------
+   Было: grid с align-items:end — подписи групп оказывались на разной высоте,
+   чипы рейтинга переносились на вторую строку, селект был выше чипов.
+   Стало: категории — первой строкой с разделителем; ниже группы в одну линию
+   по своей ширине, подписи на одном уровне, все контролы высотой 40px,
+   «Сбросить фильтры» прижат вправо (при нехватке места ряд аккуратно переносится). */
+@media (min-width: 961px) {
+  .catalog-filters__grid {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: 18px 36px;
+  }
+
+  .catalog-filters__group--categories {
+    flex: 1 1 100%;
+    padding-bottom: 18px;
+    border-bottom: 1px solid var(--line-soft);
+  }
+
+  .catalog-filters__group:not(.catalog-filters__group--categories) .catalog-chips {
+    flex-wrap: nowrap;
+  }
+
+  .catalog-page .catalog-chip {
+    min-height: 40px;
+    white-space: nowrap;
+  }
+
+  .catalog-filters__sort {
+    flex: 0 0 240px;
+  }
+
+  .catalog-page .catalog-filters__sort .select {
+    width: 100%;
+    height: 40px;
+    min-height: 40px;
+    padding: 0 38px 0 16px;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    background-color: var(--surface);
+    font-family: var(--font);
+    font-size: 13.5px;
+    font-weight: 700;
+    color: var(--fg);
+    cursor: pointer;
+  }
+
+  .catalog-filters__actions {
+    margin-left: auto;
+    align-self: flex-end;
+  }
+
+  .catalog-page .catalog-filters__actions .btn {
+    min-height: 40px;
+  }
+
+  .catalog-page .catalog-filters__actions .btn:disabled {
+    opacity: 0.45;
+  }
+}
+
+@media (min-width: 961px) {
+  .catalog-filters__grid {
+    position: relative;
+    gap: 18px 28px;
+  }
+
+  /* Сортировка — справа в общей строке с ценой и рейтингом. */
+  .catalog-filters__sort {
+    flex: 0 0 220px;
+    margin-left: auto;
+  }
+
+  /* «Сбросить фильтры» — компактная ссылка в правом верхнем углу панели. */
+  .catalog-filters__actions {
+    position: absolute;
+    top: -6px;
+    right: 0;
+    margin: 0;
+  }
+
+  .catalog-page .catalog-filters__actions .btn {
+    min-height: 32px;
+    padding: 4px 12px;
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+    color: var(--accent, #4635ff);
+    font-size: 13px;
+  }
+
+  .catalog-page .catalog-filters__actions .btn:hover:not(:disabled) {
+    background: var(--accent-soft, #eeedff);
+    transform: none;
+  }
+
+  .catalog-page .catalog-filters__actions .btn:disabled {
+    visibility: hidden;
+  }
+}
+
+/* Когда сортировка не помещается в строку и переносится — пусть стоит слева, а не «висит» справа. */
+@media (min-width: 961px) and (max-width: 1059px) {
+  .catalog-filters__sort {
+    margin-left: 0;
+  }
+}
