@@ -10,6 +10,7 @@ import type {
 } from '../api/client';
 import CourseCard from '../components/CourseCard';
 import { FeaturedCourse } from '../components/FeaturedCourse';
+import { AudienceBlock, HomeHero } from '../components/HomeHero';
 import {
   DiplomaBlock,
   FaqBlock,
@@ -210,6 +211,8 @@ export default function Catalog(): JSX.Element {
   );
   // Курс в центре внимания — первый в выдаче без фильтров (по умолчанию — популярные).
   const featured = !filtersActive && page === 1 ? items[0] : undefined;
+  // Короткий каталог (до 6 курсов) — без панели поиска и фильтров.
+  const compact = !filtersActive && page === 1 && total <= 6;
 
   const isEmpty = Boolean(data) && items.length === 0;
   // «Показано N из M»: сколько курсов пользователь уже увидел листанием.
@@ -269,55 +272,12 @@ export default function Catalog(): JSX.Element {
 
   return (
     <main className="page catalog-page">
-      <section className="hero">
-        <div className="hero-card">
-          <span className="eyebrow">Онлайн-курсы · бесплатный старт</span>
-          <h1>Понятные онлайн-курсы с нуля — в своём темпе</h1>
-          <p className="lead">
-            Короткие видеоуроки, конспекты и тесты с автоматической проверкой. Учитесь с телефона
-            или компьютера и получайте сертификат по итогам курса.
-          </p>
-          <div className="hero-cta">
-            {featured && !meQuery.data ? (
-              <Link className="btn btn-primary" to="/register" state={{ from: `/courses/${featured.slug}` }}>
-                Начать бесплатно
-              </Link>
-            ) : (
-              <button type="button" className="btn btn-primary" onClick={scrollToCards}>
-                Выбрать курс
-              </button>
-            )}
-            {/* «Мои курсы» — только вошедшим: /me за гвардом RequireAuth. */}
-            {meQuery.data && (
-              <Link className="btn btn-ghost" to="/me">
-                Мои курсы
-              </Link>
-            )}
-          </div>
-          {/* Что получает ученик — вместо витринной статистики («1 курс в каталоге»). */}
-          <ul className="hero-trust" aria-label="Почему у нас удобно учиться">
-            <li>Бесплатный старт</li>
-            <li>Сертификат</li>
-            <li>С телефона</li>
-            <li>В своём темпе</li>
-          </ul>
-          <div className="cats">
-            <a
-              className="cat dark"
-              href="#lead"
-              onClick={(e) => {
-                e.preventDefault();
-                document.getElementById('lead')?.scrollIntoView({ behavior: 'smooth' });
-              }}
-            >
-              Помогите с выбором
-            </a>
-          </div>
-        </div>
-      </section>
+      <HomeHero courses={items} total={total} loggedIn={Boolean(meQuery.data)} onChoose={scrollToCards} />
 
       <div className="wrap">
-        {featured && <FeaturedCourse course={featured} loggedIn={Boolean(meQuery.data)} />}
+        {/* Поиск и фильтры нужны, когда курсов много; при коротком каталоге — сразу карточки. */}
+        {!compact && (
+        <>
         <div className="mini-head">
           <h2>Все курсы</h2>
           <form
@@ -505,11 +465,16 @@ export default function Catalog(): JSX.Element {
           </div>
         </section>
 
-        <div className="count-line" ref={cardsRef}>
-          <h2>{t('catalog.title')}</h2>
-          <span aria-live="polite">
-            {t('p8.catalog.found')}: {total}
-          </span>
+        </>
+        )}
+
+        <div className={`count-line${compact ? ' count-line--home' : ''}`} ref={cardsRef}>
+          <h2>{compact ? 'Выберите курс' : t('catalog.title')}</h2>
+          {!compact && (
+            <span aria-live="polite">
+              {t('p8.catalog.found')}: {total}
+            </span>
+          )}
         </div>
 
         {query.isLoading && (
@@ -597,6 +562,8 @@ export default function Catalog(): JSX.Element {
           </nav>
         )}
 
+        {featured && <FeaturedCourse course={featured} loggedIn={Boolean(meQuery.data)} />}
+        <AudienceBlock />
         <SupportBlock />
         <PerksBlock />
         <DiplomaBlock courseTitle={featured?.title} />

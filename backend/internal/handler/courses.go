@@ -26,6 +26,10 @@ type courseItem struct {
 	// IsFavorite — курс в избранном текущего зрителя; для гостя всегда false.
 	// Аддитивное поле публичных видов курса (T73-extension).
 	IsFavorite bool `json:"isFavorite"`
+	// ModulesCount/LessonsCount — объём курса для карточек каталога и главной
+	// (только в GET /courses; аддитивные поля).
+	ModulesCount int `json:"modulesCount,omitempty"`
+	LessonsCount int `json:"lessonsCount,omitempty"`
 }
 
 func toCourseItem(c *repo.Course) courseItem {
@@ -148,9 +152,12 @@ func (a *App) ListCourses(w http.ResponseWriter, r *http.Request) {
 		end = len(all)
 	}
 	favs := a.favoriteCourseIDs(r)
+	counts := a.Store.CourseContentCounts()
 	items := make([]courseItem, 0, end-start)
 	for _, c := range all[start:end] {
-		items = append(items, toCourseItemFor(c, favs))
+		item := toCourseItemFor(c, favs)
+		item.ModulesCount, item.LessonsCount = counts[c.ID].Modules, counts[c.ID].Lessons
+		items = append(items, item)
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"items": items, "total": len(all), "page": safePage, "limit": safeLimit,

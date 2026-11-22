@@ -92,6 +92,9 @@ export interface CourseItem {
    * необязательное поле для совместимости со старыми ответами.
    */
   isFavorite?: boolean;
+  /** Объём курса — только в каталоге GET /courses (аддитивные поля). */
+  modulesCount?: number;
+  lessonsCount?: number;
 }
 
 /** Полный курс (repo.Course, JSON-теги backend). */

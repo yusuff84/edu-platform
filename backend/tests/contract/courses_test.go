@@ -167,3 +167,20 @@ func TestCoursePageOutline(t *testing.T) {
 		t.Fatalf("оглавление не меньше полного ответа: %d >= %d", len(body), len(full.Body.String()))
 	}
 }
+
+// Каталог отдаёт объём курса (модули и уроки) для карточек и главной.
+func TestCatalogContentCounts(t *testing.T) {
+	app, router := newTestApp()
+	seedPublishedCourse(t, app, router, 0)
+	rec := doRequest(t, router, http.MethodGet, "/api/v1/courses", nil, nil)
+	var out struct {
+		Items []struct {
+			ModulesCount int `json:"modulesCount"`
+			LessonsCount int `json:"lessonsCount"`
+		} `json:"items"`
+	}
+	decodeBody(t, rec, &out)
+	if len(out.Items) != 1 || out.Items[0].ModulesCount != 1 || out.Items[0].LessonsCount != 1 {
+		t.Fatalf("каталог без объёма курса: %s", rec.Body.String())
+	}
+}
