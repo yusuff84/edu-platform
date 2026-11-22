@@ -40,17 +40,17 @@ type MdBlock =
   | { type: 'hr' }
   | { type: 'h'; level: number; text: string };
 
-const CALLOUTS: Record<CalloutType, { label: string; icon: string }> = {
-  summary: { label: 'Главное', icon: '★' },
-  note: { label: 'Заметка', icon: 'i' },
-  tip: { label: 'Совет', icon: '✓' },
-  important: { label: 'Важно', icon: '!' },
-  warning: { label: 'Внимание', icon: '!' },
-  danger: { label: 'Опасно', icon: '×' },
-  example: { label: 'Пример', icon: '›' },
-  term: { label: 'Термин', icon: 'Аа' },
-  practice: { label: 'Попробуйте сами', icon: '▶' },
-  check: { label: 'Проверьте себя', icon: '?' },
+const CALLOUTS: Record<CalloutType, { label: string }> = {
+  summary: { label: 'Главное' },
+  note: { label: 'Заметка' },
+  tip: { label: 'Совет' },
+  important: { label: 'Важно' },
+  warning: { label: 'Внимание' },
+  danger: { label: 'Опасно' },
+  example: { label: 'Пример' },
+  term: { label: 'Термин' },
+  practice: { label: 'Попробуйте сами' },
+  check: { label: 'Проверьте себя' },
 };
 
 const CALLOUT_ALIASES: Record<string, CalloutType> = {
@@ -304,9 +304,6 @@ function Blocks({ source, keyBase }: { source: string; keyBase: string }): JSX.E
             return (
               <aside key={key} className={`md-callout md-callout--${b.kind}`}>
                 <div className="md-callout-head">
-                  <span className="md-callout-icon" aria-hidden="true">
-                    {meta.icon}
-                  </span>
                   <span className="md-callout-label">{meta.label}</span>
                   {b.title && <span className="md-callout-title">{renderInline(b.title, `${key}-t`)}</span>}
                 </div>
