@@ -26,6 +26,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"io"
+	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -219,7 +220,7 @@ func (a *App) mcpDispatch(ctx context.Context, u *repo.User, req rpcRequest) map
 			"capabilities":    map[string]any{"tools": map[string]any{"listChanged": false}},
 			"serverInfo":      map[string]any{"name": "skillex-courses", "title": "skillex.space — курсы", "version": "1.0.0"},
 			"instructions": "Инструменты для создания и редактирования курсов платформы skillex.space. " +
-				"Порядок: create_course → add_module → add_lesson (text/video/quiz) → publish_course. " +
+				"Порядок: create_course → add_module → add_lesson (text/video/quiz) → set_course_cover (обложка) → publish_course. " +
 				"Контент правится только в черновике: для опубликованного курса сначала unpublish_course. " +
 				"Разметка уроков — Markdown (##, списки, **жирный**, `код`, блоки кода); таблиц и картинок нет.",
 		}, nil)
@@ -318,6 +319,8 @@ func mcpTools() []map[string]any {
 			obj(map[string]any{"course_id": str("UUID курса")}, "course_id")),
 		tool("delete_course", "Удалить курс", "Удаляет курс-черновик без учеников.",
 			obj(map[string]any{"course_id": str("UUID курса")}, "course_id")),
+		tool("set_course_cover", "Обложка курса", "Ставит обложку курса (опубликованного тоже, кроме архива). Картинка PNG, JPEG или WebP до 5 МБ в base64; лучше 16:10, например 1600×1000, без текста — название курса сайт накладывает сам снизу слева.",
+			obj(map[string]any{"course_id": str("UUID курса"), "image_base64": str("Картинка в base64 (можно с префиксом data:image/...;base64,)")}, "course_id", "image_base64")),
 	}
 }
 
@@ -328,8 +331,13 @@ func (a *App) mcpInvoke(ctx context.Context, u *repo.User, h http.HandlerFunc, m
 		b, _ := json.Marshal(body)
 		rd = bytes.NewReader(b)
 	}
+	return a.mcpInvokeRaw(ctx, u, h, method, params, rd, "application/json")
+}
+
+// mcpInvokeRaw — как mcpInvoke, но с готовым телом и Content-Type (multipart для обложки).
+func (a *App) mcpInvokeRaw(ctx context.Context, u *repo.User, h http.HandlerFunc, method string, params map[string]string, rd io.Reader, contentType string) (int, []byte) {
 	req := httptest.NewRequest(method, "/internal/mcp", rd).WithContext(ctx)
-	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Content-Type", contentType)
 	rctx := chi.NewRouteContext()
 	for k, v := range params {
 		rctx.URLParams.Add(k, v)
@@ -485,6 +493,29 @@ func (a *App) mcpCallTool(ctx context.Context, u *repo.User, name string, args m
 		code, out = a.mcpInvoke(ctx, u, a.AdminUnpublishCourse, http.MethodPost, map[string]string{"id": cid}, nil)
 	case "delete_course":
 		code, out = a.mcpInvoke(ctx, u, a.TeacherDeleteCourse, http.MethodDelete, map[string]string{"id": cid}, nil)
+	case "set_course_cover":
+		raw, _ := argStr(args, "image_base64")
+		if i := strings.Index(raw, ";base64,"); i >= 0 {
+			raw = raw[i+len(";base64,"):]
+		}
+		raw = strings.Map(func(r rune) rune {
+			if r == '\n' || r == '\r' || r == ' ' || r == '\t' {
+				return -1
+			}
+			return r
+		}, raw)
+		data, err := base64.StdEncoding.DecodeString(raw)
+		if err != nil {
+			if data, err = base64.RawStdEncoding.DecodeString(raw); err != nil {
+				return `{"error":"image_base64: не удалось декодировать base64"}`, true
+			}
+		}
+		var buf bytes.Buffer
+		mw := multipart.NewWriter(&buf)
+		fw, _ := mw.CreateFormFile("file", "cover")
+		_, _ = fw.Write(data)
+		_ = mw.Close()
+		code, out = a.mcpInvokeRaw(ctx, u, a.TeacherUploadCover, http.MethodPost, map[string]string{"id": cid}, &buf, mw.FormDataContentType())
 	default:
 		return `{"error":"Неизвестный инструмент: ` + name + `"}`, true
 	}

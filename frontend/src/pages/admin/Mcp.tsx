@@ -47,6 +47,7 @@ const TOOLS = [
   ['add_lesson / update_lesson / delete_lesson', 'уроки: текст, видео, тесты'],
   ['publish_course / unpublish_course', 'опубликовать или снять с публикации'],
   ['delete_course', 'удалить черновик без учеников'],
+  ['set_course_cover', 'поставить обложку курса (картинка в base64)'],
 ];
 
 function CodeBlock({ code, copyLabel = 'Скопировать', block }: { code: string; copyLabel?: string; block?: boolean }): JSX.Element {

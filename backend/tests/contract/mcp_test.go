@@ -118,6 +118,24 @@ func TestMCPServer(t *testing.T) {
 	if _, isErr := tool(t, router, created.Token, "publish_course", map[string]any{"course_id": cid}); isErr {
 		t.Fatal("publish_course")
 	}
+	// Обложка через MCP: base64 (в т.ч. с data:-префиксом) → обычная загрузка обложки.
+	covers := &fakeCoverStore{}
+	app.Storage = covers
+	png := "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg=="
+	if res, isErr := tool(t, router, created.Token, "set_course_cover", map[string]any{"course_id": cid, "image_base64": png}); isErr {
+		t.Fatalf("set_course_cover: %+v", res)
+	}
+	if _, isErr := tool(t, router, created.Token, "set_course_cover", map[string]any{"course_id": cid, "image_base64": "bm90IGFuIGltYWdl"}); !isErr {
+		t.Fatal("set_course_cover: не-картинка должна отклоняться")
+	}
+	if _, isErr := tool(t, router, created.Token, "set_course_cover", map[string]any{"course_id": cid, "image_base64": "%%%"}); !isErr {
+		t.Fatal("set_course_cover: битый base64 должен отклоняться")
+	}
+	got, _ := tool(t, router, created.Token, "get_course", map[string]any{"course_id": cid})
+	if cp, _ := got["course"].(map[string]any)["coverPath"].(string); cp == "" {
+		t.Fatalf("coverPath пуст: %+v", got["course"])
+	}
+
 	// Вызовы инструментов попадают в журнал действий — по одной записи, с подписью MCP.
 	auditRec := doRequest(t, router, http.MethodGet, "/api/v1/admin/audit?q=MCP", nil, admin)
 	var auditOut struct {
