@@ -33,3 +33,8 @@ Skillbox*
 /artifacts/
 
 __pycache__/
+
+# видео и голоса для видеоуроков (собираются скриптом, в git не храним)
+scripts/course-content/video/.voices/
+scripts/course-content/**/videos/*.mp4
+scripts/course-content/**/videos/*.poster.png

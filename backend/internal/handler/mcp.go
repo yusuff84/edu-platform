@@ -43,6 +43,7 @@ const mcpProtocolVersion = "2025-06-18"
 // RegisterMCPRoutes — MCP-эндпоинт и управление токенами в админке.
 func (a *App) RegisterMCPRoutes(r chi.Router) {
 	r.With(a.rateLimit("mcp", 600)).Post("/mcp", a.MCPHandler)
+	r.With(a.rateLimit("mcp", 600)).Post("/mcp/media", a.MCPUploadMedia)
 	r.Get("/mcp", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Allow", "POST")
 		writeErr(w, http.StatusMethodNotAllowed, "MCP: используйте POST (Streamable HTTP без SSE)")
@@ -222,7 +223,10 @@ func (a *App) mcpDispatch(ctx context.Context, u *repo.User, req rpcRequest) map
 			"instructions": "Инструменты для создания и редактирования курсов платформы skillex.space. " +
 				"Порядок: create_course → add_module → add_lesson (text/video/quiz) → set_course_cover (обложка) → publish_course. " +
 				"Контент правится только в черновике: для опубликованного курса сначала unpublish_course. " +
-				"Разметка уроков — Markdown (##, списки, **жирный**, `код`, блоки кода); таблиц и картинок нет.",
+				"Разметка уроков — Markdown: ## заголовки, списки, **жирный**, `код`, ``` блоки кода, таблицы | a | b | с |---|---|, ==маркер==, [[Ctrl]] — клавиша, --- разделитель. " +
+				"Выноски: цитата с первой строкой > [!SUMMARY] Заголовок (типы SUMMARY — главное, NOTE, TIP, IMPORTANT, WARNING, DANGER, EXAMPLE, TERM, PRACTICE, CHECK), дальше строки > с любым markdown. " +
+				"Картинки: загрузите upload_media и вставьте отдельным абзацем ![подпись](url). Видео: upload_media (mp4) → kind=video с video_url. " +
+				"Хороший урок: в начале выноска SUMMARY на 3–4 пункта, короткие абзацы, ключевые термины жирным, сравнения таблицей, шаги нумерованным списком, предупреждения — WARNING/DANGER.",
 		}, nil)
 	case "ping":
 		return rpcReply(req.ID, map[string]any{}, nil)
@@ -319,6 +323,8 @@ func mcpTools() []map[string]any {
 			obj(map[string]any{"course_id": str("UUID курса")}, "course_id")),
 		tool("delete_course", "Удалить курс", "Удаляет курс-черновик без учеников.",
 			obj(map[string]any{"course_id": str("UUID курса")}, "course_id")),
+		tool("upload_media", "Загрузить картинку или видео", "Загружает файл для урока и возвращает url для Markdown (![подпись](url)) или video_url. PNG, JPEG, WebP, GIF или MP4 до 3 МБ в base64 (больше — POST /api/v1/mcp/media multipart с тем же токеном, до 5,5 МБ).",
+			obj(map[string]any{"data_base64": str("Файл в base64 (можно с префиксом data:...;base64,)")}, "data_base64")),
 		tool("set_course_cover", "Обложка курса", "Ставит обложку курса (опубликованного тоже, кроме архива). Картинка PNG, JPEG или WebP до 5 МБ в base64; лучше 16:10, например 1600×1000, без текста — название курса сайт накладывает сам снизу слева.",
 			obj(map[string]any{"course_id": str("UUID курса"), "image_base64": str("Картинка в base64 (можно с префиксом data:image/...;base64,)")}, "course_id", "image_base64")),
 	}
@@ -493,22 +499,24 @@ func (a *App) mcpCallTool(ctx context.Context, u *repo.User, name string, args m
 		code, out = a.mcpInvoke(ctx, u, a.AdminUnpublishCourse, http.MethodPost, map[string]string{"id": cid}, nil)
 	case "delete_course":
 		code, out = a.mcpInvoke(ctx, u, a.TeacherDeleteCourse, http.MethodDelete, map[string]string{"id": cid}, nil)
+	case "upload_media":
+		raw, _ := argStr(args, "data_base64")
+		data, ok := decodeB64Arg(raw)
+		if !ok {
+			return `{"error":"data_base64: не удалось декодировать base64"}`, true
+		}
+		url, ct, status, msg := a.saveMedia(data)
+		if msg != "" {
+			b, _ := json.Marshal(map[string]string{"error": msg})
+			return string(b), true
+		}
+		b, _ := json.Marshal(map[string]any{"url": url, "contentType": ct, "bytes": len(data)})
+		out, code = b, status
 	case "set_course_cover":
 		raw, _ := argStr(args, "image_base64")
-		if i := strings.Index(raw, ";base64,"); i >= 0 {
-			raw = raw[i+len(";base64,"):]
-		}
-		raw = strings.Map(func(r rune) rune {
-			if r == '\n' || r == '\r' || r == ' ' || r == '\t' {
-				return -1
-			}
-			return r
-		}, raw)
-		data, err := base64.StdEncoding.DecodeString(raw)
-		if err != nil {
-			if data, err = base64.RawStdEncoding.DecodeString(raw); err != nil {
-				return `{"error":"image_base64: не удалось декодировать base64"}`, true
-			}
+		data, ok := decodeB64Arg(raw)
+		if !ok {
+			return `{"error":"image_base64: не удалось декодировать base64"}`, true
 		}
 		var buf bytes.Buffer
 		mw := multipart.NewWriter(&buf)
@@ -523,4 +531,25 @@ func (a *App) mcpCallTool(ctx context.Context, u *repo.User, name string, args m
 		out = []byte(`{"ok":true}`)
 	}
 	return string(out), code >= 300
+}
+
+// decodeB64Arg декодирует base64 из аргумента инструмента: допускает префикс
+// data:...;base64, переносы строк и вариант без «=» на конце.
+func decodeB64Arg(raw string) ([]byte, bool) {
+	if i := strings.Index(raw, ";base64,"); i >= 0 {
+		raw = raw[i+len(";base64,"):]
+	}
+	raw = strings.Map(func(r rune) rune {
+		if r == '\n' || r == '\r' || r == ' ' || r == '\t' {
+			return -1
+		}
+		return r
+	}, raw)
+	data, err := base64.StdEncoding.DecodeString(raw)
+	if err != nil {
+		if data, err = base64.RawStdEncoding.DecodeString(raw); err != nil {
+			return nil, false
+		}
+	}
+	return data, true
 }

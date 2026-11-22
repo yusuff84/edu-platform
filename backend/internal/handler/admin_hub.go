@@ -83,6 +83,7 @@ var mcpToolLabels = map[string]string{
 	"unpublish_course": "курс снят с публикации",
 	"delete_course":    "удалён курс",
 	"set_course_cover": "обновлена обложка курса",
+	"upload_media":     "загружен файл для урока",
 }
 
 // auditMCP записывает успешный меняющий вызов инструмента MCP в журнал действий.

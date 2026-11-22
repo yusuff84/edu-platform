@@ -720,7 +720,7 @@ func (a *App) csrfProtect(next http.Handler) http.Handler {
 		// MCP-эндпоинт авторизуется только токеном в заголовке Authorization
 		// (cookie-сессии там не принимаются), поэтому CSRF к нему неприменим:
 		// MCP-клиенты нейросетей шлют запросы без Origin.
-		if strings.HasSuffix(r.URL.Path, "/api/v1/mcp") {
+		if strings.HasSuffix(r.URL.Path, "/api/v1/mcp") || strings.HasSuffix(r.URL.Path, "/api/v1/mcp/media") {
 			next.ServeHTTP(w, r)
 			return
 		}

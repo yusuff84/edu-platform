@@ -6,7 +6,9 @@ package contract_test
 
 import (
 	"bytes"
+	"encoding/base64"
 	"encoding/json"
+	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -131,6 +133,36 @@ func TestMCPServer(t *testing.T) {
 	if _, isErr := tool(t, router, created.Token, "set_course_cover", map[string]any{"course_id": cid, "image_base64": "%%%"}); !isErr {
 		t.Fatal("set_course_cover: битый base64 должен отклоняться")
 	}
+	// Медиа для уроков: инструмент upload_media и REST /mcp/media (multipart, тот же токен).
+	if res, isErr := tool(t, router, created.Token, "upload_media", map[string]any{"data_base64": png}); isErr || !strings.HasPrefix(res["url"].(string), "/uploads/media/") {
+		t.Fatalf("upload_media: %+v", res)
+	}
+	if _, isErr := tool(t, router, created.Token, "upload_media", map[string]any{"data_base64": "bm90IGFuIGltYWdl"}); !isErr {
+		t.Fatal("upload_media: текст должен отклоняться")
+	}
+	pngBytes, _ := base64.StdEncoding.DecodeString(png[strings.Index(png, ",")+1:])
+	for _, tc := range []struct {
+		token string
+		data  []byte
+		want  int
+	}{{created.Token, pngBytes, http.StatusCreated}, {"", pngBytes, http.StatusUnauthorized}, {created.Token, []byte("hello"), http.StatusBadRequest}} {
+		var body bytes.Buffer
+		mw := multipart.NewWriter(&body)
+		fw, _ := mw.CreateFormFile("file", "x.png")
+		_, _ = fw.Write(tc.data)
+		_ = mw.Close()
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/mcp/media", &body)
+		req.Header.Set("Content-Type", mw.FormDataContentType())
+		if tc.token != "" {
+			req.Header.Set("Authorization", "Bearer "+tc.token)
+		}
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+		if rec.Code != tc.want {
+			t.Fatalf("POST /mcp/media: %d, want %d: %s", rec.Code, tc.want, rec.Body.String())
+		}
+	}
+
 	got, _ := tool(t, router, created.Token, "get_course", map[string]any{"course_id": cid})
 	if cp, _ := got["course"].(map[string]any)["coverPath"].(string); cp == "" {
 		t.Fatalf("coverPath пуст: %+v", got["course"])

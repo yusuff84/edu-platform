@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<style>
+/* Шаблон схемы для урока. Рисуем в #art (ширина 1600, высота — по содержимому, обычно 700–900).
+   Светлый фон (урок светлый), акценты сайта. Текст на схеме — крупный: её смотрят и с телефона. */
+:root { --ink:#141414; --muted:#6f6e6a; --line:#e3dfd5; --brand:#4635ff; --brand-soft:#eeedff; --sun:#fec466; --sun-soft:#fff3d4;
+        --ok:#1f9d55; --ok-soft:#e4f5ea; --danger:#d33a2c; --danger-soft:#fdecea; --blue:#2f5bd9; --blue-soft:#e8efff; }
+* { box-sizing: border-box; }
+body { margin: 0; background: #fff; font-family: Manrope, Arial, sans-serif; color: var(--ink); }
+#art { width: 1600px; padding: 56px 64px; background: #fbfaf7; }
+h1 { margin: 0 0 36px; font-size: 44px; font-weight: 800; }
+.box { border: 3px solid var(--line); border-radius: 24px; background: #fff; padding: 24px 28px; font-size: 30px; font-weight: 700; }
+.box small { display: block; font-size: 24px; color: var(--muted); font-weight: 600; margin-top: 6px; }
+.brand { border-color: var(--brand); background: var(--brand-soft); }
+.sun { border-color: #f2b33d; background: var(--sun-soft); }
+.ok { border-color: var(--ok); background: var(--ok-soft); }
+.danger { border-color: var(--danger); background: var(--danger-soft); }
+.mono { font-family: 'JetBrains Mono', monospace; }
+.row { display: flex; gap: 28px; align-items: center; }
+.arrow { font-size: 44px; color: var(--brand); font-weight: 800; }
+.caption { margin-top: 28px; font-size: 26px; color: var(--muted); font-weight: 600; }
+</style></head><body>
+<div id="art">
+  <h1>Пример: путь запроса из офиса в интернет</h1>
+  <div class="row">
+    <div class="box brand">Компьютер<small class="mono">192.168.1.25</small></div>
+    <div class="arrow">→</div>
+    <div class="box">Коммутатор<small>соединяет устройства офиса</small></div>
+    <div class="arrow">→</div>
+    <div class="box sun">Роутер (шлюз)<small class="mono">192.168.1.1</small></div>
+    <div class="arrow">→</div>
+    <div class="box ok">Интернет</div>
+  </div>
+  <div class="caption">Для сложных схем можно рисовать inline-SVG внутри #art.</div>
+</div>
+</body></html>
