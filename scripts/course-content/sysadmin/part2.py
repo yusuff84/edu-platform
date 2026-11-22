@@ -3,7 +3,7 @@
 
 M4 = {
     "title": "Windows: администрирование",
-    "video": "videos/m04.mp4",
+    "video": "/uploads/media/a5fafd17735a603f49c15ea3.mp4",
     "lessons": [
         {
             "title": "4.1 Службы и автозагрузка",
@@ -854,7 +854,7 @@ shutdown /r /o /t 0
 
 M5 = {
     "title": "Программы и драйверы",
-    "video": "videos/m05.mp4",
+    "video": "/uploads/media/e9e232c4347ee6a33b0be9e3.mp4",
     "lessons": [
         {
             "title": "5.1 Установка и удаление программ",
@@ -1552,7 +1552,7 @@ USB\VID_046D&PID_C52B
 
 M6 = {
     "title": "Принтеры и периферия",
-    "video": "videos/m06.mp4",
+    "video": "/uploads/media/9a5ba4ab77fc5ba9d377555b.mp4",
     "lessons": [
         {
             "title": "6.1 Типы принтеров и расходники",

@@ -98,13 +98,17 @@ def resolve_media(body, pkg_dir):
 
 
 def module_video(m, pkg_dir):
-    """Видео модуля (поле 'video': 'videos/mNN.mp4') → url после загрузки или ''."""
+    """Видео модуля → url. Поле 'video' — адрес уже загруженного ролика ('/uploads/media/….mp4')
+    или путь к готовому mp4 внутри пакета курса (будет загружен). Ролики делаются в отдельном
+    проекте skillex-video-studio — здесь видео не генерируется."""
     v = m.get('video')
     if not v:
         return ''
+    if v.startswith('/uploads/') or v.startswith('https://'):
+        return v
     path = os.path.join(pkg_dir, v)
     if not os.path.exists(path):
-        raise SystemExit(f'Нет видео {path} — соберите его: python3 video/build_video.py {os.path.splitext(path)[0]}.py')
+        raise SystemExit(f'Нет видеофайла {path}')
     return upload_file(path, pkg_dir)
 
 

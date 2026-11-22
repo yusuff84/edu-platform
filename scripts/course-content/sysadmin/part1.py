@@ -3,7 +3,7 @@
 
 M1 = {
     "title": "Профессия системного администратора",
-    "video": "videos/m01.mp4",
+    "video": "/uploads/media/b990499fdac5a19357b51e25.mp4",
     "lessons": [
         {
             "title": "1.1 Кто такой системный администратор",
@@ -627,7 +627,7 @@ nslookup ya.ru
 
 M2 = {
     "title": "Как устроен компьютер",
-    "video": "videos/m02.mp4",
+    "video": "/uploads/media/e4022f1c078ac4f6bd9df9fa.mp4",
     "lessons": [
         {
             "title": "2.1 Процессор, оперативная память и материнская плата",
@@ -1387,7 +1387,7 @@ powercfg /batteryreport /output C:\Temp\battery.html
 
 M3 = {
     "title": "Windows: основы",
-    "video": "videos/m03.mp4",
+    "video": "/uploads/media/fd6b3d25eae795c931727f6c.mp4",
     "lessons": [
         {
             "title": "3.1 Редакции и версии Windows",
