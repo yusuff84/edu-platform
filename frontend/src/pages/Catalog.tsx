@@ -10,7 +10,6 @@ import type {
 } from '../api/client';
 import CourseCard from '../components/CourseCard';
 import { FeaturedCourse } from '../components/FeaturedCourse';
-import { AudienceBlock, HomeHero } from '../components/HomeHero';
 import {
   DiplomaBlock,
   FaqBlock,
@@ -211,8 +210,6 @@ export default function Catalog(): JSX.Element {
   );
   // Курс в центре внимания — первый в выдаче без фильтров (по умолчанию — популярные).
   const featured = !filtersActive && page === 1 ? items[0] : undefined;
-  // Короткий каталог (до 6 курсов) — без панели поиска и фильтров.
-  const compact = !filtersActive && page === 1 && total <= 6;
 
   const isEmpty = Boolean(data) && items.length === 0;
   // «Показано N из M»: сколько курсов пользователь уже увидел листанием.
@@ -272,12 +269,55 @@ export default function Catalog(): JSX.Element {
 
   return (
     <main className="page catalog-page">
-      <HomeHero courses={items} total={total} loggedIn={Boolean(meQuery.data)} onChoose={scrollToCards} />
+      <section className="hero">
+        <div className="hero-card">
+          <span className="eyebrow">Онлайн-курсы по IT · старт бесплатно</span>
+          <h1>Разберитесь в IT с нуля — понятно и на практике</h1>
+          <p className="lead">
+            Короткие уроки со схемами и видеообзорами, тесты с автопроверкой после каждой темы.
+            Учитесь в своём темпе с телефона или компьютера и получите именной сертификат.
+          </p>
+          <div className="hero-cta">
+            {featured && !meQuery.data ? (
+              <Link className="btn btn-primary" to="/register" state={{ from: `/courses/${featured.slug}` }}>
+                Начать учиться бесплатно
+              </Link>
+            ) : (
+              <button type="button" className="btn btn-primary" onClick={scrollToCards}>
+                Выбрать курс
+              </button>
+            )}
+            {/* «Мои курсы» — только вошедшим: /me за гвардом RequireAuth. */}
+            {meQuery.data && (
+              <Link className="btn btn-ghost" to="/me">
+                Мои курсы
+              </Link>
+            )}
+          </div>
+          {/* Что получает ученик — вместо витринной статистики («1 курс в каталоге»). */}
+          <ul className="hero-trust" aria-label="Почему у нас удобно учиться">
+            <li>Без подготовки</li>
+            <li>Практика и тесты</li>
+            <li>Сертификат с QR</li>
+            <li>С телефона и ПК</li>
+          </ul>
+          <div className="cats">
+            <a
+              className="cat dark"
+              href="#lead"
+              onClick={(e) => {
+                e.preventDefault();
+                document.getElementById('lead')?.scrollIntoView({ behavior: 'smooth' });
+              }}
+            >
+              Помогите подобрать курс
+            </a>
+          </div>
+        </div>
+      </section>
 
       <div className="wrap">
-        {/* Поиск и фильтры нужны, когда курсов много; при коротком каталоге — сразу карточки. */}
-        {!compact && (
-        <>
+        {featured && <FeaturedCourse course={featured} loggedIn={Boolean(meQuery.data)} />}
         <div className="mini-head">
           <h2>Все курсы</h2>
           <form
@@ -465,16 +505,11 @@ export default function Catalog(): JSX.Element {
           </div>
         </section>
 
-        </>
-        )}
-
-        <div className={`count-line${compact ? ' count-line--home' : ''}`} ref={cardsRef}>
-          <h2>{compact ? 'Выберите курс' : t('catalog.title')}</h2>
-          {!compact && (
-            <span aria-live="polite">
-              {t('p8.catalog.found')}: {total}
-            </span>
-          )}
+        <div className="count-line" ref={cardsRef}>
+          <h2>{t('catalog.title')}</h2>
+          <span aria-live="polite">
+            {t('p8.catalog.found')}: {total}
+          </span>
         </div>
 
         {query.isLoading && (
@@ -562,8 +597,6 @@ export default function Catalog(): JSX.Element {
           </nav>
         )}
 
-        {featured && <FeaturedCourse course={featured} loggedIn={Boolean(meQuery.data)} />}
-        <AudienceBlock />
         <SupportBlock />
         <PerksBlock />
         <DiplomaBlock courseTitle={featured?.title} />

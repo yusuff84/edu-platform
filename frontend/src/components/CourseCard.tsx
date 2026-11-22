@@ -128,12 +128,10 @@ export default function CourseCard({ course }: { course: CourseItem }): JSX.Elem
     course.description.length > 140
       ? `${course.description.slice(0, 140)}…`
       : course.description;
-  const lessons = course.lessonsCount ?? 0;
   const meta = [
     course.avgRating > 0
       ? `★ ${course.avgRating.toFixed(1).replace('.', ',')}`
       : null,
-    lessons > 0 ? `${lessons} ${pluralRu(lessons, 'урок', 'урока', 'уроков')}` : null,
     formatPrice(course.priceCents),
   ]
     .filter(Boolean)
