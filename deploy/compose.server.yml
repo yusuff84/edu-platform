@@ -56,7 +56,7 @@ services:
     depends_on: [api]
 
   runner:
-    image: skillex-runner:${RELEASE:?required}
+    image: skillex-runner:${RUNNER_RELEASE:-${RELEASE:?required}}
     restart: unless-stopped
     mem_limit: 256m
     cpus: 0.5

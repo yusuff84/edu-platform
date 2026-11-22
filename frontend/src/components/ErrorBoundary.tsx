@@ -3,6 +3,7 @@ import type { ErrorInfo, ReactNode } from 'react';
 import { Link, isRouteErrorResponse, useRouteError } from 'react-router-dom';
 import { t } from '../i18n/t';
 import '../styles/shell.css';
+import { isChunkLoadError, reloadForNewVersion } from '../app/chunkReload';
 
 interface ErrorBoundaryProps {
   children: ReactNode;
@@ -26,6 +27,8 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
   }
 
   componentDidCatch(error: Error, info: ErrorInfo): void {
+    // Сайт обновился, а вкладка просит старые файлы сборки — перезагружаемся на новую версию.
+    if (isChunkLoadError(error) && reloadForNewVersion()) return;
     // Диагностика в консоль: текст и стек компонентов.
     console.error('Ошибка рендера:', error, info.componentStack);
   }
@@ -35,6 +38,9 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
   };
 
   render(): ReactNode {
+    if (this.state.error && isChunkLoadError(this.state.error)) {
+      return <NewVersionNotice />;
+    }
     if (this.state.error) {
       return (
         <div className="shell-center" role="alert">
@@ -60,8 +66,28 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
  * поэтому берём её из useRouteError. Ошибка одного урока заменяет только
  * элемент своего маршрута: Layout с навигацией остаётся.
  */
+/** Экран «вышла новая версия» — если автоматическая перезагрузка не помогла. */
+function NewVersionNotice(): JSX.Element {
+  return (
+    <div className="shell-center" role="alert">
+      <h1>Сайт обновился</h1>
+      <p>Чтобы продолжить, обновите страницу — загрузится новая версия.</p>
+      <div className="shell-actions">
+        <button type="button" onClick={() => window.location.reload()}>
+          Обновить страницу
+        </button>
+        <Link to="/">{t('error.goCatalog')}</Link>
+      </div>
+    </div>
+  );
+}
+
 export function RouteError(): JSX.Element {
   const error = useRouteError();
+  if (isChunkLoadError(error)) {
+    reloadForNewVersion();
+    return <NewVersionNotice />;
+  }
   const detail = isRouteErrorResponse(error)
     ? `${error.status} ${error.statusText}`
     : error instanceof Error
