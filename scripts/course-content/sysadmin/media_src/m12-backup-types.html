@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<style>
+:root { --ink:#141414; --muted:#6f6e6a; --line:#e3dfd5; --brand:#4635ff; --brand-soft:#eeedff; --sun:#fec466; --sun-soft:#fff3d4;
+        --ok:#1f9d55; --ok-soft:#e4f5ea; --danger:#d33a2c; --danger-soft:#fdecea; --blue:#2f5bd9; --blue-soft:#e8efff; }
+* { box-sizing: border-box; }
+body { margin: 0; background: #fff; font-family: Manrope, Arial, sans-serif; color: var(--ink); }
+#art { width: 1600px; padding: 56px 64px; background: #fbfaf7; }
+h1 { margin: 0 0 30px; font-size: 48px; font-weight: 800; }
+.tl { display: grid; grid-template-columns: 330px repeat(5, 1fr); gap: 14px; align-items: end; }
+.day { text-align: center; font-size: 30px; font-weight: 800; color: var(--muted); padding-bottom: 6px; }
+.lab { font-size: 32px; font-weight: 800; align-self: center; }
+.lab small { display: block; font-size: 23px; font-weight: 700; color: var(--muted); margin-top: 4px; line-height: 1.3; }
+.cell { display: flex; align-items: flex-end; justify-content: center; height: 170px; }
+.bar { width: 100%; border-radius: 14px; display: grid; place-items: center; font-size: 24px; font-weight: 800; color: #fff; }
+.full { background: var(--brand); height: 160px; }
+.inc { background: #e09a1a; height: 46px; }
+.dif { background: var(--ok); }
+.need { outline: 6px solid var(--danger); outline-offset: 4px; }
+.sep { grid-column: 1 / -1; height: 3px; background: var(--line); margin: 14px 0; }
+.res { margin-top: 30px; display: grid; grid-template-columns: 1fr 1fr; gap: 26px; }
+.r { border-radius: 24px; padding: 20px 26px; font-size: 28px; font-weight: 700; line-height: 1.35; background: #fff; border: 3px solid var(--line); }
+.r b { display: block; font-size: 30px; font-weight: 800; margin-bottom: 6px; }
+.key { display: inline-block; width: 30px; height: 30px; border-radius: 8px; outline: 5px solid var(--danger); outline-offset: 2px; vertical-align: middle; margin: 0 6px; }
+</style></head><body>
+<div id="art">
+  <h1>Инкрементные и дифференциальные копии</h1>
+  <div class="tl">
+    <div></div><div class="day">Вс</div><div class="day">Пн</div><div class="day">Вт</div><div class="day">Ср</div><div class="day">Чт</div>
+    <div class="lab">Инкрементная<small>изменения с прошлой копии любого типа</small></div>
+    <div class="cell"><div class="bar full need">полная</div></div>
+    <div class="cell"><div class="bar inc need">инкр.</div></div><div class="cell"><div class="bar inc need">инкр.</div></div>
+    <div class="cell"><div class="bar inc need">инкр.</div></div><div class="cell"><div class="bar inc need">инкр.</div></div>
+    <div class="sep"></div>
+    <div class="lab">Дифференциальная<small>все изменения с последней полной</small></div>
+    <div class="cell"><div class="bar full need">полная</div></div>
+    <div class="cell"><div class="bar dif" style="height:46px">дифф.</div></div><div class="cell"><div class="bar dif" style="height:72px">дифф.</div></div>
+    <div class="cell"><div class="bar dif" style="height:100px">дифф.</div></div><div class="cell"><div class="bar dif need" style="height:130px">дифф.</div></div>
+  </div>
+  <div class="res">
+    <div class="r"><b style="color:#b77400">Инкременты: быстро и компактно</b>для восстановления — полная + <u>все</u> инкременты по порядку (5 копий)</div>
+    <div class="r"><b style="color:var(--ok)">Дифференциальные: растут каждый день</b>для восстановления — полная + последняя дифференциальная (2 копии)</div>
+  </div>
+  <div style="margin-top:18px;font-size:24px;color:var(--muted);font-weight:700"><span class="key"></span> — копии, нужные для восстановления данных на вечер четверга</div>
+</div>
+</body></html>

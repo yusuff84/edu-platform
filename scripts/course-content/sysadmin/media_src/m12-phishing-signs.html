@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<style>
+:root { --ink:#141414; --muted:#6f6e6a; --line:#e3dfd5; --brand:#4635ff; --brand-soft:#eeedff; --sun:#fec466; --sun-soft:#fff3d4;
+        --ok:#1f9d55; --ok-soft:#e4f5ea; --danger:#d33a2c; --danger-soft:#fdecea; --blue:#2f5bd9; --blue-soft:#e8efff; }
+* { box-sizing: border-box; }
+body { margin: 0; background: #fff; font-family: Manrope, Arial, sans-serif; color: var(--ink); }
+#art { width: 1600px; padding: 56px 64px; background: #fbfaf7; }
+h1 { margin: 0 0 30px; font-size: 48px; font-weight: 800; }
+.g { display: grid; grid-template-columns: 860px 1fr; gap: 40px; align-items: start; }
+.mail { background: #fff; border: 3px solid var(--line); border-radius: 26px; overflow: hidden; box-shadow: 0 20px 40px -24px rgba(0,0,0,.25); }
+.bar { background: #f1efe9; padding: 14px 24px; font-size: 22px; font-weight: 800; color: var(--muted); }
+.hd { padding: 20px 28px; border-bottom: 2px solid var(--line); font-size: 26px; font-weight: 700; line-height: 1.6; }
+.hd .k { color: var(--muted); display: inline-block; width: 110px; }
+.bd { padding: 24px 28px; font-size: 27px; font-weight: 600; line-height: 1.45; }
+.bd p { margin: 0 0 16px; }
+.hl { background: var(--danger-soft); border-radius: 8px; padding: 2px 6px; box-shadow: inset 0 0 0 3px var(--danger); }
+.mk { display: inline-grid; place-items: center; width: 40px; height: 40px; border-radius: 50%; background: var(--danger); color: #fff; font-size: 22px; font-weight: 800; vertical-align: middle; margin-left: 8px; }
+.btn { display: inline-block; background: #2f5bd9; color: #fff; border-radius: 12px; padding: 12px 22px; font-weight: 800; }
+.tipurl { display: inline-block; margin-top: 10px; font-family: 'JetBrains Mono', monospace; font-size: 21px; background: var(--ink); color: #fff; border-radius: 8px; padding: 6px 12px; }
+.att { display: inline-flex; align-items: center; gap: 12px; border: 2px solid var(--line); border-radius: 14px; padding: 10px 16px; font-size: 25px; font-weight: 800; }
+.list { display: grid; gap: 14px; }
+.it { display: flex; gap: 16px; background: #fff; border: 3px solid var(--line); border-radius: 20px; padding: 16px 20px; font-size: 27px; font-weight: 700; line-height: 1.3; }
+.it .mk { margin: 0; flex: none; }
+.it b { display: block; font-weight: 800; }
+.it small { display: block; font-size: 23px; color: var(--muted); font-weight: 700; margin-top: 2px; }
+.rule { margin-top: 16px; background: var(--ok); color: #fff; border-radius: 20px; padding: 18px 22px; font-size: 27px; font-weight: 800; line-height: 1.35; }
+</style></head><body>
+<div id="art">
+  <h1>Шесть признаков фишингового письма</h1>
+  <div class="g">
+    <div class="mail">
+      <div class="bar">Входящие · письмо</div>
+      <div class="hd">
+        <div><span class="k">От:</span>Директор <span class="hl">&lt;director@rornashka.ru&gt;</span><span class="mk">1</span></div>
+        <div><span class="k">Тема:</span><span class="hl">СРОЧНО: оплатить сегодня до 15:00</span><span class="mk">2</span></div>
+      </div>
+      <div class="bd">
+        <p>Я на совещании, не звоните. Нужно срочно оплатить счёт поставщику, иначе сорвём сделку.<span class="mk">6</span></p>
+        <p><span class="att">📦 Счёт_№4471.zip <span class="hl">(пароль 1234)</span></span><span class="mk">3</span></p>
+        <p>Если архив не открывается, войдите в почту по ссылке, чтобы получить документ:</p>
+        <p><span class="btn">Открыть документ</span><span class="mk">4</span><br><span class="tipurl">→ mail-romashka.login-check.xyz</span></p>
+        <p style="margin:0">Введите логин и пароль от рабочей почты.<span class="mk">5</span></p>
+      </div>
+    </div>
+    <div class="list">
+      <div class="it"><span class="mk">1</span><div><b>Чужой адрес</b><small>rornashka вместо romashka: «rn» похоже на «m»</small></div></div>
+      <div class="it"><span class="mk">2</span><div><b>Срочность и давление</b><small>«сегодня», «не звоните», «иначе сорвём»</small></div></div>
+      <div class="it"><span class="mk">3</span><div><b>Архив с паролем</b><small>так прячут вирус от антивируса</small></div></div>
+      <div class="it"><span class="mk">4</span><div><b>Ссылка ведёт не туда</b><small>наведите мышь и прочитайте адрес</small></div></div>
+      <div class="it"><span class="mk">5</span><div><b>Просят пароль</b><small>настоящая поддержка его не спрашивает</small></div></div>
+      <div class="it"><span class="mk">6</span><div><b>Необычная просьба о деньгах</b><small>проверьте звонком по известному номеру</small></div></div>
+      <div class="rule">Сомневаетесь — не нажимайте и перешлите письмо админу</div>
+    </div>
+  </div>
+</div>
+</body></html>

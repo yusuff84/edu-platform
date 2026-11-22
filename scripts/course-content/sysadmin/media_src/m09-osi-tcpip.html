@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<style>
+:root { --ink:#141414; --muted:#6f6e6a; --line:#e3dfd5; --brand:#4635ff; --brand-soft:#eeedff; --sun:#fec466; --sun-soft:#fff3d4;
+        --ok:#1f9d55; --ok-soft:#e4f5ea; --danger:#d33a2c; --danger-soft:#fdecea; --blue:#2f5bd9; --blue-soft:#e8efff; }
+* { box-sizing: border-box; }
+body { margin: 0; background: #fff; font-family: Manrope, Arial, sans-serif; color: var(--ink); }
+#art { width: 1600px; padding: 56px 64px; background: #fbfaf7; }
+h1 { margin: 0 0 32px; font-size: 44px; font-weight: 800; }
+.grid { display: grid; grid-template-columns: 440px 330px 1fr; grid-template-rows: 46px repeat(7, 96px); gap: 12px 20px; }
+.hd { font-size: 28px; font-weight: 800; color: var(--muted); align-self: end; padding-left: 6px; }
+.cell { border: 3px solid var(--line); border-radius: 20px; background: #fff; display: flex; align-items: center; padding: 0 24px; font-size: 34px; font-weight: 700; }
+.cell .n { flex: none; width: 50px; height: 50px; border-radius: 14px; display: grid; place-items: center; font-size: 26px; font-weight: 800; margin-right: 18px; background: var(--brand-soft); color: var(--brand); }
+.tcp { justify-content: center; text-align: center; font-size: 36px; font-weight: 800; }
+.app { border-color: var(--brand); background: var(--brand-soft); color: var(--brand); }
+.tr  { border-color: #f2b33d; background: var(--sun-soft); }
+.net { border-color: var(--ok); background: var(--ok-soft); color: #126b39; }
+.lnk { border-color: var(--blue); background: var(--blue-soft); color: var(--blue); }
+.ex { font-size: 29px; line-height: 1.2; font-weight: 600; color: #34332f; background: transparent; border: 0; border-bottom: 2px dashed var(--line); border-radius: 0; padding-left: 8px; }
+.ex b { font-weight: 800; color: var(--ink); margin-right: 10px; }
+.caption { margin-top: 32px; font-size: 28px; color: var(--muted); font-weight: 600; display: flex; gap: 40px; }
+.caption b { color: var(--ink); }
+</style></head><body>
+<div id="art">
+  <h1>Модель OSI и стек TCP/IP: уровни сети</h1>
+  <div class="grid">
+    <div class="hd">Модель OSI (7 уровней)</div>
+    <div class="hd" style="text-align:center">TCP/IP (4 уровня)</div>
+    <div class="hd">Что здесь работает</div>
+
+    <div class="cell" style="grid-row:2"><span class="n">7</span>Прикладной</div>
+    <div class="cell" style="grid-row:3"><span class="n">6</span>Представления</div>
+    <div class="cell" style="grid-row:4"><span class="n">5</span>Сеансовый</div>
+    <div class="cell" style="grid-row:5"><span class="n">4</span>Транспортный</div>
+    <div class="cell" style="grid-row:6"><span class="n">3</span>Сетевой</div>
+    <div class="cell" style="grid-row:7"><span class="n">2</span>Канальный</div>
+    <div class="cell" style="grid-row:8"><span class="n">1</span>Физический</div>
+
+    <div class="cell tcp app" style="grid-column:2;grid-row:2 / span 3">Прикладной</div>
+    <div class="cell tcp tr" style="grid-column:2;grid-row:5">Транспортный</div>
+    <div class="cell tcp net" style="grid-column:2;grid-row:6">Межсетевой</div>
+    <div class="cell tcp lnk" style="grid-column:2;grid-row:7 / span 2"><span>Канальный<small style="display:block;font-size:26px;font-weight:700;margin-top:4px">доступ к сети</small></span></div>
+
+    <div class="cell ex" style="grid-column:3;grid-row:2"><b>HTTP, DNS, SMTP, SSH</b>браузер, почта</div>
+    <div class="cell ex" style="grid-column:3;grid-row:3">формат данных, кодировка, шифрование</div>
+    <div class="cell ex" style="grid-column:3;grid-row:4">установка и поддержание сеанса</div>
+    <div class="cell ex" style="grid-column:3;grid-row:5"><b>TCP, UDP</b>порты: 22, 80, 443…</div>
+    <div class="cell ex" style="grid-column:3;grid-row:6"><b>IP-адреса</b>маршрутизатор</div>
+    <div class="cell ex" style="grid-column:3;grid-row:7"><b>MAC-адреса, Ethernet</b>коммутатор</div>
+    <div class="cell ex" style="grid-column:3;grid-row:8"><b>кабель, Wi-Fi</b>индикатор порта</div>
+  </div>
+  <div class="caption"><span><b>Отправка:</b> данные «упаковываются» сверху вниз</span><span><b>Диагностика:</b> проверяем снизу вверх</span></div>
+</div>
+</body></html>

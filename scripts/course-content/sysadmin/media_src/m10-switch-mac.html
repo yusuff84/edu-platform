@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<style>
+:root { --ink:#141414; --muted:#6f6e6a; --line:#e3dfd5; --brand:#4635ff; --brand-soft:#eeedff; --sun:#fec466; --sun-soft:#fff3d4;
+        --ok:#1f9d55; --ok-soft:#e4f5ea; --danger:#d33a2c; --danger-soft:#fdecea; --blue:#2f5bd9; --blue-soft:#e8efff; }
+* { box-sizing: border-box; }
+body { margin: 0; background: #fff; font-family: Manrope, Arial, sans-serif; color: var(--ink); }
+#art { width: 1600px; padding: 56px 64px; background: #fbfaf7; }
+h1 { margin: 0 0 30px; font-size: 48px; font-weight: 800; }
+.top { display: grid; grid-template-columns: 900px 1fr; gap: 48px; align-items: start; }
+table { width: 100%; border-collapse: separate; border-spacing: 0; background: #fff; border: 3px solid var(--line); border-radius: 24px; overflow: hidden; font-size: 30px; }
+th { background: var(--ink); color: #fff; text-align: left; padding: 16px 22px; font-weight: 800; }
+td { padding: 14px 22px; border-top: 2px solid var(--line); font-weight: 700; }
+td.mono { font-family: 'JetBrains Mono', monospace; font-size: 26px; }
+tr.new td { background: var(--sun-soft); }
+.tcap { font-size: 26px; font-weight: 800; margin: 0 0 14px; }
+.rules { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; margin-top: 34px; }
+.rule { border: 3px solid var(--line); border-radius: 24px; background: #fff; padding: 22px 26px; font-size: 27px; font-weight: 700; line-height: 1.35; }
+.rule b { display: flex; align-items: center; gap: 14px; font-size: 30px; font-weight: 800; margin-bottom: 8px; }
+.rule b i { font-style: normal; width: 46px; height: 46px; border-radius: 50%; display: grid; place-items: center; color: #fff; background: var(--brand); flex: none; }
+.rule.ok { border-color: var(--ok); background: var(--ok-soft); } .rule.ok b i { background: var(--ok); }
+.rule.sun { border-color: #f2b33d; background: var(--sun-soft); } .rule.sun b i { background: #e09a1a; }
+</style></head><body>
+<div id="art">
+  <h1>Как коммутатор учит, кто за каким портом</h1>
+  <div class="top">
+    <svg width="900" height="540" viewBox="0 0 900 540" font-family="Manrope, Arial" font-weight="800">
+      <defs><marker id="ar" markerUnits="userSpaceOnUse" markerWidth="30" markerHeight="30" refX="26" refY="15" orient="auto"><path d="M0,0 L30,15 L0,30 z" fill="#4635ff"/></marker></defs>
+      <!-- компьютеры -->
+      <g font-size="30" text-anchor="middle">
+        <rect x="20" y="20" width="190" height="130" rx="20" fill="#eeedff" stroke="#4635ff" stroke-width="4"/>
+        <text x="115" y="78">ПК «А»</text><text x="115" y="118" font-size="22" font-family="JetBrains Mono" fill="#4635ff">MAC …:A1</text>
+        <rect x="245" y="20" width="190" height="130" rx="20" fill="#fff" stroke="#e3dfd5" stroke-width="4"/>
+        <text x="340" y="78">ПК «Б»</text><text x="340" y="118" font-size="22" font-family="JetBrains Mono" fill="#6f6e6a">MAC …:B2</text>
+        <rect x="470" y="20" width="190" height="130" rx="20" fill="#e4f5ea" stroke="#1f9d55" stroke-width="4"/>
+        <text x="565" y="78">ПК «В»</text><text x="565" y="118" font-size="22" font-family="JetBrains Mono" fill="#1f9d55">MAC …:C3</text>
+        <rect x="695" y="20" width="190" height="130" rx="20" fill="#fff" stroke="#e3dfd5" stroke-width="4"/>
+        <text x="790" y="78">Принтер</text><text x="790" y="118" font-size="22" font-family="JetBrains Mono" fill="#6f6e6a">MAC …:D4</text>
+      </g>
+      <!-- кабели -->
+      <g stroke-width="6" fill="none">
+        <path d="M115 150 V300" stroke="#4635ff"/><path d="M340 150 V300" stroke="#c9c4b8"/>
+        <path d="M565 150 V300" stroke="#1f9d55"/><path d="M790 150 V300" stroke="#c9c4b8"/>
+      </g>
+      <!-- коммутатор -->
+      <rect x="20" y="300" width="865" height="140" rx="22" fill="#141414"/>
+      <g fill="#2b2b2b" stroke="#555" stroke-width="2">
+        <rect x="80" y="330" width="70" height="56" rx="8"/><rect x="305" y="330" width="70" height="56" rx="8"/>
+        <rect x="530" y="330" width="70" height="56" rx="8"/><rect x="755" y="330" width="70" height="56" rx="8"/>
+      </g>
+      <g font-size="26" fill="#fec466" text-anchor="middle">
+        <text x="115" y="422">порт 1</text><text x="340" y="422">порт 2</text><text x="565" y="422">порт 3</text><text x="790" y="422">порт 4</text>
+      </g>
+      <!-- путь кадра -->
+      <path d="M115 468 H565" stroke="#4635ff" stroke-width="6" fill="none" marker-end="url(#ar)"/>
+      <text x="340" y="520" font-size="26" fill="#4635ff" text-anchor="middle">кадр от «А» для «В» → только в порт 3</text>
+    </svg>
+    <div>
+      <div class="tcap">Таблица MAC‑адресов</div>
+      <table>
+        <tr><th>Порт</th><th>MAC‑адрес</th></tr>
+        <tr class="new"><td>1</td><td class="mono">…:A1 ← только что</td></tr>
+        <tr><td>2</td><td class="mono">…:B2</td></tr>
+        <tr><td>3</td><td class="mono">…:C3</td></tr>
+        <tr><td>4</td><td class="mono">…:D4</td></tr>
+      </table>
+      <div style="font-size:24px;color:var(--muted);font-weight:700;margin-top:14px;line-height:1.35">Записи без трафика стираются через несколько минут (часто 300 с)</div>
+    </div>
+  </div>
+  <div class="rules">
+    <div class="rule"><b><i>1</i>Запоминает</b>MAC отправителя и порт, с которого пришёл кадр</div>
+    <div class="rule ok"><b><i>2</i>Знает получателя</b>отправляет кадр только в его порт</div>
+    <div class="rule sun"><b><i>3</i>Не знает</b>рассылает во все порты, кроме входного. Широковещание — тоже всем</div>
+  </div>
+</div>
+</body></html>

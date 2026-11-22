@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<style>
+:root { --ink:#141414; --muted:#6f6e6a; --line:#e3dfd5; --brand:#4635ff; --brand-soft:#eeedff; --sun:#fec466; --sun-soft:#fff3d4;
+        --ok:#1f9d55; --ok-soft:#e4f5ea; --danger:#d33a2c; --danger-soft:#fdecea; --blue:#2f5bd9; --blue-soft:#e8efff; }
+* { box-sizing: border-box; }
+body { margin: 0; background: #fff; font-family: Manrope, Arial, sans-serif; color: var(--ink); }
+#art { width: 1600px; padding: 56px 64px; background: #fbfaf7; }
+h1 { margin: 0 0 32px; font-size: 48px; font-weight: 800; }
+.g { display: grid; grid-template-columns: repeat(3, 1fr); gap: 28px; }
+.c { background: #fff; border: 4px solid var(--brand); border-radius: 28px; padding: 26px 30px; }
+.num { font-size: 120px; font-weight: 800; line-height: 1; color: var(--brand); }
+.c h3 { margin: 6px 0 12px; font-size: 36px; font-weight: 800; }
+.c p { margin: 0; font-size: 27px; font-weight: 700; color: var(--muted); line-height: 1.35; }
+.chips { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 18px; }
+.chip { font-size: 24px; font-weight: 800; padding: 8px 16px; border-radius: 999px; background: var(--brand-soft); color: var(--brand); }
+.c.s { border-color: #f2b33d; } .c.s .num { color: #d08a12; } .c.s .chip { background: var(--sun-soft); color: #9a6200; }
+.c.o { border-color: var(--ok); } .c.o .num { color: var(--ok); } .c.o .chip { background: var(--ok-soft); color: var(--ok); }
+.ext { margin-top: 28px; display: grid; grid-template-columns: 1fr 1fr; gap: 28px; }
+.e { border-radius: 24px; padding: 22px 28px; font-size: 28px; font-weight: 700; line-height: 1.35; display: flex; gap: 22px; align-items: center; background: var(--ink); color: #fff; }
+.e b { font-size: 70px; line-height: 1; color: var(--sun); flex: none; width: 70px; text-align: center; }
+.not { margin-top: 28px; border: 3px dashed var(--danger); background: var(--danger-soft); border-radius: 24px; padding: 20px 28px; font-size: 28px; font-weight: 700; }
+.not b { color: var(--danger); }
+</style></head><body>
+<div id="art">
+  <h1>Правило 3‑2‑1 для резервных копий</h1>
+  <div class="g">
+    <div class="c"><div class="num">3</div><h3>копии данных</h3><p>оригинал и ещё две копии</p>
+      <div class="chips"><span class="chip">сервер</span><span class="chip">копия 1</span><span class="chip">копия 2</span></div></div>
+    <div class="c s"><div class="num">2</div><h3>разных носителя</h3><p>или разные системы хранения</p>
+      <div class="chips"><span class="chip">NAS в офисе</span><span class="chip">облако</span></div></div>
+    <div class="c o"><div class="num">1</div><h3>копия вне офиса</h3><p>переживёт пожар, кражу, затопление</p>
+      <div class="chips"><span class="chip">другой офис</span><span class="chip">облако</span></div></div>
+  </div>
+  <div class="ext">
+    <div class="e"><b>+1</b><div>копия <span style="color:var(--sun)">офлайн или неизменяемая</span> — шифровальщик до неё не дотянется</div></div>
+    <div class="e"><b>0</b><div>ошибок при <span style="color:var(--sun)">проверке восстановления</span> — копию нужно пробовать</div></div>
+  </div>
+  <div class="not"><b>Не резервная копия:</b> RAID · синхронизация с облаком · копия на том же диске · диск, всегда подключённый к серверу</div>
+</div>
+</body></html>

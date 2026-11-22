@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<style>
+:root { --ink:#141414; --muted:#6f6e6a; --line:#e3dfd5; --brand:#4635ff; --brand-soft:#eeedff; --sun:#fec466; --sun-soft:#fff3d4;
+        --ok:#1f9d55; --ok-soft:#e4f5ea; --danger:#d33a2c; --danger-soft:#fdecea; --blue:#2f5bd9; --blue-soft:#e8efff; }
+* { box-sizing: border-box; }
+body { margin: 0; background: #fff; font-family: Manrope, Arial, sans-serif; color: var(--ink); }
+#art { width: 1600px; padding: 56px 64px; background: #fbfaf7; }
+h1 { margin: 0 0 34px; font-size: 50px; font-weight: 800; }
+.mono { font-family: 'JetBrains Mono', monospace; }
+.zone { font-size: 28px; font-weight: 800; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; margin-bottom: 14px; }
+.pcs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; }
+.box { border: 3px solid var(--line); border-radius: 24px; background: #fff; padding: 20px 28px; font-size: 36px; font-weight: 800; }
+.box small { display: block; font-size: 34px; font-weight: 700; margin-top: 4px; }
+.pc small { color: var(--brand); font-family: 'JetBrains Mono', monospace; }
+.sun { border-color: #f2b33d; background: var(--sun-soft); }
+.ok { border-color: var(--ok); background: var(--ok-soft); }
+.down { text-align: center; font-size: 60px; line-height: 1; color: var(--brand); font-weight: 800; margin: 14px 0; }
+.rt-head { display: flex; justify-content: space-between; align-items: baseline; font-size: 38px; }
+.rt-head span { font-size: 32px; color: var(--muted); font-weight: 700; }
+.rt-head b { font-family: 'JetBrains Mono', monospace; color: #126b39; }
+table { width: 100%; border-collapse: collapse; margin-top: 16px; font-family: 'JetBrains Mono', monospace; font-size: 42px; }
+th { font-family: Manrope, Arial, sans-serif; font-size: 30px; color: var(--muted); text-align: left; padding: 6px 12px; font-weight: 800; }
+td { padding: 12px; border-top: 2px solid #f0d9a8; font-weight: 700; white-space: nowrap; }
+td.in { color: var(--brand); } td.out { color: #126b39; } td.s { color: #9a5b00; text-align: center; }
+.site { display: flex; align-items: baseline; gap: 20px; font-size: 38px; }
+.site span { font-size: 34px; color: var(--muted); font-weight: 700; }
+.site b { font-family: 'JetBrains Mono', monospace; color: #126b39; }
+</style></head><body>
+<div id="art">
+  <h1>NAT: весь офис выходит в интернет под одним адресом</h1>
+  <div class="zone">Офис · серые адреса</div>
+  <div class="pcs">
+    <div class="box pc">ПК бухгалтера<small>192.168.1.37</small></div>
+    <div class="box pc">Ноутбук<small>192.168.1.52</small></div>
+    <div class="box pc">ПК директора<small>192.168.1.60</small></div>
+  </div>
+  <div class="down">↓</div>
+  <div class="box sun">
+    <div class="rt-head">Маршрутизатор с NAT <span>внешний адрес <b>203.0.113.45</b></span></div>
+    <table>
+      <tr><th>Внутри</th><th></th><th>Снаружи</th></tr>
+      <tr><td class="in">192.168.1.37:51515</td><td class="s">⇄</td><td class="out">203.0.113.45:40001</td></tr>
+      <tr><td class="in">192.168.1.52:49822</td><td class="s">⇄</td><td class="out">203.0.113.45:40002</td></tr>
+      <tr><td class="in">192.168.1.60:50110</td><td class="s">⇄</td><td class="out">203.0.113.45:40003</td></tr>
+    </table>
+  </div>
+  <div class="down">↓</div>
+  <div class="box ok site">Интернет <span>сайт видит всех как</span> <b>203.0.113.45</b></div>
+</div>
+</body></html>

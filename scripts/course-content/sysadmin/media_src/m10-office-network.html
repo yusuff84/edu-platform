@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<style>
+:root { --ink:#141414; --muted:#6f6e6a; --line:#e3dfd5; --brand:#4635ff; --brand-soft:#eeedff; --sun:#fec466; --sun-soft:#fff3d4;
+        --ok:#1f9d55; --ok-soft:#e4f5ea; --danger:#d33a2c; --danger-soft:#fdecea; --blue:#2f5bd9; --blue-soft:#e8efff; }
+* { box-sizing: border-box; }
+body { margin: 0; background: #fff; font-family: Manrope, Arial, sans-serif; color: var(--ink); }
+#art { width: 1600px; padding: 56px 64px; background: #fbfaf7; }
+h1 { margin: 0 0 32px; font-size: 48px; font-weight: 800; }
+.grid { display: grid; grid-template-columns: 1fr 470px; gap: 56px; align-items: start; }
+.box { border: 3px solid var(--line); border-radius: 22px; background: #fff; padding: 16px 24px; font-size: 30px; font-weight: 800; text-align: center; }
+.box small { display: block; font-size: 22px; color: var(--muted); font-weight: 700; margin-top: 4px; }
+.brand { border-color: var(--brand); background: var(--brand-soft); }
+.sun { border-color: #f2b33d; background: var(--sun-soft); }
+.ok { border-color: var(--ok); background: var(--ok-soft); }
+.dark { background: var(--ink); color: #fff; border-color: var(--ink); } .dark small { color: #c9c7c0; }
+.v { width: 6px; height: 34px; background: var(--brand); margin: 0 auto; border-radius: 3px; }
+.col { display: flex; flex-direction: column; align-items: stretch; }
+.narrow { width: 640px; margin: 0 auto; }
+.fan { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; position: relative; padding-top: 34px; }
+.fan::before { content: ''; position: absolute; top: 0; left: 12%; right: 12%; height: 6px; background: var(--brand); border-radius: 3px; }
+.fan > div { position: relative; }
+.fan > div::before { content: ''; position: absolute; top: -34px; left: 50%; width: 6px; height: 34px; margin-left: -3px; background: var(--brand); }
+.fan .box { font-size: 26px; padding: 14px 10px; }
+.rack-t { font-size: 30px; font-weight: 800; margin-bottom: 14px; text-align: center; }
+.rack { border: 10px solid #2b2b2b; border-radius: 16px; background: #3a3a3a; padding: 10px 26px; display: grid; gap: 8px; }
+.u { border-radius: 8px; padding: 10px 16px; font-size: 24px; font-weight: 800; color: #fff; display: flex; justify-content: space-between; align-items: center; }
+.u small { font-weight: 700; font-size: 20px; opacity: .8; }
+.pp { background: #6b7280; } .org { background: #4b5563; height: 34px; padding: 0 16px; font-size: 19px; }
+.sw { background: #4635ff; } .rt { background: #d08a12; } .srv { background: #1f9d55; height: 96px; } .ups { background: #141414; height: 96px; border: 2px solid #777; }
+.ups-note { margin-top: 22px; font-size: 24px; color: var(--muted); font-weight: 700; line-height: 1.35; }
+</style></head><body>
+<div id="art">
+  <h1>Сеть небольшого офиса и коммутационный шкаф</h1>
+  <div class="grid">
+    <div class="col">
+      <div class="narrow">
+        <div class="box">Провайдер · оптика<small>ONT провайдера</small></div>
+        <div class="v"></div>
+        <div class="box sun">Маршрутизатор / межсетевой экран<small>NAT, DHCP, VPN, правила между VLAN</small></div>
+        <div class="v"></div>
+        <div class="box dark">Основной коммутатор с PoE<small>управляемый, 24–48 портов</small></div>
+      </div>
+      <div class="fan">
+        <div><div class="box">Патч‑панель<small>→ розетки → ПК, принтеры, телефоны</small></div></div>
+        <div><div class="box ok">Сервер / NAS<small>файлы, 1С, копии</small></div></div>
+        <div><div class="box brand">Точки доступа<small>Wi‑Fi, питание PoE</small></div></div>
+        <div><div class="box brand">IP‑камеры<small>питание PoE</small></div></div>
+      </div>
+      <div class="ups-note">Роутер, коммутаторы и сервер — через <b style="color:var(--ink)">ИБП</b>: короткое отключение света не уронит сеть.</div>
+    </div>
+    <div>
+      <div class="rack-t">Шкаф 19″ · 12U (сверху вниз)</div>
+      <div class="rack">
+        <div class="u pp">Патч‑панель 24<small>1U</small></div>
+        <div class="u org">органайзер кабеля</div>
+        <div class="u sw">Коммутатор PoE<small>1U</small></div>
+        <div class="u pp">Патч‑панель 24<small>1U</small></div>
+        <div class="u org">органайзер кабеля</div>
+        <div class="u rt">Роутер, ONT<small>полка</small></div>
+        <div class="u srv">Сервер / NAS<small>2U</small></div>
+        <div class="u ups">ИБП — внизу, тяжёлое<small>2U</small></div>
+      </div>
+    </div>
+  </div>
+</div>
+</body></html>

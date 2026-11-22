@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<style>
+/* Шаблон схемы для урока. Рисуем в #art (ширина 1600, высота — по содержимому, обычно 700–900).
+   Светлый фон (урок светлый), акценты сайта. Текст на схеме — крупный: её смотрят и с телефона. */
+:root { --ink:#141414; --muted:#6f6e6a; --line:#e3dfd5; --brand:#4635ff; --brand-soft:#eeedff; --sun:#fec466; --sun-soft:#fff3d4;
+        --ok:#1f9d55; --ok-soft:#e4f5ea; --danger:#d33a2c; --danger-soft:#fdecea; --blue:#2f5bd9; --blue-soft:#e8efff; }
+* { box-sizing: border-box; }
+body { margin: 0; background: #fff; font-family: Manrope, Arial, sans-serif; color: var(--ink); }
+#art { width: 1600px; padding: 56px 64px; background: #fbfaf7; }
+h1 { margin: 0 0 36px; font-size: 44px; font-weight: 800; }
+.box { border: 3px solid var(--line); border-radius: 24px; background: #fff; padding: 24px 28px; font-size: 30px; font-weight: 700; }
+.box small { display: block; font-size: 24px; color: var(--muted); font-weight: 600; margin-top: 6px; }
+.brand { border-color: var(--brand); background: var(--brand-soft); }
+.sun { border-color: #f2b33d; background: var(--sun-soft); }
+.ok { border-color: var(--ok); background: var(--ok-soft); }
+.danger { border-color: var(--danger); background: var(--danger-soft); }
+.mono { font-family: 'JetBrains Mono', monospace; }
+.row { display: flex; gap: 28px; align-items: center; }
+.arrow { font-size: 44px; color: var(--brand); font-weight: 800; }
+.caption { margin-top: 28px; font-size: 26px; color: var(--muted); font-weight: 600; }
+
+.snake { display: grid; grid-template-columns: repeat(3, 1fr); column-gap: 90px; row-gap: 90px; position: relative; }
+.card { position: relative; border: 3px solid var(--line); border-radius: 26px; background: #fff; padding: 26px 30px; min-height: 190px; }
+.card .n { width: 58px; height: 58px; border-radius: 50%; background: var(--brand); color: #fff; display: grid; place-items: center; font-size: 30px; font-weight: 800; margin-bottom: 14px; }
+.card b { display: block; font-size: 36px; font-weight: 800; line-height: 1.15; }
+.card span { display: block; font-size: 27px; color: var(--muted); font-weight: 600; margin-top: 8px; line-height: 1.3; }
+.card.brand { border-color: var(--brand); background: var(--brand-soft); }
+.card.sun { border-color: #f2b33d; background: var(--sun-soft); } .card.sun .n { background: #f2b33d; color: #141414; }
+.card.ok { border-color: var(--ok); background: var(--ok-soft); } .card.ok .n { background: var(--ok); }
+.card.danger { border-color: var(--danger); background: var(--danger-soft); } .card.danger .n { background: var(--danger); }
+.ar { position: absolute; font-size: 56px; font-weight: 800; color: var(--brand); line-height: 1; }
+.ar.r { right: -76px; top: 50%; transform: translateY(-50%); }
+.ar.l { left: -76px; top: 50%; transform: translateY(-50%); }
+.ar.d { bottom: -82px; left: 50%; transform: translateX(-50%); }
+.note { margin-top: 40px; border-radius: 22px; padding: 22px 30px; font-size: 29px; font-weight: 700; background: var(--sun-soft); border: 3px dashed #f2b33d; }
+.pill { display: inline-block; padding: 6px 18px; border-radius: 999px; font-size: 26px; font-weight: 800; }
+
+.mx { display: grid; grid-template-columns: 400px repeat(3, 1fr); gap: 14px; }
+.corner { font-size: 25px; font-weight: 800; color: var(--muted); align-self: end; padding: 10px; }
+.ch { font-size: 29px; font-weight: 800; text-align: center; padding: 18px 12px; background: var(--blue-soft); border-radius: 18px; color: var(--blue); }
+.rh { font-size: 30px; font-weight: 800; padding: 22px 20px; background: #fff; border: 3px solid var(--line); border-radius: 18px; display: flex; align-items: center; }
+.c { border-radius: 18px; display: grid; place-items: center; font-size: 36px; font-weight: 800; min-height: 130px; }
+.crit { background: var(--danger); color: #fff; } .high { background: #ffd9a8; color: #8a4b00; }
+.mid { background: var(--sun-soft); color: #7a5a00; border: 3px solid #f2d48a; } .low { background: var(--ok-soft); color: #136b3a; }
+</style></head><body>
+<div id="art">
+  <h1>Приоритет = влияние + срочность</h1>
+<div class="mx"><div class="corner">Влияние ↓ &nbsp; Срочность →</div><div class="ch">Работа стоит прямо сейчас</div><div class="ch">Мешает, но работать можно</div><div class="ch">Может подождать</div><div class="rh">Весь офис или ключевой сервис</div><div class="c crit">Критический</div><div class="c high">Высокий</div><div class="c mid">Средний</div><div class="rh">Отдел или группа людей</div><div class="c high">Высокий</div><div class="c mid">Средний</div><div class="c low">Низкий</div><div class="rh">Один человек</div><div class="c high">Высокий</div><div class="c mid">Средний</div><div class="c low">Низкий</div></div><div class="caption">Пример шкалы. Конкретные правила и сроки договорите с руководством.</div>
+</div>
+</body></html>

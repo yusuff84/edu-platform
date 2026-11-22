@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<style>
+/* Шаблон схемы для урока. Рисуем в #art (ширина 1600, высота — по содержимому, обычно 700–900).
+   Светлый фон (урок светлый), акценты сайта. Текст на схеме — крупный: её смотрят и с телефона. */
+:root { --ink:#141414; --muted:#6f6e6a; --line:#e3dfd5; --brand:#4635ff; --brand-soft:#eeedff; --sun:#fec466; --sun-soft:#fff3d4;
+        --ok:#1f9d55; --ok-soft:#e4f5ea; --danger:#d33a2c; --danger-soft:#fdecea; --blue:#2f5bd9; --blue-soft:#e8efff; }
+* { box-sizing: border-box; }
+body { margin: 0; background: #fff; font-family: Manrope, Arial, sans-serif; color: var(--ink); }
+#art { width: 1600px; padding: 56px 64px; background: #fbfaf7; }
+h1 { margin: 0 0 36px; font-size: 44px; font-weight: 800; }
+.box { border: 3px solid var(--line); border-radius: 24px; background: #fff; padding: 24px 28px; font-size: 30px; font-weight: 700; }
+.box small { display: block; font-size: 24px; color: var(--muted); font-weight: 600; margin-top: 6px; }
+.brand { border-color: var(--brand); background: var(--brand-soft); }
+.sun { border-color: #f2b33d; background: var(--sun-soft); }
+.ok { border-color: var(--ok); background: var(--ok-soft); }
+.danger { border-color: var(--danger); background: var(--danger-soft); }
+.mono { font-family: 'JetBrains Mono', monospace; }
+.row { display: flex; gap: 28px; align-items: center; }
+.arrow { font-size: 44px; color: var(--brand); font-weight: 800; }
+.caption { margin-top: 28px; font-size: 26px; color: var(--muted); font-weight: 600; }
+.root { display: flex; align-items: center; gap: 22px; margin-bottom: 0; }
+.root .r { font-family: 'JetBrains Mono', monospace; font-size: 44px; font-weight: 700; background: #141414; color: #fff; border-radius: 18px; padding: 8px 30px; }
+.root span { font-size: 28px; font-weight: 700; color: var(--muted); }
+.trunk { margin-left: 52px; border-left: 4px solid #c9c6bd; height: 34px; }
+.bar { margin-left: 52px; border-top: 4px solid #c9c6bd; border-left: 4px solid #c9c6bd; border-radius: 0; height: 30px; width: calc(100% - 52px - 230px); }
+.grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 22px; }
+.c { border: 3px solid var(--line); border-radius: 22px; background: #fff; padding: 20px 24px; }
+.c code { font-family: 'JetBrains Mono', monospace; font-size: 34px; font-weight: 700; }
+.c div { font-size: 26px; color: var(--muted); font-weight: 600; margin-top: 6px; line-height: 1.35; }
+.c.top { border-color: var(--brand); background: var(--brand-soft); }
+.c.top code { color: var(--brand); }
+.c.top b { display: inline-block; margin-left: 10px; font-size: 20px; font-weight: 800; color: #fff; background: var(--brand); border-radius: 999px; padding: 3px 12px; vertical-align: 6px; }
+.c.warn { border-color: #d33a2c66; background: var(--danger-soft); }
+.legend { margin: 6px 0 18px; font-size: 26px; font-weight: 700; color: var(--muted); }
+</style></head><body>
+<div id="art">
+  <h1>Дерево каталогов Linux: что где лежит</h1>
+  <div class="root"><span class="r">/</span><span>корень — отсюда начинается всё, включая другие диски и флешки</span></div>
+  <div class="trunk"></div>
+  <div class="grid">
+    <div class="c top"><code>/etc</code><b>чаще всего</b><div>настройки системы и программ — текстовые файлы</div></div>
+    <div class="c top"><code>/var/log</code><b>чаще всего</b><div>журналы: syslog, auth.log, журналы nginx</div></div>
+    <div class="c top"><code>/home</code><b>чаще всего</b><div>папки пользователей: /home/ivan = ~</div></div>
+    <div class="c"><code>/root</code><div>домашняя папка администратора root</div></div>
+    <div class="c"><code>/var</code><div>меняющиеся данные: кэши, базы, сайты</div></div>
+    <div class="c"><code>/usr</code><div>установленные программы и библиотеки</div></div>
+    <div class="c"><code>/tmp</code><div>временные файлы, могут удаляться при перезагрузке</div></div>
+    <div class="c"><code>/dev</code><div>устройства как файлы: /dev/sda</div></div>
+    <div class="c"><code>/proc</code><span style="font-size:32px;color:var(--muted);font-weight:800"> и </span><code>/sys</code><div>«виртуальные» файлы о состоянии системы</div></div>
+    <div class="c"><code>/mnt</code><span style="font-size:32px;color:var(--muted);font-weight:800"> и </span><code>/media</code><div>сюда подключаются диски и флешки</div></div>
+    <div class="c"><code>/opt</code><div>сторонние программы «одной папкой»</div></div>
+    <div class="c warn"><code>/boot</code><div>ядро и загрузчик — не трогать без понимания</div></div>
+  </div>
+  <div class="caption">В Windows: C:\Users\ivan → в Linux: /home/ivan. Букв дисков нет, разделитель — прямой слеш.</div>
+</div>
+</body></html>

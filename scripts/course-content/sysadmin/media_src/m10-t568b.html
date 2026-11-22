@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<style>
+:root { --ink:#141414; --muted:#6f6e6a; --line:#e3dfd5; --brand:#4635ff; --brand-soft:#eeedff; --sun:#fec466; --sun-soft:#fff3d4;
+        --ok:#1f9d55; --ok-soft:#e4f5ea; --danger:#d33a2c; --danger-soft:#fdecea; --blue:#2f5bd9; --blue-soft:#e8efff; }
+* { box-sizing: border-box; }
+body { margin: 0; background: #fff; font-family: Manrope, Arial, sans-serif; color: var(--ink); }
+#art { width: 1600px; padding: 56px 64px; background: #fbfaf7; }
+h1 { margin: 0 0 36px; font-size: 48px; font-weight: 800; }
+.wrap { display: flex; gap: 56px; align-items: flex-start; }
+.legend { flex: 1; display: grid; gap: 12px; }
+.leg { display: flex; align-items: center; gap: 20px; font-size: 32px; font-weight: 700; background: #fff; border: 3px solid var(--line); border-radius: 18px; padding: 10px 18px; }
+.leg .n { width: 50px; height: 50px; border-radius: 50%; background: var(--ink); color: #fff; display: grid; place-items: center; font-size: 26px; font-weight: 800; flex: none; }
+.leg .sw { width: 70px; height: 34px; border-radius: 8px; flex: none; border: 2px solid rgba(0,0,0,.15); }
+.leg .tag { margin-left: auto; font-size: 22px; font-weight: 800; color: var(--brand); background: var(--brand-soft); border-radius: 999px; padding: 6px 14px; }
+.facts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; margin-top: 36px; }
+.fact { border: 3px solid var(--line); border-radius: 24px; background: #fff; padding: 24px 28px; font-size: 28px; font-weight: 700; line-height: 1.35; }
+.fact b { display: block; font-size: 40px; font-weight: 800; color: var(--brand); margin-bottom: 6px; }
+.fact.sun { border-color: #f2b33d; background: var(--sun-soft); } .fact.sun b { color: #b77400; }
+.fact.ok { border-color: var(--ok); background: var(--ok-soft); } .fact.ok b { color: var(--ok); }
+.cap { font-size: 24px; color: var(--muted); font-weight: 700; text-align: center; margin-top: 8px; }
+</style></head><body>
+<div id="art">
+  <h1>Витая пара и разъём RJ‑45: порядок жил T568B</h1>
+  <div class="wrap">
+    <div>
+      <svg width="600" height="640" viewBox="0 0 600 640" font-family="Manrope, Arial" font-weight="800">
+        <defs>
+          <pattern id="so" width="26" height="26" patternUnits="userSpaceOnUse" patternTransform="rotate(35)"><rect width="26" height="26" fill="#fff"/><rect width="11" height="26" fill="#f08a24"/></pattern>
+          <pattern id="sg" width="26" height="26" patternUnits="userSpaceOnUse" patternTransform="rotate(35)"><rect width="26" height="26" fill="#fff"/><rect width="11" height="26" fill="#2f9e44"/></pattern>
+          <pattern id="sb" width="26" height="26" patternUnits="userSpaceOnUse" patternTransform="rotate(35)"><rect width="26" height="26" fill="#fff"/><rect width="11" height="26" fill="#2f5bd9"/></pattern>
+          <pattern id="sr" width="26" height="26" patternUnits="userSpaceOnUse" patternTransform="rotate(35)"><rect width="26" height="26" fill="#fff"/><rect width="11" height="26" fill="#8b5a2b"/></pattern>
+        </defs>
+        <!-- корпус разъёма -->
+        <rect x="30" y="20" width="540" height="380" rx="30" fill="#eef3fb" stroke="#9fb0cc" stroke-width="4"/>
+        <!-- жилы -->
+        <g stroke="rgba(0,0,0,.25)" stroke-width="2">
+          <rect x="62"  y="150" width="44" height="340" fill="url(#so)"/>
+          <rect x="126" y="150" width="44" height="340" fill="#f08a24"/>
+          <rect x="190" y="150" width="44" height="340" fill="url(#sg)"/>
+          <rect x="254" y="150" width="44" height="340" fill="#2f5bd9"/>
+          <rect x="318" y="150" width="44" height="340" fill="url(#sb)"/>
+          <rect x="382" y="150" width="44" height="340" fill="#2f9e44"/>
+          <rect x="446" y="150" width="44" height="340" fill="url(#sr)"/>
+          <rect x="510" y="150" width="44" height="340" fill="#8b5a2b" transform="translate(-6 0)"/>
+        </g>
+        <!-- контакты -->
+        <g fill="#e0b440" stroke="#a9801c" stroke-width="2">
+          <rect x="64" y="40" width="40" height="70" rx="6"/><rect x="128" y="40" width="40" height="70" rx="6"/>
+          <rect x="192" y="40" width="40" height="70" rx="6"/><rect x="256" y="40" width="40" height="70" rx="6"/>
+          <rect x="320" y="40" width="40" height="70" rx="6"/><rect x="384" y="40" width="40" height="70" rx="6"/>
+          <rect x="448" y="40" width="40" height="70" rx="6"/><rect x="506" y="40" width="40" height="70" rx="6"/>
+        </g>
+        <g font-size="30" fill="#141414" text-anchor="middle">
+          <text x="84" y="142">1</text><text x="148" y="142">2</text><text x="212" y="142">3</text><text x="276" y="142">4</text>
+          <text x="340" y="142">5</text><text x="404" y="142">6</text><text x="468" y="142">7</text><text x="526" y="142">8</text>
+        </g>
+        <!-- оболочка кабеля -->
+        <rect x="30" y="470" width="540" height="160" rx="22" fill="#8e98ad"/>
+        <text x="300" y="545" font-size="30" fill="#fff" text-anchor="middle">кабель Cat5e / Cat6</text>
+        <text x="300" y="588" font-size="24" fill="#e6eaf3" text-anchor="middle" font-weight="700">оболочка заходит под фиксатор</text>
+      </svg>
+      <div class="cap">Вид со стороны контактов, защёлка сзади</div>
+    </div>
+    <div class="legend">
+      <div class="leg"><span class="n">1</span><span class="sw" style="background:repeating-linear-gradient(55deg,#fff 0 9px,#f08a24 9px 18px)"></span>бело‑оранжевый<span class="tag">100 Мбит</span></div>
+      <div class="leg"><span class="n">2</span><span class="sw" style="background:#f08a24"></span>оранжевый<span class="tag">100 Мбит</span></div>
+      <div class="leg"><span class="n">3</span><span class="sw" style="background:repeating-linear-gradient(55deg,#fff 0 9px,#2f9e44 9px 18px)"></span>бело‑зелёный<span class="tag">100 Мбит</span></div>
+      <div class="leg"><span class="n">4</span><span class="sw" style="background:#2f5bd9"></span>синий</div>
+      <div class="leg"><span class="n">5</span><span class="sw" style="background:repeating-linear-gradient(55deg,#fff 0 9px,#2f5bd9 9px 18px)"></span>бело‑синий</div>
+      <div class="leg"><span class="n">6</span><span class="sw" style="background:#2f9e44"></span>зелёный<span class="tag">100 Мбит</span></div>
+      <div class="leg"><span class="n">7</span><span class="sw" style="background:repeating-linear-gradient(55deg,#fff 0 9px,#8b5a2b 9px 18px)"></span>бело‑коричневый</div>
+      <div class="leg"><span class="n">8</span><span class="sw" style="background:#8b5a2b"></span>коричневый</div>
+    </div>
+  </div>
+  <div class="facts">
+    <div class="fact"><b>до 100 м</b>от коммутатора до компьютера, вместе с патч‑кордами</div>
+    <div class="fact sun"><b>1 Гбит/с = 4 пары</b>100 Мбит/с хватает двух пар (1‑2 и 3‑6). Перебита пара — скорость падает до 100</div>
+    <div class="fact ok"><b>Тестер</b>после обжима все 8 огоньков должны загореться по порядку</div>
+  </div>
+</div>
+</body></html>

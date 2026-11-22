@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<style>
+:root { --ink:#141414; --muted:#6f6e6a; --line:#e3dfd5; --brand:#4635ff; --brand-soft:#eeedff; --sun:#fec466; --sun-soft:#fff3d4;
+        --ok:#1f9d55; --ok-soft:#e4f5ea; --danger:#d33a2c; --danger-soft:#fdecea; --blue:#2f5bd9; --blue-soft:#e8efff; }
+* { box-sizing: border-box; }
+body { margin: 0; background: #fff; font-family: Manrope, Arial, sans-serif; color: var(--ink); }
+#art { width: 1600px; padding: 56px 64px; background: #fbfaf7; }
+h1 { margin: 0 0 30px; font-size: 44px; font-weight: 800; }
+h1 .mono { color: var(--brand); }
+.mono { font-family: 'JetBrains Mono', monospace; }
+.wrap { position: relative; width: 1472px; height: 640px; }
+.box { position: absolute; border: 3px solid var(--line); border-radius: 24px; background: #fff; padding: 20px 24px; font-size: 30px; font-weight: 800; }
+.box small { display: block; font-size: 23px; color: var(--muted); font-weight: 600; margin-top: 6px; line-height: 1.3; }
+.brand { border-color: var(--brand); background: var(--brand-soft); }
+.sun { border-color: #f2b33d; background: var(--sun-soft); }
+.ok { border-color: var(--ok); background: var(--ok-soft); }
+.blue { border-color: var(--blue); background: var(--blue-soft); }
+svg { position: absolute; left: 0; top: 0; }
+.lab { position: absolute; font-size: 24px; font-weight: 700; color: #34332f; background: #fbfaf7; padding: 2px 8px; line-height: 1.3; }
+.num { display: inline-grid; place-items: center; width: 38px; height: 38px; border-radius: 50%; background: var(--brand); color: #fff; font-size: 22px; font-weight: 800; margin-right: 8px; vertical-align: middle; }
+.caption { margin-top: 20px; font-size: 26px; color: var(--muted); font-weight: 600; }
+</style></head><body>
+<div id="art">
+  <h1>Путь DNS-запроса: кто подскажет адрес <span class="mono">www.example.ru</span></h1>
+  <div class="wrap">
+    <svg width="1472" height="640" viewBox="0 0 1472 640">
+      <defs>
+        <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#4635ff"/></marker>
+        <marker id="g" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#1f9d55"/></marker>
+      </defs>
+      <!-- ПК -> кэш -->
+      <line x1="170" y1="200" x2="170" y2="400" stroke="#4635ff" stroke-width="5" marker-end="url(#a)"/>
+      <!-- ПК -> резолвер -->
+      <line x1="340" y1="130" x2="560" y2="130" stroke="#4635ff" stroke-width="5" marker-end="url(#a)"/>
+      <!-- резолвер -> ответ ПК -->
+      <line x1="560" y1="230" x2="340" y2="230" stroke="#1f9d55" stroke-width="5" marker-end="url(#g)"/>
+      <!-- резолвер -> корень -->
+      <line x1="880" y1="120" x2="1030" y2="70" stroke="#4635ff" stroke-width="5" marker-end="url(#a)"/>
+      <!-- резолвер -> .ru -->
+      <line x1="880" y1="200" x2="1030" y2="300" stroke="#4635ff" stroke-width="5" marker-end="url(#a)"/>
+      <!-- резолвер -> авторитетный -->
+      <line x1="840" y1="260" x2="1030" y2="520" stroke="#4635ff" stroke-width="5" marker-end="url(#a)"/>
+    </svg>
+
+    <div class="box brand" style="left:0;top:60px;width:340px">Компьютер<small>браузер: «где www.example.ru?»</small></div>
+    <div class="box" style="left:0;top:410px;width:340px"><span class="num">1</span>Кэш и hosts<small>сначала смотрим у себя</small></div>
+
+    <div class="box sun" style="left:560px;top:60px;width:320px;height:200px">DNS-резолвер<small>роутер, сервер офиса или провайдера; запоминает ответы</small></div>
+
+    <div class="box" style="left:1040px;top:0;width:432px">Корневой сервер<small>«за .ru отвечают вот эти»</small></div>
+    <div class="box blue" style="left:1040px;top:230px;width:432px">Серверы зоны .ru<small>«за example.ru — вот этот»</small></div>
+    <div class="box ok" style="left:1040px;top:460px;width:432px">Авторитетный сервер<small class="mono">www → 203.0.113.10</small></div>
+
+    <div class="lab" style="left:380px;top:76px"><span class="num">2</span>запрос</div>
+    <div class="lab" style="left:372px;top:246px;color:#126b39"><span class="num" style="background:#1f9d55">6</span>адрес</div>
+    <div class="lab" style="left:900px;top:40px"><span class="num">3</span></div>
+    <div class="lab" style="left:960px;top:200px"><span class="num">4</span></div>
+    <div class="lab" style="left:880px;top:420px"><span class="num">5</span></div>
+  </div>
+  <div class="caption">Шаги 3–5 резолвер делает, только если ответа нет в его кэше. Обычно всё занимает миллисекунды.</div>
+</div>
+</body></html>

@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<style>
+:root { --ink:#141414; --muted:#6f6e6a; --line:#e3dfd5; --brand:#4635ff; --brand-soft:#eeedff; --sun:#fec466; --sun-soft:#fff3d4;
+        --ok:#1f9d55; --ok-soft:#e4f5ea; --danger:#d33a2c; --danger-soft:#fdecea; --blue:#2f5bd9; --blue-soft:#e8efff; }
+* { box-sizing: border-box; }
+body { margin: 0; background: #fff; font-family: Manrope, Arial, sans-serif; color: var(--ink); }
+#art { width: 1600px; padding: 56px 64px; background: #fbfaf7; }
+h1 { margin: 0 0 40px; font-size: 48px; font-weight: 800; line-height: 1.15; }
+.box { border: 3px solid var(--line); border-radius: 24px; background: #fff; padding: 24px 28px; font-size: 34px; font-weight: 800; line-height: 1.2; }
+.box small { display: block; font-size: 27px; color: var(--muted); font-weight: 600; margin-top: 8px; line-height: 1.3; }
+.brand { border-color: var(--brand); background: var(--brand-soft); }
+.sun { border-color: #f2b33d; background: var(--sun-soft); }
+.ok { border-color: var(--ok); background: var(--ok-soft); }
+.danger { border-color: var(--danger); background: var(--danger-soft); }
+.blue { border-color: var(--blue); background: var(--blue-soft); }
+.mono { font-family: 'JetBrains Mono', monospace; }
+.row { display: flex; gap: 22px; align-items: stretch; }
+.row > .box { flex: 1; }
+.arrow { font-size: 48px; color: var(--brand); font-weight: 800; display: flex; align-items: center; }
+.caption { margin-top: 32px; font-size: 28px; color: var(--muted); font-weight: 600; }
+.tag { display: inline-block; font-size: 24px; font-weight: 800; padding: 6px 16px; border-radius: 999px; background: var(--brand); color: #fff; margin-bottom: 14px; }
+.tag.ok { background: var(--ok); } .tag.sun { background: #e0a020; } .tag.danger { background: var(--danger); } .tag.gray { background: #8a877f; }
+.num { display: inline-grid; place-items: center; width: 52px; height: 52px; border-radius: 50%; background: var(--brand); color: #fff; font-size: 28px; font-weight: 800; margin-bottom: 14px; }
+code, .code { font-family: 'JetBrains Mono', monospace; font-size: .86em; background: rgba(0,0,0,.06); padding: 2px 10px; border-radius: 8px; font-weight: 700; }
+
+.top { font-size: 36px; text-align: center; font-weight: 700; max-width: 1200px; margin: 0 auto; }
+.top b { font-weight: 800; }
+.fork { display: block; margin: 0 auto; }
+.two { gap: 40px; }
+.two .box { font-size: 40px; }
+
+</style></head><body>
+<div id="art">
+
+<h1>Где проблема: в принтере или в компьютере?</h1>
+<div class="top box brand">Распечатайте тестовую страницу <b>кнопками на самом принтере</b><small>без компьютера: страница конфигурации или тестовая страница</small></div>
+<svg class="fork" viewBox="0 0 1472 130" width="1472" height="130"><defs><marker id="h" markerUnits="userSpaceOnUse" markerWidth="34" markerHeight="34" viewBox="0 0 10 10" refX="5" refY="5" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#4635ff"/></marker></defs>
+<path d="M736 6 L736 40 L368 40 L368 112" fill="none" stroke="#4635ff" stroke-width="6" marker-end="url(#h)"/>
+<path d="M736 40 L1104 40 L1104 112" fill="none" stroke="#4635ff" stroke-width="6" marker-end="url(#h)"/></svg>
+<div class="row two">
+  <div class="box ok"><span class="tag ok">Страница чистая</span><br>Проблема в компьютере<small>драйвер, настройки печати, сам файл</small></div>
+  <div class="box danger"><span class="tag danger">Тоже с дефектами</span><br>Проблема в принтере<small>тонер, барабан, сопла, механика</small></div>
+</div>
+
+</div>
+</body></html>

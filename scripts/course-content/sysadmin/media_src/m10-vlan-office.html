@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<style>
+:root { --ink:#141414; --muted:#6f6e6a; --line:#e3dfd5; --brand:#4635ff; --brand-soft:#eeedff; --sun:#fec466; --sun-soft:#fff3d4;
+        --ok:#1f9d55; --ok-soft:#e4f5ea; --danger:#d33a2c; --danger-soft:#fdecea; --blue:#2f5bd9; --blue-soft:#e8efff; }
+* { box-sizing: border-box; }
+body { margin: 0; background: #fff; font-family: Manrope, Arial, sans-serif; color: var(--ink); }
+#art { width: 1600px; padding: 56px 64px; background: #fbfaf7; }
+h1 { margin: 0 0 24px; font-size: 48px; font-weight: 800; }
+.legend { display: grid; grid-template-columns: repeat(4, 1fr); gap: 18px; margin-top: 26px; }
+.lg { border-radius: 20px; padding: 16px 20px; font-size: 26px; font-weight: 800; border: 3px solid; background: #fff; }
+.lg small { display: block; font-family: 'JetBrains Mono', monospace; font-size: 21px; font-weight: 700; color: var(--muted); margin-top: 4px; }
+</style></head><body>
+<div id="art">
+  <h1>VLAN: один коммутатор — несколько отдельных сетей</h1>
+  <svg width="1472" height="700" viewBox="0 0 1472 700" font-family="Manrope, Arial" font-weight="800">
+    <!-- роутер -->
+    <rect x="436" y="10" width="600" height="120" rx="22" fill="#fff3d4" stroke="#f2b33d" stroke-width="4"/>
+    <text x="736" y="62" font-size="32" text-anchor="middle">Маршрутизатор</text>
+    <text x="736" y="100" font-size="23" text-anchor="middle" fill="#6f6e6a" font-weight="700">правила: кто в какой VLAN может ходить</text>
+    <!-- trunk роутер—коммутатор -->
+    <g stroke-width="7"><path d="M720 130 V250" stroke="#2f5bd9"/><path d="M732 130 V250" stroke="#1f9d55"/><path d="M744 130 V250" stroke="#e8590c"/><path d="M756 130 V250" stroke="#a23ad1"/></g>
+    <rect x="780" y="158" width="250" height="56" rx="14" fill="#141414"/>
+    <text x="905" y="196" font-size="26" fill="#fec466" text-anchor="middle">trunk · с тегами</text>
+    <!-- коммутатор 1 -->
+    <rect x="200" y="250" width="1072" height="110" rx="22" fill="#141414"/>
+    <text x="236" y="318" font-size="30" fill="#fff">Управляемый коммутатор</text>
+    <!-- порты -->
+    <g>
+      <rect x="640" y="275" width="70" height="60" rx="8" fill="#2f5bd9"/>
+      <rect x="730" y="275" width="70" height="60" rx="8" fill="#1f9d55"/>
+      <rect x="820" y="275" width="70" height="60" rx="8" fill="#e8590c"/>
+      <rect x="910" y="275" width="70" height="60" rx="8" fill="#555"/>
+      <rect x="1000" y="275" width="70" height="60" rx="8" fill="#555"/>
+      <rect x="1150" y="275" width="70" height="60" rx="8" fill="#555"/>
+    </g>
+    <!-- access-кабели -->
+    <path d="M675 335 C675 420, 175 420, 175 480" stroke="#2f5bd9" stroke-width="7" fill="none"/>
+    <path d="M765 335 C765 430, 485 430, 485 480" stroke="#1f9d55" stroke-width="7" fill="none"/>
+    <path d="M855 335 C855 430, 795 430, 795 480" stroke="#e8590c" stroke-width="7" fill="none"/>
+    <!-- trunk к точке доступа -->
+    <g stroke-width="7" fill="none"><path d="M1179 335 V480" stroke="#2f5bd9"/><path d="M1191 335 V480" stroke="#a23ad1"/></g>
+    <!-- устройства -->
+    <g font-size="30" text-anchor="middle">
+      <rect x="40" y="480" width="270" height="120" rx="20" fill="#e8efff" stroke="#2f5bd9" stroke-width="4"/>
+      <text x="175" y="532">ПК сотрудника</text><text x="175" y="572" font-size="23" fill="#2f5bd9">access · VLAN 10</text>
+      <rect x="350" y="480" width="270" height="120" rx="20" fill="#e4f5ea" stroke="#1f9d55" stroke-width="4"/>
+      <text x="485" y="532">IP‑телефон</text><text x="485" y="572" font-size="23" fill="#1f9d55">access · VLAN 20</text>
+      <rect x="660" y="480" width="270" height="120" rx="20" fill="#fff0e6" stroke="#e8590c" stroke-width="4"/>
+      <text x="795" y="532">Камера</text><text x="795" y="572" font-size="23" fill="#e8590c">access · VLAN 30</text>
+      <rect x="1030" y="480" width="320" height="120" rx="20" fill="#fff" stroke="#141414" stroke-width="4"/>
+      <text x="1190" y="532">Точка доступа</text><text x="1190" y="572" font-size="23" fill="#6f6e6a">trunk · VLAN 10 и 99</text>
+    </g>
+    <text x="1190" y="660" font-size="24" text-anchor="middle" fill="#6f6e6a" font-weight="700">Wi‑Fi «Office» и «Guest»</text>
+    <text x="485" y="660" font-size="24" text-anchor="middle" fill="#6f6e6a" font-weight="700">access‑порт: один VLAN, устройство о нём не знает</text>
+  </svg>
+  <div class="legend">
+    <div class="lg" style="border-color:#2f5bd9">VLAN 10 · сотрудники<small>192.168.10.0/24</small></div>
+    <div class="lg" style="border-color:#1f9d55">VLAN 20 · телефоны<small>192.168.20.0/24</small></div>
+    <div class="lg" style="border-color:#e8590c">VLAN 30 · камеры<small>192.168.30.0/24</small></div>
+    <div class="lg" style="border-color:#a23ad1">VLAN 99 · гости<small>192.168.99.0/24</small></div>
+  </div>
+</div>
+</body></html>

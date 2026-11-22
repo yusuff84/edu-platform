@@ -212,6 +212,13 @@
 }
 
 .md-table {
+  /* Сбрасываем общий стиль таблиц сайта (рамка, скругление, тень) — рамку рисует обёртка. */
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  background: transparent;
+  overflow: visible;
   width: 100%;
   min-width: 420px;
   border-collapse: collapse;
@@ -264,6 +271,11 @@
   border-radius: 14px;
   border: 1px solid #ece9e2;
   background: #fff;
+}
+
+.md-figure-link {
+  display: block;
+  cursor: zoom-in;
 }
 
 .md-figure figcaption {

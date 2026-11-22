@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<style>
+:root { --ink:#141414; --muted:#6f6e6a; --line:#e3dfd5; --brand:#4635ff; --brand-soft:#eeedff; --sun:#fec466; --sun-soft:#fff3d4;
+        --ok:#1f9d55; --ok-soft:#e4f5ea; --danger:#d33a2c; --danger-soft:#fdecea; --blue:#2f5bd9; --blue-soft:#e8efff; }
+* { box-sizing: border-box; }
+body { margin: 0; background: #fff; font-family: Manrope, Arial, sans-serif; color: var(--ink); }
+#art { width: 1600px; padding: 56px 64px; background: #fbfaf7; }
+h1 { margin: 0 0 40px; font-size: 48px; font-weight: 800; line-height: 1.15; }
+.box { border: 3px solid var(--line); border-radius: 24px; background: #fff; padding: 24px 28px; font-size: 34px; font-weight: 800; line-height: 1.2; }
+.box small { display: block; font-size: 27px; color: var(--muted); font-weight: 600; margin-top: 8px; line-height: 1.3; }
+.brand { border-color: var(--brand); background: var(--brand-soft); }
+.sun { border-color: #f2b33d; background: var(--sun-soft); }
+.ok { border-color: var(--ok); background: var(--ok-soft); }
+.danger { border-color: var(--danger); background: var(--danger-soft); }
+.blue { border-color: var(--blue); background: var(--blue-soft); }
+.mono { font-family: 'JetBrains Mono', monospace; }
+.row { display: flex; gap: 22px; align-items: stretch; }
+.row > .box { flex: 1; }
+.arrow { font-size: 48px; color: var(--brand); font-weight: 800; display: flex; align-items: center; }
+.caption { margin-top: 32px; font-size: 28px; color: var(--muted); font-weight: 600; }
+.tag { display: inline-block; font-size: 24px; font-weight: 800; padding: 6px 16px; border-radius: 999px; background: var(--brand); color: #fff; margin-bottom: 14px; }
+.tag.ok { background: var(--ok); } .tag.sun { background: #e0a020; } .tag.danger { background: var(--danger); } .tag.gray { background: #8a877f; }
+.num { display: inline-grid; place-items: center; width: 52px; height: 52px; border-radius: 50%; background: var(--brand); color: #fff; font-size: 28px; font-weight: 800; margin-bottom: 14px; }
+code, .code { font-family: 'JetBrains Mono', monospace; font-size: .86em; background: rgba(0,0,0,.06); padding: 2px 10px; border-radius: 8px; font-weight: 700; }
+
+h1 { font-size: 54px; margin-bottom: 44px; }
+.box { font-size: 46px; padding: 26px 32px; }
+.box small { font-size: 36px; }
+.num { width: 64px; height: 64px; font-size: 34px; margin: 0; flex: none; }
+
+.g2 { display: grid; grid-template-columns: 1fr 1fr; gap: 70px 90px; position: relative; }
+.it { display: flex; gap: 26px; align-items: center; }
+.a { position: absolute; font-size: 60px; font-weight: 800; color: var(--brand); line-height: 1; }
+.a1 { left: 50%; top: 22%; transform: translate(-50%, -50%); }
+.a2 { right: 22%; top: 50%; transform: translate(50%, -50%); }
+.a3 { left: 50%; top: 78%; transform: translate(-50%, -50%); }
+.a4 { left: 22%; top: 50%; transform: translate(-50%, -50%); }
+.br { margin-top: 44px; }
+
+</style></head><body>
+<div id="art">
+<h1>Цикл обновлений в офисе — каждый месяц</h1>
+<div class="g2">
+  <div class="box brand it"><span class="num">1</span><div>Вторник патчей<small>второй вторник месяца: вышли исправления</small></div></div>
+  <div class="box sun it"><span class="num">2</span><div>Пилот<small>2–3 компьютера ставят сразу</small></div></div>
+  <div class="box it"><span class="num">4</span><div>Контроль<small>все ли обновились без ошибок</small></div></div>
+  <div class="box ok it"><span class="num">3</span><div>Все компьютеры<small>через несколько дней, в окно перезагрузки</small></div></div>
+  <div class="a a1">→</div><div class="a a2">↓</div><div class="a a3">←</div><div class="a a4">↑</div>
+</div>
+<div class="box danger br"><b>У пилота что-то сломалось?</b><small>Найти номер KB → удалить обновление → пауза до исправления. Остальные пока не обновляем.</small></div>
+</div>
+</body></html>

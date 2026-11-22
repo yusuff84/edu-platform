@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<style>
+:root { --ink:#141414; --muted:#6f6e6a; --line:#e3dfd5; --brand:#4635ff; --brand-soft:#eeedff; --sun:#fec466; --sun-soft:#fff3d4;
+        --ok:#1f9d55; --ok-soft:#e4f5ea; --danger:#d33a2c; --danger-soft:#fdecea; --blue:#2f5bd9; --blue-soft:#e8efff; }
+* { box-sizing: border-box; }
+body { margin: 0; background: #fff; font-family: Manrope, Arial, sans-serif; color: var(--ink); }
+#art { width: 1600px; padding: 56px 64px; background: #fbfaf7; }
+h1 { margin: 0 0 34px; font-size: 48px; font-weight: 800; }
+.path { display: grid; grid-template-columns: repeat(5, 1fr); gap: 0; align-items: stretch; }
+.s { position: relative; margin-right: 34px; border-radius: 24px; padding: 22px 22px; background: #fff; border: 4px solid var(--line); }
+.s:not(:last-child)::after { content: '→'; position: absolute; right: -36px; top: 50%; transform: translateY(-50%); font-size: 40px; font-weight: 800; color: var(--brand); }
+.s .n { font-size: 22px; font-weight: 800; color: var(--muted); }
+.s h3 { margin: 6px 0 10px; font-size: 31px; font-weight: 800; line-height: 1.15; }
+.s p { margin: 0; font-size: 23px; font-weight: 700; color: var(--muted); line-height: 1.35; }
+.s.a { border-color: var(--ok); background: var(--ok-soft); }
+.s.b { border-color: var(--brand); background: var(--brand-soft); }
+.s.c { border-color: #f2b33d; background: var(--sun-soft); }
+.spec { margin-top: 40px; }
+.spec h2 { margin: 0 0 18px; font-size: 34px; font-weight: 800; }
+.chips { display: flex; flex-wrap: wrap; gap: 12px; }
+.chip { font-size: 27px; font-weight: 800; padding: 12px 22px; border-radius: 999px; background: var(--ink); color: #fff; }
+.habits { margin-top: 36px; display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; }
+.h { border: 3px solid var(--line); background: #fff; border-radius: 20px; padding: 18px 22px; font-size: 26px; font-weight: 800; }
+.h small { display: block; font-size: 22px; color: var(--muted); font-weight: 700; margin-top: 4px; }
+</style></head><body>
+<div id="art">
+  <h1>Что дальше: путь от курса до профессии</h1>
+  <div class="path">
+    <div class="s a"><div class="n">сейчас</div><h3>Курс пройден</h3><p>база: ПК, Windows, Linux, сети, безопасность</p></div>
+    <div class="s"><div class="n">1–3 месяца</div><h3>Домашний стенд</h3><p>виртуалки: домен, Linux‑сервер, VLAN, бэкапы</p></div>
+    <div class="s b"><div class="n">первая работа</div><h3>Helpdesk, 1‑я линия</h3><p>заявки пользователей, сотни реальных случаев</p></div>
+    <div class="s b"><div class="n">дальше</div><h3>2‑я линия</h3><p>сложные заявки, серверы, сеть</p></div>
+    <div class="s c"><div class="n">цель</div><h3>Системный администратор</h3><p>отвечает за инфраструктуру</p></div>
+  </div>
+  <div class="spec"><h2>Потом — специализация</h2>
+    <div class="chips"><span class="chip">Сети</span><span class="chip">Linux‑серверы</span><span class="chip">Виртуализация и облака</span><span class="chip">Информационная безопасность</span><span class="chip">DevOps</span></div>
+  </div>
+  <div class="habits">
+    <div class="h">Документируйте<small>схемы, пароли в менеджере</small></div>
+    <div class="h">Автоматизируйте<small>PowerShell и bash</small></div>
+    <div class="h">Читайте по‑английски<small>документация и ошибки</small></div>
+    <div class="h">Понемногу, но каждый день<small>полчаса практики</small></div>
+  </div>
+</div>
+</body></html>

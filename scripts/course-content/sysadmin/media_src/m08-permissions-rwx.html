@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<style>
+:root { --ink:#141414; --muted:#6f6e6a; --line:#e3dfd5; --brand:#4635ff; --brand-soft:#eeedff; --sun:#fec466; --sun-soft:#fff3d4;
+        --ok:#1f9d55; --ok-soft:#e4f5ea; --danger:#d33a2c; --danger-soft:#fdecea; --blue:#2f5bd9; --blue-soft:#e8efff; }
+* { box-sizing: border-box; }
+body { margin: 0; background: #fff; font-family: Manrope, Arial, sans-serif; color: var(--ink); }
+#art { width: 1600px; padding: 56px 64px; background: #fbfaf7; }
+h1 { margin: 0 0 30px; font-size: 44px; font-weight: 800; }
+.mono { font-family: 'JetBrains Mono', monospace; }
+.lsline { font-family: 'JetBrains Mono', monospace; font-size: 38px; font-weight: 700; background: #1b1d3a; color: #e9ecff;
+          border-radius: 20px; padding: 22px 30px; margin-bottom: 40px; }
+.lsline .u { color: #9aa2ff; } .lsline .g { color: #fec466; } .lsline .o { color: #ff9b91; } .lsline .t { color: #b5b3ad; }
+.lsline .pr { color: #7ca0ff; }
+.grid { display: grid; grid-template-columns: 200px 1fr 1fr 1fr; gap: 22px; }
+.col { border-radius: 24px; border: 3px solid var(--line); background: #fff; padding: 22px 22px 24px; text-align: center; }
+.col.t { border-color: #c9c6bd; background: #f3f1ec; }
+.col.u { border-color: var(--brand); background: var(--brand-soft); }
+.col.g { border-color: #f2b33d; background: var(--sun-soft); }
+.col.o { border-color: var(--danger); background: var(--danger-soft); }
+.lbl { font-size: 30px; font-weight: 800; }
+.lbl small { display: block; font-size: 24px; color: var(--muted); font-weight: 700; margin-top: 4px; }
+.chars { display: flex; justify-content: center; gap: 12px; margin: 20px 0 10px; }
+.ch { width: 76px; height: 86px; border-radius: 16px; background: #fff; border: 3px solid rgba(0,0,0,.12);
+      display: grid; place-items: center; font-family: 'JetBrains Mono', monospace; font-size: 54px; font-weight: 700; }
+.ch.off { color: #b5b3ad; }
+.w { display: flex; justify-content: center; gap: 12px; }
+.w span { width: 76px; font-size: 26px; font-weight: 800; color: var(--muted); }
+.w span.on { color: var(--ink); }
+.sum { margin-top: 14px; font-size: 28px; font-weight: 700; color: var(--muted); }
+.sum b { display: inline-block; margin-left: 8px; min-width: 64px; padding: 4px 14px; border-radius: 14px; background: var(--ink); color: #fff;
+         font-family: 'JetBrains Mono', monospace; font-size: 38px; }
+.type-ch { margin: 20px auto 10px; }
+.result { margin-top: 34px; display: flex; align-items: center; gap: 28px; }
+.result .cmd { font-family: 'JetBrains Mono', monospace; font-size: 40px; font-weight: 700; padding: 18px 30px; border-radius: 20px;
+               background: var(--ink); color: #fff; }
+.result .cmd em { font-style: normal; color: var(--sun); }
+.result .txt { font-size: 28px; font-weight: 700; color: var(--muted); line-height: 1.35; }
+.chips { margin-top: 34px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 22px; }
+.chip { border-radius: 22px; border: 3px solid var(--line); background: #fff; padding: 20px 24px; }
+.chip .n { font-family: 'JetBrains Mono', monospace; font-size: 40px; font-weight: 700; color: var(--brand); }
+.chip .p { font-family: 'JetBrains Mono', monospace; font-size: 30px; font-weight: 700; margin-left: 14px; }
+.chip small { display: block; font-size: 25px; color: var(--muted); font-weight: 700; margin-top: 6px; }
+</style></head><body>
+<div id="art">
+  <h1>Как читать права в выводе ls -l</h1>
+  <div class="lsline"><span class="pr">$</span> ls -l backup.sh<br><span class="t">-</span><span class="u">rwx</span><span class="g">r-x</span><span class="o">---</span> 1 <span class="u">ivan</span> <span class="g">buh</span> 512 Nov 22 backup.sh</div>
+
+  <div class="grid">
+    <div class="col t">
+      <div class="lbl">Тип<small>- файл<br>d каталог</small></div>
+      <div class="chars"><div class="ch">-</div></div>
+    </div>
+    <div class="col u">
+      <div class="lbl">Владелец · u<small>пользователь ivan</small></div>
+      <div class="chars"><div class="ch">r</div><div class="ch">w</div><div class="ch">x</div></div>
+      <div class="w"><span class="on">4</span><span class="on">2</span><span class="on">1</span></div>
+      <div class="sum">4+2+1 =<b>7</b></div>
+    </div>
+    <div class="col g">
+      <div class="lbl">Группа · g<small>группа buh</small></div>
+      <div class="chars"><div class="ch">r</div><div class="ch off">-</div><div class="ch">x</div></div>
+      <div class="w"><span class="on">4</span><span>0</span><span class="on">1</span></div>
+      <div class="sum">4+0+1 =<b>5</b></div>
+    </div>
+    <div class="col o">
+      <div class="lbl">Остальные · o<small>все прочие</small></div>
+      <div class="chars"><div class="ch off">-</div><div class="ch off">-</div><div class="ch off">-</div></div>
+      <div class="w"><span>0</span><span>0</span><span>0</span></div>
+      <div class="sum">0+0+0 =<b>0</b></div>
+    </div>
+  </div>
+
+  <div class="result">
+    <div class="cmd">chmod <em>750</em> backup.sh</div>
+    <div class="txt">Вес прав: r = 4, w = 2, x = 1.<br>Сумма в каждой тройке — одна цифра.</div>
+  </div>
+
+  <div class="chips">
+    <div class="chip"><span class="n">755</span><span class="p">rwxr-xr-x</span><small>скрипты и каталоги</small></div>
+    <div class="chip"><span class="n">644</span><span class="p">rw-r--r--</span><small>обычные файлы</small></div>
+    <div class="chip"><span class="n">600</span><span class="p">rw-------</span><small>секреты, приватные ключи</small></div>
+  </div>
+</div>
+</body></html>

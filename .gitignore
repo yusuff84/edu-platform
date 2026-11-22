@@ -38,3 +38,4 @@ __pycache__/
 scripts/course-content/video/.voices/
 scripts/course-content/**/videos/*.mp4
 scripts/course-content/**/videos/*.poster.png
+scripts/course-content/**/media/.uploaded.*.json

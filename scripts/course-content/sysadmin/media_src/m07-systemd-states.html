@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<style>
+/* Шаблон схемы для урока. Рисуем в #art (ширина 1600, высота — по содержимому, обычно 700–900).
+   Светлый фон (урок светлый), акценты сайта. Текст на схеме — крупный: её смотрят и с телефона. */
+:root { --ink:#141414; --muted:#6f6e6a; --line:#e3dfd5; --brand:#4635ff; --brand-soft:#eeedff; --sun:#fec466; --sun-soft:#fff3d4;
+        --ok:#1f9d55; --ok-soft:#e4f5ea; --danger:#d33a2c; --danger-soft:#fdecea; --blue:#2f5bd9; --blue-soft:#e8efff; }
+* { box-sizing: border-box; }
+body { margin: 0; background: #fff; font-family: Manrope, Arial, sans-serif; color: var(--ink); }
+#art { width: 1600px; padding: 56px 64px; background: #fbfaf7; }
+h1 { margin: 0 0 36px; font-size: 44px; font-weight: 800; }
+.box { border: 3px solid var(--line); border-radius: 24px; background: #fff; padding: 24px 28px; font-size: 30px; font-weight: 700; }
+.box small { display: block; font-size: 24px; color: var(--muted); font-weight: 600; margin-top: 6px; }
+.brand { border-color: var(--brand); background: var(--brand-soft); }
+.sun { border-color: #f2b33d; background: var(--sun-soft); }
+.ok { border-color: var(--ok); background: var(--ok-soft); }
+.danger { border-color: var(--danger); background: var(--danger-soft); }
+.mono { font-family: 'JetBrains Mono', monospace; }
+.row { display: flex; gap: 28px; align-items: center; }
+.arrow { font-size: 44px; color: var(--brand); font-weight: 800; }
+.caption { margin-top: 28px; font-size: 26px; color: var(--muted); font-weight: 600; }
+.m { display: grid; grid-template-columns: 300px 1fr 1fr; gap: 20px; }
+.hd { font-size: 30px; font-weight: 800; text-align: center; padding: 16px; border-radius: 20px; background: #ecebe6; }
+.hd small, .side small { display: block; font-size: 24px; font-weight: 600; color: var(--muted); margin-top: 4px; }
+.hd code, .side code, .cell code, .bot code { font-family: 'JetBrains Mono', monospace; font-weight: 700; font-size: 26px; background: #1b1d3a; color: #e9ecff; padding: 3px 10px; border-radius: 8px; }
+.side { font-size: 30px; font-weight: 800; padding: 20px; border-radius: 20px; background: #ecebe6; display: flex; flex-direction: column; justify-content: center; }
+.cell { border: 3px solid var(--line); border-radius: 22px; background: #fff; padding: 22px 26px; font-size: 28px; font-weight: 700; line-height: 1.35; }
+.cell small { display: block; font-size: 24px; color: var(--muted); font-weight: 600; margin-top: 8px; }
+.cell .tag { display: inline-block; font-size: 22px; font-weight: 800; border-radius: 999px; padding: 4px 14px; margin-bottom: 10px; color: #fff; }
+.cell.ok { border-color: var(--ok); background: var(--ok-soft); } .cell.ok .tag { background: var(--ok); }
+.cell.warn { border-color: #f2b33d; background: var(--sun-soft); } .cell.warn .tag { background: #c98a12; }
+.cell.bad { border-color: var(--danger); background: var(--danger-soft); } .cell.bad .tag { background: var(--danger); }
+.cell.off .tag { background: #8a877f; }
+.bot code { white-space: nowrap; flex: none; font-size: 28px !important; }
+.bot { margin-top: 28px; display: flex; gap: 20px; align-items: center; font-size: 28px; font-weight: 700; border: 3px solid var(--brand); background: var(--brand-soft); border-radius: 22px; padding: 20px 28px; }
+</style></head><body>
+<div id="art">
+  <h1>Служба: «работает сейчас» и «запускается при загрузке»</h1>
+  <div class="m">
+    <div></div>
+    <div class="hd">Работает сейчас<small><code>start</code> · active (running)</small></div>
+    <div class="hd">Остановлена<small><code>stop</code> · inactive / failed</small></div>
+    <div class="side">Автозагрузка включена<small><code>enable</code> · enabled</small></div>
+    <div class="cell ok"><span class="tag">норма для сервера</span><br>Работает и поднимется после перезагрузки</div>
+    <div class="cell warn"><span class="tag">проверьте журнал</span><br>Не работает, но после перезагрузки попробует запуститься<small>если failed — смотрите journalctl -u</small></div>
+    <div class="side">Автозагрузка выключена<small><code>disable</code> · disabled</small></div>
+    <div class="cell bad"><span class="tag">ловушка</span><br>Работает до первой перезагрузки, потом сайт «пропадёт»</div>
+    <div class="cell off"><span class="tag">выключена</span><br>Служба не нужна — так и задумано</div>
+  </div>
+  <div class="bot"><code>sudo systemctl enable --now nginx</code> <span>— сразу в зелёную клетку: запустить и включить автозагрузку</span></div>
+</div>
+</body></html>

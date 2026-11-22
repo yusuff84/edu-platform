@@ -23,7 +23,8 @@ if (!existsSync(path.join(dist, 'entry.js')) || process.env.REBUILD) {
 let md = readFileSync(mdPath, 'utf8');
 // media/<файл> ищется в --media <каталог курса> или рядом с .md.
 const base = mediaDir ?? path.dirname(path.resolve(mdPath));
-md = md.replace(/\]\((media\/[^)\s]+)\)/g, (m, rel) => `](file://${path.join(base, rel).replace(/ /g, '%20')})`);
+// Абсолютный путь «/Users/…»: страница открыта по file://, а рендерер пропускает только http(s) и пути от «/».
+md = md.replace(/\]\((media\/[^)\s]+)\)/g, (m, rel) => `](${path.join(base, rel).replace(/ /g, '%20')})`);
 const html = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="file://${dist}/entry.css"></head><body style="background:#f4f3ef"><div id="root"></div>
@@ -37,6 +38,12 @@ for (const [tag, opts] of [['d', { viewport: { width: 1100, height: 900 } }], ['
   const errs = [];
   page.on('pageerror', (e) => errs.push(e.message));
   await page.goto('file://' + htmlPath, { waitUntil: 'networkidle' });
+  // Картинки на сайте грузятся лениво — для снимка и проверки загружаем все сразу.
+  await page.evaluate(async () => {
+    const imgs = [...document.images];
+    imgs.forEach((i) => { i.loading = 'eager'; });
+    await Promise.all(imgs.map((i) => (i.complete ? null : new Promise((r) => { i.onload = r; i.onerror = r; }))));
+  });
   await page.waitForTimeout(300);
   const info = await page.evaluate(() => ({
     h: document.documentElement.scrollWidth > document.documentElement.clientWidth,

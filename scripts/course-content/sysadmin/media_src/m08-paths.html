@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<style>
+:root { --ink:#141414; --muted:#6f6e6a; --line:#e3dfd5; --brand:#4635ff; --brand-soft:#eeedff; --sun:#fec466; --sun-soft:#fff3d4;
+        --ok:#1f9d55; --ok-soft:#e4f5ea; --danger:#d33a2c; --danger-soft:#fdecea; --blue:#2f5bd9; --blue-soft:#e8efff; }
+* { box-sizing: border-box; }
+body { margin: 0; background: #fff; font-family: Manrope, Arial, sans-serif; color: var(--ink); }
+#art { width: 1600px; padding: 56px 64px; background: #fbfaf7; }
+h1 { margin: 0 0 34px; font-size: 44px; font-weight: 800; }
+.mono { font-family: 'JetBrains Mono', monospace; }
+.wrap { display: grid; grid-template-columns: 630px 1fr; gap: 40px; align-items: start; }
+.tree { border: 3px solid var(--line); border-radius: 24px; background: #fff; padding: 22px 18px; }
+.here { font-size: 30px; font-weight: 800; margin-bottom: 20px; }
+.here code { font-family: 'JetBrains Mono', monospace; color: #fff; background: var(--brand); padding: 4px 14px; border-radius: 12px; }
+.r { display: grid; grid-template-columns: 250px 50px 1fr; align-items: center; gap: 8px; border: 3px solid var(--line); border-radius: 22px;
+      background: #fff; padding: 16px 20px; margin-bottom: 16px; }
+.r code { font-family: 'JetBrains Mono', monospace; font-size: 30px; font-weight: 700; background: #1b1d3a; color: #e9ecff; padding: 8px 16px; border-radius: 12px; justify-self: start; }
+.r .ar { font-size: 38px; font-weight: 800; color: var(--brand); text-align: center; }
+.r b { font-size: 30px; }
+.r small { display: block; font-size: 24px; color: var(--muted); font-weight: 700; margin-top: 2px; }
+.r.abs { border-color: #f2b33d; background: var(--sun-soft); }
+.r.rel { border-color: var(--ok); background: var(--ok-soft); }
+.r.up { border-color: var(--blue); background: var(--blue-soft); }
+.r.here { border-color: var(--brand); background: var(--brand-soft); font-size: inherit; margin-bottom: 0; }
+</style></head><body>
+<div id="art">
+  <h1>Пути: абсолютный и относительный</h1>
+  <div class="wrap">
+    <div class="tree"><svg width="590" height="792" viewBox="0 0 590 792"><path d="M42,68 V118.0 H116" fill="none" stroke="#c9c6bd" stroke-width="4"/><path d="M146,146 V196.0 H220" fill="none" stroke="#c9c6bd" stroke-width="4"/><path d="M42,68 V274.0 H116" fill="none" stroke="#c9c6bd" stroke-width="4"/><path d="M146,302 V352.0 H220" fill="none" stroke="#c9c6bd" stroke-width="4"/><path d="M250,380 V430.0 H324" fill="none" stroke="#c9c6bd" stroke-width="4"/><path d="M250,380 V508.0 H324" fill="none" stroke="#c9c6bd" stroke-width="4"/><path d="M42,68 V586.0 H116" fill="none" stroke="#c9c6bd" stroke-width="4"/><path d="M146,614 V664.0 H220" fill="none" stroke="#c9c6bd" stroke-width="4"/><path d="M250,692 V742.0 H324" fill="none" stroke="#c9c6bd" stroke-width="4"/><rect x="12" y="12" width="60" height="56" rx="14" fill="#141414" stroke="#141414" stroke-width="3"/><text x="42.0" y="50" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="30" font-weight="700" fill="#fff">/</text><text x="90" y="50" font-family="Manrope, Arial" font-size="26" font-weight="700" fill="#6f6e6a">корень</text><rect x="116" y="90" width="103" height="56" rx="14" fill="#fff" stroke="#e3dfd5" stroke-width="3"/><text x="167.5" y="128" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="30" font-weight="700" fill="#141414">etc</text><rect x="220" y="168" width="103" height="56" rx="14" fill="#fff" stroke="#e3dfd5" stroke-width="3"/><text x="271.5" y="206" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="30" font-weight="700" fill="#141414">ssh</text><rect x="116" y="246" width="124" height="56" rx="14" fill="#e8efff" stroke="#2f5bd9" stroke-width="3"/><text x="178.0" y="284" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="30" font-weight="700" fill="#141414">home</text><rect x="220" y="324" width="124" height="56" rx="14" fill="#4635ff" stroke="#4635ff" stroke-width="3"/><text x="282.0" y="362" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="30" font-weight="700" fill="#fff">ivan</text><text x="362" y="362" font-family="Manrope, Arial" font-size="28" font-weight="800" fill="#4635ff">← вы здесь · ~</text><rect x="324" y="402" width="124" height="56" rx="14" fill="#e4f5ea" stroke="#1f9d55" stroke-width="3"/><text x="386.0" y="440" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="30" font-weight="700" fill="#141414">docs</text><rect x="324" y="480" width="187" height="56" rx="14" fill="#fff" stroke="#e3dfd5" stroke-width="3"/><text x="417.5" y="518" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="30" font-weight="700" fill="#141414">reports</text><rect x="116" y="558" width="103" height="56" rx="14" fill="#fff" stroke="#e3dfd5" stroke-width="3"/><text x="167.5" y="596" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="30" font-weight="700" fill="#141414">var</text><rect x="220" y="636" width="103" height="56" rx="14" fill="#fff3d4" stroke="#f2b33d" stroke-width="3"/><text x="271.5" y="674" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="30" font-weight="700" fill="#141414">log</text><rect x="324" y="714" width="145" height="56" rx="14" fill="#fff" stroke="#e3dfd5" stroke-width="3"/><text x="396.5" y="752" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="30" font-weight="700" fill="#141414">nginx</text></svg></div>
+    <div>
+      <div class="here">Вы здесь: <code>/home/ivan</code></div>
+      <div class="r abs"><code>cd /var/log</code><span class="ar">→</span><div><b class="mono">/var/log</b><small>абсолютный: от корня, работает откуда угодно</small></div></div><div class="r rel"><code>cd docs</code><span class="ar">→</span><div><b class="mono">/home/ivan/docs</b><small>относительный: от текущего каталога</small></div></div><div class="r up"><code>cd ..</code><span class="ar">→</span><div><b class="mono">/home</b><small>.. — на уровень выше</small></div></div><div class="r "><code>cd ../../etc</code><span class="ar">→</span><div><b class="mono">/etc</b><small>два раза вверх, затем в etc</small></div></div><div class="r here"><code>cd ~</code><span class="ar">→</span><div><b class="mono">/home/ivan</b><small>~ — домашний каталог</small></div></div>
+    </div>
+  </div>
+</div>
+</body></html>

@@ -76,6 +76,8 @@ const RE_HR = /^\s*(-{3,}|\*{3,}|_{3,})\s*$/;
 const RE_TABLE_ROW = /^\s*\|.*\|\s*$/;
 const RE_TABLE_SEP = /^\s*\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)*\|?\s*$/;
 const RE_CALLOUT = /^\[!([A-Za-zА-Яа-яЁё]+)\]\s*(.*)$/;
+// Подписи-заглушки не показываем под рисунком.
+const GENERIC_ALT = /^(иллюстрация|изображение|картинка|рисунок|фото|скриншот|image|img|picture|photo|screenshot)?\s*\d*\.?$/i;
 const RE_FIGURE = /^!\[([^\]]*)\]\(([^\s)]+)\)$/;
 // Начало нового блока — чтобы абзац обрывался на списке/заголовке/цитате/коде/таблице.
 const RE_BLOCK_START = /^\s*([-*+]\s|\d+[.)]\s|>|#{1,6}\s|```|\|)/;
@@ -238,10 +240,14 @@ export function renderInline(text: string, keyBase: string): ReactNode[] {
         );
       }
       if (part.length > 4 && part.startsWith('==') && part.endsWith('==')) {
+        // Пробелы у краёв маркера оставляем снаружи подсветки.
+        const inner = part.slice(2, -2);
         return (
-          <mark key={key} className="md-mark">
-            {renderInline(part.slice(2, -2), key)}
-          </mark>
+          <span key={key}>
+            {/^\s/.test(inner) ? ' ' : ''}
+            <mark className="md-mark">{renderInline(inner.trim(), key)}</mark>
+            {/\s$/.test(inner) ? ' ' : ''}
+          </span>
         );
       }
       if (part.length > 6 && part.startsWith('***') && part.endsWith('***')) {
@@ -330,7 +336,7 @@ function Blocks({ source, keyBase }: { source: string; keyBase: string }): JSX.E
                       <tr key={j}>
                         {r.map((c, k) => (
                           <td key={k} style={{ textAlign: b.align[k] }} data-label={b.head[k]}>
-                            {renderInline(c, `${key}-${j}-${k}`)}
+                            <span className="md-cell">{renderInline(c, `${key}-${j}-${k}`)}</span>
                           </td>
                         ))}
                       </tr>
@@ -344,8 +350,11 @@ function Blocks({ source, keyBase }: { source: string; keyBase: string }): JSX.E
             if (!url) return <p key={key}>{b.alt}</p>;
             return (
               <figure key={key} className="md-figure">
-                <img src={url} alt={b.alt} loading="lazy" />
-                {b.alt && <figcaption>{b.alt}</figcaption>}
+                {/* По нажатию — картинка в полном размере (мелкие подписи схем на телефоне). */}
+                <a className="md-figure-link" href={url} target="_blank" rel="noopener noreferrer" aria-label={`Открыть в полном размере: ${b.alt || 'рисунок'}`}>
+                  <img src={url} alt={b.alt} loading="lazy" />
+                </a>
+                {b.alt && !GENERIC_ALT.test(b.alt.trim()) && <figcaption>{b.alt}</figcaption>}
               </figure>
             );
           }

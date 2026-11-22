@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<style>
+:root { --ink:#141414; --muted:#6f6e6a; --line:#e3dfd5; --brand:#4635ff; --brand-soft:#eeedff; --sun:#fec466; --sun-soft:#fff3d4;
+        --ok:#1f9d55; --ok-soft:#e4f5ea; --danger:#d33a2c; --danger-soft:#fdecea; --blue:#2f5bd9; --blue-soft:#e8efff; }
+* { box-sizing: border-box; }
+body { margin: 0; background: #fff; font-family: Manrope, Arial, sans-serif; color: var(--ink); }
+#art { width: 1600px; padding: 56px 64px; background: #fbfaf7; }
+h1 { margin: 0 0 34px; font-size: 44px; font-weight: 800; }
+.mono { font-family: 'JetBrains Mono', monospace; }
+.wrap { display: grid; grid-template-columns: 1fr 330px 1fr; gap: 20px; align-items: center; }
+.side { border: 3px solid var(--line); border-radius: 28px; background: #fff; padding: 26px 28px; }
+.side h2 { margin: 0 0 6px; font-size: 34px; font-weight: 800; }
+.side .dir { font-family: 'JetBrains Mono', monospace; font-size: 26px; color: var(--muted); font-weight: 700; margin-bottom: 18px; }
+.f { border-radius: 20px; border: 3px solid var(--line); padding: 16px 20px; margin-top: 14px; display: flex; gap: 18px; align-items: center; }
+.f .ic { flex: none; width: 64px; height: 64px; border-radius: 18px; display: grid; place-items: center; font-size: 36px; }
+.f .n { font-family: 'JetBrains Mono', monospace; font-size: 29px; font-weight: 700; }
+.f small { display: block; font-family: Manrope, Arial, sans-serif; font-size: 24px; color: var(--muted); font-weight: 700; margin-top: 2px; }
+.f.priv { border-color: var(--danger); background: var(--danger-soft); } .f.priv .ic { background: var(--danger); color: #fff; }
+.f.pub { border-color: var(--ok); background: var(--ok-soft); } .f.pub .ic { background: var(--ok); color: #fff; }
+.f.kh .ic { background: #f3f1ec; }
+.mid { display: grid; gap: 34px; }
+.link { text-align: center; }
+.link .cmd { display: inline-block; font-family: 'JetBrains Mono', monospace; font-size: 28px; font-weight: 700; background: #1b1d3a; color: #e9ecff;
+             padding: 8px 16px; border-radius: 12px; }
+.link .arr { font-size: 84px; line-height: 1; font-weight: 800; color: var(--ok); margin: 6px 0 2px; }
+.link.login .arr { color: var(--brand); }
+.link small { display: block; font-size: 24px; color: var(--muted); font-weight: 700; }
+.server { border-color: var(--brand); background: var(--brand-soft); }
+.note { margin-top: 34px; display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+.note div { border-radius: 22px; padding: 20px 26px; font-size: 27px; font-weight: 700; line-height: 1.4; background: #fff; border: 3px solid var(--line); }
+.note b { color: var(--brand); }
+</style></head><body>
+<div id="art">
+  <h1>Вход по SSH-ключу: что где лежит</h1>
+  <div class="wrap">
+    <div class="side">
+      <h2>Ваш компьютер</h2>
+      <div class="dir">~/.ssh/</div>
+      <div class="f priv"><div class="ic">🔑</div><div><div class="n">id_ed25519</div><small>приватный — только у вас, никому</small></div></div>
+      <div class="f pub"><div class="ic">🔒</div><div><div class="n">id_ed25519.pub</div><small>публичный — можно раздавать</small></div></div>
+      <div class="f kh"><div class="ic">📋</div><div><div class="n">known_hosts</div><small>отпечатки знакомых серверов</small></div></div>
+    </div>
+    <div class="mid">
+      <div class="link"><span class="cmd">ssh-copy-id</span><div class="arr">→</div><small>копия публичного<br>ключа на сервер</small></div>
+      <div class="link login"><span class="cmd">ssh ivan@…</span><div class="arr">→</div><small>вход без пароля<br>от сервера</small></div>
+    </div>
+    <div class="side server">
+      <h2>Сервер</h2>
+      <div class="dir">/home/ivan/.ssh/</div>
+      <div class="f pub"><div class="ic">🔒</div><div><div class="n">authorized_keys</div><small>публичные ключи тех, кого пускать</small></div></div>
+      <div class="f" style="border-style:dashed"><div class="ic" style="background:#fff">✕</div><div><div class="n" style="font-family:Manrope,Arial;font-size:27px">Приватного ключа нет</div><small>он никогда не покидает ваш компьютер</small></div></div>
+    </div>
+  </div>
+  <div class="note">
+    <div><b>Публичный ключ — как замок</b>, который вы вешаете на сервер. Его не страшно показать кому угодно.</div>
+    <div><b>Приватный — единственный ключ к этому замку.</b> Права 600 и парольная фраза защищают его от кражи.</div>
+  </div>
+</div>
+</body></html>

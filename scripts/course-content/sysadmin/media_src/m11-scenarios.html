@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<style>
+:root { --ink:#141414; --muted:#6f6e6a; --line:#e3dfd5; --brand:#4635ff; --brand-soft:#eeedff; --sun:#fec466; --sun-soft:#fff3d4;
+        --ok:#1f9d55; --ok-soft:#e4f5ea; --danger:#d33a2c; --danger-soft:#fdecea; --blue:#2f5bd9; --blue-soft:#e8efff; }
+* { box-sizing: border-box; }
+body { margin: 0; background: #fff; font-family: Manrope, Arial, sans-serif; color: var(--ink); }
+#art { width: 1600px; padding: 56px 64px; background: #fbfaf7; }
+h1 { margin: 0 0 30px; font-size: 48px; font-weight: 800; }
+.g { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; }
+.card { background: #fff; border: 3px solid var(--line); border-radius: 26px; overflow: hidden; }
+.top { padding: 18px 28px; font-size: 34px; font-weight: 800; color: #fff; display: flex; align-items: center; gap: 16px; }
+.top i { font-style: normal; width: 50px; height: 50px; border-radius: 50%; background: rgba(255,255,255,.25); display: grid; place-items: center; font-size: 26px; }
+.r { display: grid; grid-template-columns: 170px 1fr; gap: 14px; padding: 14px 28px; border-top: 2px solid var(--line); font-size: 27px; font-weight: 700; line-height: 1.3; }
+.r span { color: var(--muted); font-weight: 800; font-size: 24px; padding-top: 3px; }
+.r code { font-family: 'JetBrains Mono', monospace; font-size: 24px; background: var(--brand-soft); color: var(--brand); border-radius: 8px; padding: 1px 8px; }
+</style></head><body>
+<div id="art">
+  <h1>Четыре частые поломки: симптом → причина → что делать</h1>
+  <div class="g">
+    <div class="card"><div class="top" style="background:#d33a2c"><i>1</i>Адрес 169.254.x.x</div>
+      <div class="r"><span>Симптом</span>нет сети, шлюз пустой</div>
+      <div class="r"><span>Причина</span>не ответил DHCP: нет линка, пул закончился, не тот VLAN</div>
+      <div class="r"><span>Действие</span><div><code>ipconfig /renew</code>, проверить соседей</div></div></div>
+    <div class="card"><div class="top" style="background:#e09a1a"><i>2</i>Конфликт IP</div>
+      <div class="r"><span>Симптом</span>сеть то есть, то нет; «пропадает» принтер</div>
+      <div class="r"><span>Причина</span>два устройства с одним адресом</div>
+      <div class="r"><span>Действие</span><div><code>arp -a</code> → чужой MAC → найти устройство</div></div></div>
+    <div class="card"><div class="top" style="background:#4635ff"><i>3</i>Не работают имена</div>
+      <div class="r"><span>Симптом</span>IP пингуется, сайты «не найдены»</div>
+      <div class="r"><span>Причина</span>DNS‑сервер не отвечает или указан неверно</div>
+      <div class="r"><span>Действие</span><div><code>nslookup ya.ru 77.88.8.8</code> — сравнить</div></div></div>
+    <div class="card"><div class="top" style="background:#1f9d55"><i>4</i>Медленная сеть</div>
+      <div class="r"><span>Симптом</span>«всё тормозит» — уточните, что именно</div>
+      <div class="r"><span>Причина</span>100 Мбит/с, слабый Wi‑Fi, загрузка канала, потери</div>
+      <div class="r"><span>Действие</span>сравнить кабель и Wi‑Fi, замеры в разное время</div></div>
+  </div>
+</div>
+</body></html>

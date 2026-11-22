@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<style>
+:root { --ink:#141414; --muted:#6f6e6a; --line:#e3dfd5; --brand:#4635ff; --brand-soft:#eeedff; --sun:#fec466; --sun-soft:#fff3d4;
+        --ok:#1f9d55; --ok-soft:#e4f5ea; --danger:#d33a2c; --danger-soft:#fdecea; --blue:#2f5bd9; --blue-soft:#e8efff; }
+* { box-sizing: border-box; }
+body { margin: 0; background: #fff; font-family: Manrope, Arial, sans-serif; color: var(--ink); }
+#art { width: 1600px; padding: 56px 64px; background: #fbfaf7; }
+h1 { margin: 0 0 36px; font-size: 44px; font-weight: 800; }
+h1 .mono { color: var(--brand); }
+.mono { font-family: 'JetBrains Mono', monospace; }
+.grid { display: grid; grid-template-columns: 170px repeat(4, 1fr); gap: 14px 16px; align-items: stretch; }
+.lbl { font-size: 26px; font-weight: 800; color: var(--muted); display: flex; align-items: center; }
+.oct { border: 3px solid var(--line); border-radius: 20px; background: #fff; text-align: center; padding: 14px 8px; }
+.oct .d { font-family: 'JetBrains Mono', monospace; font-size: 46px; font-weight: 700; line-height: 1.1; }
+.oct .b { font-family: 'JetBrains Mono', monospace; font-size: 30px; font-weight: 500; color: #4a4945; margin-top: 6px; letter-spacing: .04em; }
+.net { border-color: var(--brand); background: var(--brand-soft); }
+.net .d { color: var(--brand); }
+.host { border-color: #f2b33d; background: var(--sun-soft); }
+.host .d { color: #9a5b00; }
+.ones .b { color: var(--brand); font-weight: 700; }
+.zeros .b { color: #9a5b00; font-weight: 700; }
+.brace { grid-column: 2 / span 3; border-top: 5px solid var(--brand); margin-top: 6px; padding-top: 12px; text-align: center; font-size: 30px; font-weight: 800; color: var(--brand); }
+.brace2 { grid-column: 5; border-top: 5px solid #f2b33d; margin-top: 6px; padding-top: 12px; text-align: center; font-size: 30px; font-weight: 800; color: #9a5b00; }
+.res { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; margin-top: 40px; }
+.box { border: 3px solid var(--line); border-radius: 24px; background: #fff; padding: 22px 26px; font-size: 26px; font-weight: 700; color: var(--muted); }
+.box .v { display: block; font-family: 'JetBrains Mono', monospace; font-size: 34px; color: var(--ink); margin-top: 8px; }
+.box small { display: block; font-size: 23px; font-weight: 600; margin-top: 6px; }
+.ok { border-color: var(--ok); background: var(--ok-soft); }
+</style></head><body>
+<div id="art">
+  <h1>Адрес <span class="mono">192.168.1.37/24</span>: где сеть, а где хост</h1>
+  <div class="grid">
+    <div class="lbl">Адрес</div>
+    <div class="oct net"><div class="d">192</div><div class="b">11000000</div></div>
+    <div class="oct net"><div class="d">168</div><div class="b">10101000</div></div>
+    <div class="oct net"><div class="d">1</div><div class="b">00000001</div></div>
+    <div class="oct host"><div class="d">37</div><div class="b">00100101</div></div>
+
+    <div class="lbl">Маска</div>
+    <div class="oct ones"><div class="d">255</div><div class="b">11111111</div></div>
+    <div class="oct ones"><div class="d">255</div><div class="b">11111111</div></div>
+    <div class="oct ones"><div class="d">255</div><div class="b">11111111</div></div>
+    <div class="oct zeros"><div class="d">0</div><div class="b">00000000</div></div>
+
+    <div></div>
+    <div class="brace">24 единицы маски → часть сети (префикс /24)</div>
+    <div class="brace2">8 нулей → хост</div>
+  </div>
+  <div class="res">
+    <div class="box">Адрес сети<span class="v">192.168.1.0</span><small>все биты хоста = 0</small></div>
+    <div class="box ok">Адреса для устройств<span class="v">.1 … .254</span><small>254 хоста</small></div>
+    <div class="box">Широковещательный<span class="v">192.168.1.255</span><small>все биты хоста = 1</small></div>
+  </div>
+</div>
+</body></html>

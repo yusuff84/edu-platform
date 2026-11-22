@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<style>
+:root { --ink:#141414; --muted:#6f6e6a; --line:#e3dfd5; --brand:#4635ff; --brand-soft:#eeedff; --sun:#fec466; --sun-soft:#fff3d4;
+        --ok:#1f9d55; --ok-soft:#e4f5ea; --danger:#d33a2c; --danger-soft:#fdecea; --blue:#2f5bd9; --blue-soft:#e8efff; }
+* { box-sizing: border-box; }
+body { margin: 0; background: #fff; font-family: Manrope, Arial, sans-serif; color: var(--ink); }
+#art { width: 1600px; padding: 56px 64px; background: #fbfaf7; }
+h1 { margin: 0 0 28px; font-size: 44px; font-weight: 800; }
+h2 { margin: 52px 0 24px; font-size: 38px; font-weight: 800; }
+.mono { font-family: 'JetBrains Mono', monospace; }
+.cmdline { font-family: 'JetBrains Mono', monospace; font-size: 38px; font-weight: 700; background: #1b1d3a; color: #e9ecff;
+           border-radius: 20px; padding: 22px 30px; margin-bottom: 30px; }
+.cmdline .pr { color: #7ca0ff; } .cmdline .pipe { color: #fec466; }
+.stages { display: flex; align-items: stretch; gap: 10px; }
+.stage { flex: 1; border: 3px solid var(--line); border-radius: 24px; background: #fff; padding: 20px 22px; }
+.stage.last { border-color: var(--ok); background: var(--ok-soft); }
+.stage .name { font-family: 'JetBrains Mono', monospace; font-size: 32px; font-weight: 700; color: var(--brand); }
+.stage .what { font-size: 24px; font-weight: 700; color: var(--muted); margin: 4px 0 14px; }
+.stage pre { margin: 0; font-family: 'JetBrains Mono', monospace; font-size: 27px; line-height: 1.45; font-weight: 500;
+             background: #f6f4ef; border-radius: 14px; padding: 12px 16px; }
+.pipe-ar { display: flex; flex-direction: column; align-items: center; justify-content: center; width: 52px; flex: none; }
+.pipe-ar b { font-family: 'JetBrains Mono', monospace; font-size: 46px; color: #e0a020; line-height: 1; }
+.pipe-ar i { font-style: normal; font-size: 40px; font-weight: 800; color: #e0a020; line-height: 1; }
+.streams { display: grid; grid-template-columns: 300px 60px 300px 60px 1fr; align-items: center; row-gap: 22px; }
+.box { border: 3px solid var(--line); border-radius: 24px; background: #fff; padding: 20px 24px; font-size: 30px; font-weight: 800; }
+.box small { display: block; font-size: 24px; color: var(--muted); font-weight: 700; margin-top: 4px; }
+.box.cmd { border-color: var(--brand); background: var(--brand-soft); text-align: center; grid-row: 1 / span 2; grid-column: 3; }
+.box.in { grid-row: 1 / span 2; grid-column: 1; }
+.ar { font-size: 44px; color: var(--brand); font-weight: 800; text-align: center; }
+.ar.mid { grid-row: 1 / span 2; grid-column: 2; }
+.out { grid-column: 5; border-radius: 24px; border: 3px solid var(--ok); background: var(--ok-soft); padding: 18px 24px; }
+.err { grid-column: 5; border-radius: 24px; border: 3px solid var(--danger); background: var(--danger-soft); padding: 18px 24px; }
+.out .t, .err .t { font-size: 30px; font-weight: 800; }
+.opts { display: flex; flex-wrap: wrap; gap: 10px 14px; margin-top: 10px; }
+.opt { font-size: 24px; font-weight: 700; background: #fff; border-radius: 12px; padding: 6px 14px; border: 2px solid rgba(0,0,0,.08); }
+.opt code { font-family: 'JetBrains Mono', monospace; font-weight: 700; font-size: 26px; color: var(--brand); }
+.opt.bad code { color: var(--danger); }
+</style></head><body>
+<div id="art">
+  <h1>Конвейер: вывод одной команды — вход следующей</h1>
+  <div class="cmdline"><span class="pr">$</span> cat logins.txt <span class="pipe">|</span> grep fail <span class="pipe">|</span> sort <span class="pipe">|</span> uniq -c</div>
+
+  <div class="stages">
+    <div class="stage"><div class="name">cat</div><div class="what">выводит файл</div>
+      <pre>olga ok
+ivan fail
+anna fail
+ivan fail
+olga ok</pre></div>
+    <div class="pipe-ar"><b>|</b><i>→</i></div>
+    <div class="stage"><div class="name">grep fail</div><div class="what">строки с «fail»</div>
+      <pre>ivan fail
+anna fail
+ivan fail</pre></div>
+    <div class="pipe-ar"><b>|</b><i>→</i></div>
+    <div class="stage"><div class="name">sort</div><div class="what">сортирует</div>
+      <pre>anna fail
+ivan fail
+ivan fail</pre></div>
+    <div class="pipe-ar"><b>|</b><i>→</i></div>
+    <div class="stage last"><div class="name">uniq -c</div><div class="what">считает повторы</div>
+      <pre>1 anna fail
+2 ivan fail</pre></div>
+  </div>
+
+  <h2>Потоки и перенаправление</h2>
+  <div class="streams">
+    <div class="box in">Ввод · 0<small>stdin, клавиатура</small></div>
+    <div class="ar mid">→</div>
+    <div class="box cmd">Команда<small>например, find</small></div>
+    <div class="ar">→</div>
+    <div class="out"><div class="t">Вывод · 1 (stdout) → экран</div>
+      <div class="opts"><span class="opt bad"><code>&gt; файл</code> перезаписать</span><span class="opt"><code>&gt;&gt; файл</code> дописать</span><span class="opt"><code>|</code> в другую команду</span></div></div>
+    <div class="ar">→</div>
+    <div class="err"><div class="t">Ошибки · 2 (stderr) → экран</div>
+      <div class="opts"><span class="opt"><code>2&gt; errors.txt</code> в файл</span><span class="opt"><code>2&gt;/dev/null</code> выбросить</span></div></div>
+  </div>
+</div>
+</body></html>
