@@ -165,7 +165,7 @@
 
 .md-pre code,
 .code-template code {
-  font-family: ui-monospace, 'Cascadia Code', Consolas, monospace;
+  font-family: ui-monospace, 'SF Mono', SFMono-Regular, Menlo, 'Cascadia Code', Consolas, 'Roboto Mono', 'DejaVu Sans Mono', 'Liberation Mono', monospace;
   font-size: 0.9em;
   white-space: pre;
 }
@@ -212,7 +212,7 @@
   width: 100%;
   max-width: 100%;
   box-sizing: border-box;
-  font-family: ui-monospace, 'Cascadia Code', Consolas, monospace;
+  font-family: ui-monospace, 'SF Mono', SFMono-Regular, Menlo, 'Cascadia Code', Consolas, 'Roboto Mono', 'DejaVu Sans Mono', 'Liberation Mono', monospace;
   font-size: 0.9em;
   line-height: 1.4;
   tab-size: 4;

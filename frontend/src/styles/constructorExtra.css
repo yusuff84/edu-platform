@@ -252,7 +252,7 @@
 }
 
 .ce-template code {
-  font-family: ui-monospace, 'Cascadia Code', Consolas, monospace;
+  font-family: ui-monospace, 'SF Mono', SFMono-Regular, Menlo, 'Cascadia Code', Consolas, 'Roboto Mono', 'DejaVu Sans Mono', 'Liberation Mono', monospace;
   font-size: 0.9em;
   white-space: pre;
 }
@@ -286,7 +286,7 @@
 }
 
 .ce-test-io {
-  font-family: ui-monospace, 'Cascadia Code', Consolas, monospace;
+  font-family: ui-monospace, 'SF Mono', SFMono-Regular, Menlo, 'Cascadia Code', Consolas, 'Roboto Mono', 'DejaVu Sans Mono', 'Liberation Mono', monospace;
   white-space: pre-wrap;
 }
 

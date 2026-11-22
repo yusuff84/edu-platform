@@ -3,7 +3,7 @@
 """Загружает курс на платформу через MCP-сервер (как это делает нейросеть).
 
   SKX_MCP_URL=https://skillex.space/api/v1/mcp SKX_MCP_TOKEN=skx_... \
-    python3 load_course_via_mcp.py sysadmin [--publish]
+    python3 load_course_via_mcp.py sysadmin [--publish | --sync]
 
 Источник — пакет scripts/course-content/<name>/: __init__.py c COURSE
 ({title, description, category, price_rub, slug}) и part*.py с MODULES
@@ -57,6 +57,32 @@ def shuffle(questions, salt):
     return out
 
 
+def sync(existing, c, modules):
+    """--sync: обновляет тексты уроков уже загруженного курса (сопоставление по названию урока).
+    Структуру и тесты не трогает — только body текстовых уроков, которые изменились."""
+    items = existing.get('items', existing) if isinstance(existing, dict) else existing
+    match = [x for x in items if x.get('slug') == c.get('slug')]
+    if not match:
+        raise SystemExit(f'Курс со slug {c.get("slug")} не найден — сначала загрузите его без --sync')
+    cid = match[0]['id']
+    src = {l['title']: l['body'] for m in modules for l in m['lessons'] if l['kind'] != 'quiz'}
+    cur = tool('get_course', course_id=cid)
+    changed = [(l, src[l['title']]) for m in cur['modules'] for l in m['lessons']
+               if l['title'] in src and (l.get('bodyMd') or '').strip() != src[l['title']].strip()]
+    if not changed:
+        return print('изменений нет')
+    # Контент правится только в черновике: снимаем с публикации на время правки.
+    was_published = cur['course']['status'] == 'published'
+    if was_published:
+        tool('unpublish_course', course_id=cid)
+    for l, body in changed:
+        tool('update_lesson', course_id=cid, lesson_id=l['id'], body_md=body)
+        print(f'  обновлён: {l["title"]}')
+    if was_published:
+        tool('publish_course', course_id=cid)
+    print(f'обновлено уроков: {len(changed)}')
+
+
 def main():
     name = sys.argv[1]
     publish = '--publish' in sys.argv
@@ -69,8 +95,10 @@ def main():
 
     rpc('initialize', {'protocolVersion': '2025-06-18', 'capabilities': {}, 'clientInfo': {'name': 'skillex-course-loader'}})
     existing = tool('list_courses', query=c['title'])
+    if '--sync' in sys.argv:
+        return sync(existing, c, modules)
     if c.get('slug') and c['slug'] in json.dumps(existing, ensure_ascii=False):
-        raise SystemExit(f'Курс со slug {c["slug"]} уже существует — загрузка остановлена')
+        raise SystemExit(f'Курс со slug {c["slug"]} уже существует — загрузка остановлена (для правки текстов: --sync)')
 
     course = tool('create_course', title=c['title'], description=c['description'],
                   price_rub=c.get('price_rub', 0), category=c.get('category', 'other'), slug=c.get('slug', ''))

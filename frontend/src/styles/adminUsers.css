@@ -306,7 +306,7 @@ main.au-admin {
 }
 
 .au-details-mono {
-  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-family: ui-monospace, 'SF Mono', SFMono-Regular, Menlo, 'Cascadia Code', Consolas, 'Roboto Mono', 'DejaVu Sans Mono', 'Liberation Mono', monospace;
   font-size: 0.85rem;
 }
 

@@ -188,7 +188,7 @@ main.admin {
 }
 
 .admin-table code {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-family: ui-monospace, 'SF Mono', SFMono-Regular, Menlo, 'Cascadia Code', Consolas, 'Roboto Mono', 'DejaVu Sans Mono', 'Liberation Mono', monospace;
   font-size: 0.85rem;
 }
 
@@ -392,7 +392,7 @@ main.admin {
   border: 1px dashed #999;
   border-radius: 6px;
   word-break: break-all;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-family: ui-monospace, 'SF Mono', SFMono-Regular, Menlo, 'Cascadia Code', Consolas, 'Roboto Mono', 'DejaVu Sans Mono', 'Liberation Mono', monospace;
   font-size: 0.9rem;
 }
 
