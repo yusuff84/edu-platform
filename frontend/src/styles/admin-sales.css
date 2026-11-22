@@ -1,0 +1,654 @@
+/* Админка — «Продажи и доступы»: платежи, промокоды, доступы к курсам, сертификаты.
+   Префикс asl-. Базовые элементы — из adminShell.css (ax-). */
+
+/* ---------- общие ---------- */
+
+/* Модалки и шторки рендерятся порталом вне .ax-shell, где объявлены токены ax-:
+   дублируем их для своих блоков, чтобы рамки и акценты не пропадали. */
+.asl-picker,
+.asl-drawer-section,
+.asl-result,
+.asl-preview,
+.asl-inline-input,
+.asl-timeline {
+  --ax-line: #e9e6df;
+  --ax-hover: #f3f1ec;
+  --ax-accent: #4635ff;
+  --ax-accent-soft: #eeedff;
+}
+
+.asl-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.asl-person {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  color: inherit;
+  text-decoration: none;
+}
+
+.asl-person:hover strong {
+  color: var(--ax-accent, #4635ff);
+}
+
+.asl-person .ax-person-text strong {
+  font-size: 14px;
+}
+
+.asl-course-link {
+  color: inherit;
+  text-decoration: none;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  line-height: 1.35;
+}
+
+a.asl-course-link:hover {
+  color: var(--ax-accent, #4635ff);
+  text-decoration: underline;
+}
+
+.asl-nowrap {
+  white-space: nowrap;
+}
+
+.asl-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.asl-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 0 6px 0 12px;
+  border-radius: 999px;
+  background: var(--ax-accent-soft, #eeedff);
+  color: #3a2bd6;
+  font-size: 13.5px;
+  font-weight: 700;
+  max-width: 100%;
+}
+
+.asl-chip span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.asl-chip button {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  flex: none;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.asl-chip button:hover {
+  background: rgba(70, 53, 255, 0.12);
+}
+
+.asl-toolbar-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px 20px;
+  border-bottom: 1px solid var(--ax-line);
+}
+
+.asl-toolbar-stack > .ax-toolbar {
+  padding: 0;
+  border: 0;
+}
+
+.asl-toolbar-stack > .ax-seg {
+  align-self: flex-start;
+}
+
+.ax-table .asl-course-link {
+  min-width: 150px;
+}
+
+.ax-table .asl-person .ax-person-text {
+  max-width: 200px;
+}
+
+.asl-amount {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 3px;
+}
+
+.asl-code--sm {
+  font-size: 11.5px;
+  padding: 1px 6px;
+}
+
+.asl-stack .ax-badge {
+  align-self: flex-start;
+}
+
+.asl-btn-icon {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.asl-actions-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.asl-actions-row .btn {
+  min-height: 40px;
+  border-radius: 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.asl-section-title {
+  margin: 0 0 10px;
+  color: var(--faint, #8b8880);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.asl-drawer-section + .asl-drawer-section {
+  margin-top: 22px;
+  padding-top: 18px;
+  border-top: 1px solid var(--ax-line, #e9e6df);
+}
+
+.asl-toolbar-end {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  flex: 1;
+}
+
+/* ---------- период (платежи) ---------- */
+
+.asl-period {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.asl-period-fields {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.asl-period input[type='date'] {
+  min-height: 40px;
+  padding: 0 10px;
+  border: 1px solid var(--ax-line);
+  border-radius: 12px;
+  background: #fff;
+  color: var(--fg);
+  font: inherit;
+  font-size: 14px;
+  min-width: 0;
+}
+
+.asl-period input[type='date']:focus {
+  outline: 0;
+  border-color: var(--ax-accent);
+  box-shadow: 0 0 0 3px rgba(70, 53, 255, 0.12);
+}
+
+.asl-period-dash {
+  color: var(--muted);
+}
+
+.asl-quick {
+  display: inline-flex;
+  gap: 4px;
+}
+
+.asl-quick button {
+  min-height: 40px;
+  padding: 0 12px;
+  border: 1px solid var(--ax-line);
+  border-radius: 12px;
+  background: #fff;
+  color: var(--muted);
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.asl-quick button:hover {
+  color: var(--fg);
+}
+
+.asl-quick button.is-active {
+  border-color: var(--ax-accent);
+  background: var(--ax-accent-soft, #eeedff);
+  color: #3a2bd6;
+}
+
+/* ---------- деньги ---------- */
+
+.asl-money {
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.asl-old-price {
+  color: var(--faint, #8b8880);
+  text-decoration: line-through;
+  font-size: 12.5px;
+  white-space: nowrap;
+}
+
+.asl-promo {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+}
+
+.asl-foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+  width: 100%;
+}
+
+.asl-foot .btn {
+  min-height: 42px;
+  border-radius: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.asl-code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  padding: 2px 8px;
+  border-radius: 8px;
+  background: #f3f1ec;
+  color: var(--fg);
+  white-space: nowrap;
+}
+
+.asl-code-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.asl-code-cell .ax-icon-btn {
+  width: 32px;
+  height: 32px;
+}
+
+/* ---------- прогресс ---------- */
+
+.asl-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 120px;
+  max-width: 220px;
+}
+
+.asl-progress-bar {
+  position: relative;
+  height: 7px;
+  border-radius: 999px;
+  background: #efede7;
+  overflow: hidden;
+}
+
+.asl-progress-bar > span {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-radius: inherit;
+  background: var(--ax-accent, #4635ff);
+}
+
+.asl-progress-bar.is-done > span {
+  background: var(--ok, #1f9d55);
+}
+
+.asl-progress-bar.is-full > span {
+  background: #d98a00;
+}
+
+.asl-progress-meta {
+  color: var(--muted);
+  font-size: 12.5px;
+  white-space: nowrap;
+}
+
+/* ---------- история платежа ---------- */
+
+.asl-timeline {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.asl-timeline li {
+  position: relative;
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.asl-timeline-dot {
+  flex: none;
+  width: 12px;
+  height: 12px;
+  margin-top: 4px;
+  border-radius: 50%;
+  background: var(--ax-line, #e9e6df);
+  box-shadow: 0 0 0 3px #fff;
+}
+
+.asl-timeline-dot.is-ok { background: var(--ok, #1f9d55); }
+.asl-timeline-dot.is-warn { background: #d98a00; }
+.asl-timeline-dot.is-danger { background: var(--danger, #d0392b); }
+.asl-timeline-dot.is-brand { background: var(--ax-accent, #4635ff); }
+
+.asl-timeline strong {
+  display: block;
+  font-size: 14px;
+}
+
+.asl-timeline small {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.asl-id {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.asl-id code {
+  font-size: 12.5px;
+  overflow-wrap: anywhere;
+  word-break: break-all;
+}
+
+.asl-drawer-head-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* ---------- выбор курса ---------- */
+
+.asl-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.asl-picker-label {
+  font-size: 13.5px;
+  font-weight: 700;
+}
+
+.asl-picker .ax-search {
+  max-width: none;
+  flex: none;
+}
+
+.asl-picker-list {
+  max-height: 232px;
+  overflow-y: auto;
+  border: 1px solid var(--ax-line);
+  border-radius: 12px;
+  background: #fff;
+  overscroll-behavior: contain;
+}
+
+.asl-picker-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 48px;
+  padding: 8px 12px;
+  border: 0;
+  border-bottom: 1px solid #f1efea;
+  background: transparent;
+  color: var(--fg);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.asl-picker-option:last-child {
+  border-bottom: 0;
+}
+
+.asl-picker-option:hover {
+  background: #fcfbf8;
+}
+
+.asl-picker-option.is-selected {
+  background: var(--ax-accent-soft, #eeedff);
+}
+
+.asl-picker-option:focus-visible {
+  outline: 2px solid var(--ax-accent);
+  outline-offset: -2px;
+}
+
+.asl-picker-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+}
+
+.asl-picker-text strong {
+  font-size: 14px;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.asl-picker-text small {
+  color: var(--muted);
+  font-size: 12.5px;
+}
+
+.asl-picker-check {
+  flex: none;
+  color: var(--ax-accent, #4635ff);
+}
+
+.asl-picker-empty {
+  padding: 14px 12px;
+  color: var(--muted);
+  font-size: 13.5px;
+}
+
+.asl-result {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.asl-result-title {
+  font-weight: 800;
+}
+
+.asl-inline-input {
+  display: flex;
+  gap: 8px;
+}
+
+.asl-inline-input .ax-input {
+  flex: 1;
+  min-width: 0;
+}
+
+.asl-inline-input .btn {
+  flex: none;
+  min-height: 42px;
+  border-radius: 12px;
+}
+
+.asl-preview {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: #f7f6f2;
+  font-size: 14px;
+}
+
+.asl-preview .asl-old-price {
+  margin-right: 2px;
+}
+
+.asl-preview strong {
+  font-size: 16px;
+}
+
+/* ---------- телефон ---------- */
+
+@media (max-width: 720px) {
+  .asl-toolbar-stack {
+    padding: 12px 16px;
+  }
+
+  .asl-toolbar-stack > .ax-seg {
+    align-self: stretch;
+  }
+
+  .asl-toolbar-stack > .ax-seg button {
+    flex: 1 0 auto;
+    justify-content: center;
+    padding: 0 8px;
+    font-size: 13px;
+  }
+
+  .asl-desktop-only {
+    display: none;
+  }
+
+  .asl-foot .btn {
+    flex: 1 1 140px;
+  }
+
+  .asl-stats {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .asl-stats .ax-stat {
+    padding: 12px;
+  }
+
+  .asl-stats .ax-stat-icon,
+  .asl-stats .ax-stat-hint {
+    display: none;
+  }
+
+  .asl-stats .ax-stat-label {
+    font-size: 12.5px;
+  }
+
+  .asl-amount {
+    align-items: flex-start;
+  }
+
+  .asl-period {
+    width: 100%;
+  }
+
+  .asl-period-fields {
+    flex: 1 1 100%;
+  }
+
+  .asl-period-fields input[type='date'] {
+    flex: 1;
+    width: 0;
+  }
+
+  .asl-quick {
+    flex: 1 1 100%;
+  }
+
+  .asl-quick button {
+    flex: 1;
+  }
+
+  .asl-progress {
+    max-width: none;
+    min-width: 0;
+  }
+
+  .asl-actions-row .btn {
+    flex: 1 1 auto;
+    justify-content: center;
+  }
+
+  .asl-picker-list {
+    max-height: 200px;
+  }
+}
+
+.asl-info-1col .ax-info {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.ax-table .asl-progress {
+  min-width: 110px;
+  max-width: 170px;
+}
+
+/* Скрытые подписи в заголовках таблицы не должны выталкивать страницу вширь. */
+.asl-card .ax-table-wrap {
+  position: relative;
+}

@@ -66,6 +66,7 @@ type Store struct {
 	siteSettings map[string]string
 	// Токены MCP-доступа (api_tokens.go).
 	apiTokens []*APIToken
+	audit     []*AuditEntry
 
 	// lastCreatedAt — источник монотонного времени создания в in-memory
 	// режиме: см. nextCreatedAt.

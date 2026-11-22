@@ -19,7 +19,6 @@ package handler
 import (
 	"crypto/rand"
 	"errors"
-	"log"
 	"math/big"
 	"net/http"
 	"net/mail"
@@ -153,7 +152,7 @@ func (a *App) AdminCreateUser(w http.ResponseWriter, r *http.Request) {
 		a.Store.SetUserDisplayName(u.ID, name)
 		u.DisplayName = name
 	}
-	a.auditAdmin(r, "create user %s role=%s", u.ID, role)
+	a.auditAdmin(r, "Создан пользователь %s (роль %s)", u.Email, role)
 	writeJSON(w, http.StatusCreated, map[string]any{"user": a.adminUserItemOf(u), "password": generated})
 }
 
@@ -199,7 +198,7 @@ func (a *App) AdminUpdateUserProfile(w http.ResponseWriter, r *http.Request) {
 		}
 		a.Store.SetUserDisplayName(u.ID, name)
 	}
-	a.auditAdmin(r, "update profile %s", u.ID)
+	a.auditAdmin(r, "Изменён профиль %s", u.Email)
 	nu, _ := a.Store.GetUserByID(u.ID)
 	writeJSON(w, http.StatusOK, a.adminUserItemOf(nu))
 }
@@ -233,7 +232,7 @@ func (a *App) AdminSetUserPassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	_ = a.Store.RevokeOtherAccountSessions(u.ID, uuid.Nil.String())
-	a.auditAdmin(r, "set password %s", u.ID)
+	a.auditAdmin(r, "Задан новый пароль для %s", u.Email)
 	writeJSON(w, http.StatusOK, map[string]string{"password": generated})
 }
 
@@ -247,7 +246,7 @@ func (a *App) AdminLogoutUser(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, "Не удалось завершить сеансы")
 		return
 	}
-	a.auditAdmin(r, "logout all %s", u.ID)
+	a.auditAdmin(r, "Завершены все сеансы %s", u.Email)
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -332,7 +331,7 @@ func (a *App) AdminResetProgress(w http.ResponseWriter, r *http.Request) {
 		ids = append(ids, l.ID)
 	}
 	n := a.Store.DeleteLessonProgress(u.ID, ids)
-	a.auditAdmin(r, "reset progress %s course %s (%d)", u.ID, c.ID, n)
+	a.auditAdmin(r, "Сброшен прогресс %s по курсу «%s» (%d уроков)", u.Email, c.Title, n)
 	writeJSON(w, http.StatusOK, map[string]int{"deleted": n})
 }
 
@@ -360,7 +359,7 @@ func (a *App) AdminCompleteCourse(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, "Уроки засчитаны, но выдать сертификат не удалось")
 		return
 	}
-	a.auditAdmin(r, "complete course %s for %s", c.ID, u.ID)
+	a.auditAdmin(r, "Курс «%s» отмечен пройденным для %s", c.Title, u.Email)
 	writeJSON(w, http.StatusOK, map[string]string{"certificateNumber": cert.Number})
 }
 
@@ -405,7 +404,7 @@ func (a *App) AdminIssueCertificate(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, "Не удалось выдать сертификат")
 		return
 	}
-	a.auditAdmin(r, "issue certificate %s course %s for %s", cert.Number, c.ID, u.ID)
+	a.auditAdmin(r, "Выдан сертификат %s по курсу «%s» для %s", cert.Number, c.Title, u.Email)
 	writeJSON(w, http.StatusOK, map[string]string{"certificateNumber": cert.Number})
 }
 
@@ -416,7 +415,7 @@ func (a *App) AdminRevokeCertificate(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusNotFound, "Сертификат не найден")
 		return
 	}
-	a.auditAdmin(r, "revoke certificate %s", number)
+	a.auditAdmin(r, "Отозван сертификат %s", number)
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -451,7 +450,7 @@ func (a *App) AdminPublishCourse(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, "Не удалось опубликовать курс")
 		return
 	}
-	a.auditAdmin(r, "publish course %s", c.ID)
+	a.auditAdmin(r, "Опубликован курс «%s»", c.Title)
 	nc, _ := a.Store.GetCourseByID(c.ID)
 	writeJSON(w, http.StatusOK, nc)
 }
@@ -482,7 +481,7 @@ func (a *App) AdminSetCourseOwner(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, "Не удалось передать курс")
 		return
 	}
-	a.auditAdmin(r, "course %s owner -> %s", c.ID, u.ID)
+	a.auditAdmin(r, "Курс «%s» передан %s", c.Title, u.Email)
 	writeJSON(w, http.StatusOK, map[string]string{"courseId": c.ID, "teacherId": u.ID, "teacherEmail": u.Email})
 }
 
@@ -530,15 +529,7 @@ func (a *App) AdminPutSiteSettings(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, "Не удалось сохранить настройки")
 		return
 	}
-	a.auditAdmin(r, "site settings updated")
+	a.auditAdmin(r, "Изменены тексты сайта")
 	writeJSON(w, http.StatusOK, map[string]any{"settings": a.Store.GetSiteSettings()})
 }
 
-// auditAdmin пишет в лог, кто из администраторов что сделал.
-func (a *App) auditAdmin(r *http.Request, format string, args ...any) {
-	who := "?"
-	if u, ok := a.currentUser(r); ok {
-		who = u.ID
-	}
-	log.Printf("admin-audit %s: "+format, append([]any{who}, args...)...)
-}

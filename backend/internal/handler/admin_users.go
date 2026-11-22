@@ -47,6 +47,8 @@ type adminUserItem struct {
 	CreatedAt        time.Time       `json:"createdAt"`
 	CoursesCount     int             `json:"coursesCount"`
 	EnrollmentsCount int             `json:"enrollmentsCount"`
+	// EmailVerified — пользователь подтвердил email по ссылке из письма.
+	EmailVerified bool `json:"emailVerified"`
 }
 
 // statusOf читает статус пользователя: пустая строка (старые объекты
@@ -65,6 +67,7 @@ func (a *App) adminUserItemOf(u *repo.User) adminUserItem {
 		ID: u.ID, Email: u.Email, Role: u.Role, DisplayName: u.DisplayName,
 		Status: statusOf(u), CreatedAt: u.CreatedAt,
 		CoursesCount: deps.Courses, EnrollmentsCount: deps.Enrollments,
+		EmailVerified: u.EmailVerifiedAt != nil,
 	}
 }
 

@@ -26,7 +26,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"io"
-	"log"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -97,7 +96,7 @@ func (a *App) AdminCreateMCPToken(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, "Не удалось создать токен")
 		return
 	}
-	a.auditAdmin(r, "create mcp token %s (%s)", item.ID, name)
+	a.auditAdmin(r, "Выпущен MCP-токен «%s» (%s…)", name, item.Prefix)
 	writeJSON(w, http.StatusCreated, map[string]any{"token": token, "item": item})
 }
 
@@ -107,7 +106,7 @@ func (a *App) AdminRevokeMCPToken(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusNotFound, "Токен не найден или уже отозван")
 		return
 	}
-	a.auditAdmin(r, "revoke mcp token %s", id)
+	a.auditAdmin(r, "Отозван MCP-токен %s", id)
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -237,7 +236,7 @@ func (a *App) mcpDispatch(ctx context.Context, u *repo.User, req rpcRequest) map
 			return rpcReply(req.ID, nil, &rpcError{-32602, "Invalid params"})
 		}
 		text, isErr := a.mcpCallTool(ctx, u, p.Name, p.Arguments)
-		log.Printf("admin-audit %s: mcp tool %s error=%v", u.ID, p.Name, isErr)
+		a.auditMCP(ctx, u, p.Name, p.Arguments, isErr)
 		return rpcReply(req.ID, map[string]any{
 			"content": []map[string]any{{"type": "text", "text": text}},
 			"isError": isErr,

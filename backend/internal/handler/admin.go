@@ -72,6 +72,7 @@ func (a *App) AdminCreateInvite(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	a.auditAdmin(r, "Отправлено приглашение преподавателю %s", inv.Email)
 	writeJSON(w, http.StatusCreated, map[string]any{
 		"id": inv.ID, "email": inv.Email, "token": token,
 		"tokenPrefix": inv.TokenPrefix, "expiresAt": inv.ExpiresAt,

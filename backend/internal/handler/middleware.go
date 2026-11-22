@@ -112,6 +112,8 @@ func NewRouter(app *App) http.Handler {
 		// T10: глобальный мягкий лимит от флуда + CSRF-проверка меняющих методов.
 		r.Use(app.rateLimit("global", app.Config.RateLimitGlobalPerMin))
 		r.Use(app.csrfProtect)
+		// Журнал действий администраторов (handler/admin_hub.go).
+		r.Use(app.adminAudit)
 
 		r.Get("/healthz", healthz)
 
@@ -252,6 +254,8 @@ func NewRouter(app *App) http.Handler {
 		app.RegisterAdminOpsRoutes(r)
 		// MCP-сервер для нейросетей: POST /mcp по токену администратора + управление токенами (handler/mcp.go).
 		app.RegisterMCPRoutes(r)
+		// Новая админка: сводка, журнал действий, сквозные вопросы/отзывы/промокоды (handler/admin_hub.go).
+		app.RegisterAdminHubRoutes(r)
 	})
 	return r
 }

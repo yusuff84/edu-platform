@@ -1,0 +1,991 @@
+/* Админка: разделы «Система» и заявки (pages/admin/Leads, Invites, Settings, Mcp, Audit).
+   Префикс asy-. Остальное — из adminShell.css (ax-). */
+
+.asy-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+
+.asy-p {
+  margin: 0;
+  line-height: 1.55;
+}
+
+.asy-small {
+  font-size: 13px;
+}
+
+.asy-break {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.asy-footnote {
+  margin: -6px 4px 0;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.asy-inline-hint {
+  display: block;
+  font-size: 12.5px;
+}
+
+.asy-dim {
+  opacity: 0.6;
+  transition: opacity 0.15s;
+}
+
+/* ---------- код и секреты ---------- */
+
+.asy-code {
+  display: block;
+  min-width: 0;
+  flex: 1 1 auto;
+  padding: 9px 12px;
+  border-radius: 10px;
+  background: #f4f2ed;
+  border: 1px solid var(--ax-line, #e9e6df);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 13px;
+  line-height: 1.5;
+  color: #2b2a27;
+  overflow-wrap: anywhere;
+}
+
+.asy-pre {
+  margin: 0;
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: #1d1c1a;
+  color: #f2f0ea;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12.5px;
+  line-height: 1.55;
+  overflow-x: auto;
+  white-space: pre;
+}
+
+.asy-codebox {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  min-width: 0;
+}
+
+.asy-codebox .ax-copy,
+.asy-secret-row .ax-copy,
+.asy-server .ax-copy {
+  flex: none;
+  min-height: 40px;
+}
+
+.asy-codebox--block {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.asy-codebox--block .pre,
+.asy-codebox--block .asy-pre {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.asy-codebox--block .ax-copy {
+  align-self: flex-start;
+}
+
+.asy-secret {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.asy-secret-label {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.asy-secret-row {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  min-width: 0;
+}
+
+/* ---------- блок «создано» (приглашение, токен) ---------- */
+
+.asy-created {
+  margin-top: 16px;
+  padding: 16px;
+  border-radius: 14px;
+  border: 1px solid #cdeedb;
+  background: #f3fbf6;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+
+.asy-created--warn {
+  border-color: #f4dfae;
+  background: #fffaf0;
+}
+
+.asy-created-head {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.asy-created-head > div {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.asy-created-head strong {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.asy-created-head p {
+  margin: 4px 0 0;
+  font-size: 13.5px;
+  line-height: 1.5;
+}
+
+.asy-created-icon {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--ok-bg, #e3f6ea);
+  color: #17773f;
+}
+
+.asy-created-icon--warn {
+  background: #fdf0d2;
+  color: #8a5a00;
+}
+
+.asy-hide-token {
+  align-self: flex-start;
+}
+
+/* ---------- форма «одно поле + кнопка» ---------- */
+
+.asy-invite-form {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+
+.asy-invite-form > .ax-field {
+  flex: 1 1 280px;
+  max-width: 480px;
+}
+
+.asy-invite-submit {
+  margin-top: 25px;
+  min-height: 42px;
+  border-radius: 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* ---------- заявки ---------- */
+
+.asy-leads {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.asy-lead {
+  display: grid;
+  grid-template-columns: minmax(180px, 1.1fr) minmax(200px, 1.3fr) minmax(130px, 0.7fr) 200px;
+  gap: 16px;
+  align-items: center;
+  padding: 14px 20px;
+  border-bottom: 1px solid var(--ax-line, #e9e6df);
+  position: relative;
+}
+
+.asy-lead:last-child {
+  border-bottom: 0;
+}
+
+.asy-lead.is-new::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 12px;
+  bottom: 12px;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: var(--ax-accent, #4635ff);
+}
+
+.asy-lead.is-done .asy-lead-who strong {
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.asy-lead-who {
+  min-width: 0;
+}
+
+.asy-lead-contacts {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.asy-lead-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--fg);
+  text-decoration: none;
+  min-width: 0;
+  min-height: 24px;
+}
+
+.asy-lead-link span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.asy-lead-link .ax-icon {
+  color: var(--muted);
+  flex: none;
+}
+
+.asy-lead-link:hover {
+  color: var(--ax-accent, #4635ff);
+}
+
+.asy-lead-link:hover .ax-icon {
+  color: inherit;
+}
+
+.asy-lead-noemail {
+  font-size: 13px;
+  padding-left: 22px;
+}
+
+.asy-lead-method {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+.asy-done-btn {
+  background: var(--ax-accent-soft, #eeedff);
+  color: var(--ax-accent, #4635ff);
+  border: 1px solid transparent;
+  box-shadow: none;
+}
+
+.asy-done-btn:hover {
+  background: var(--ax-accent, #4635ff);
+  color: #fff;
+}
+
+.asy-lead-method-label {
+  font-size: 13px;
+}
+
+.asy-lead-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  justify-content: flex-end;
+}
+
+.asy-lead-actions .btn {
+  min-height: 40px;
+  border-radius: 12px;
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* ---------- настройки ---------- */
+
+.asy-settings {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.asy-two {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 14px;
+  align-items: start;
+}
+
+.asy-three {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+  align-items: start;
+}
+
+.asy-row-wide {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.asy-textarea-sm {
+  min-height: 76px;
+}
+
+@media (max-width: 720px) {
+  .asy-textarea-sm { min-height: 120px; }
+}
+
+.asy-counter {
+  color: #8a5a00;
+}
+
+.asy-commission {
+  display: grid;
+  grid-template-columns: minmax(0, 340px) minmax(0, 1fr);
+  gap: 24px;
+  align-items: start;
+}
+
+.asy-suffix {
+  position: relative;
+  max-width: 160px;
+}
+
+.asy-suffix .ax-input {
+  padding-right: 34px;
+  font-weight: 700;
+  font-size: 16px;
+}
+
+.asy-suffix > span {
+  position: absolute;
+  right: 13px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--muted);
+  font-weight: 700;
+  pointer-events: none;
+}
+
+.asy-split {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px 16px;
+  border-radius: 14px;
+  background: #f8f7f3;
+  border: 1px solid var(--ax-line, #e9e6df);
+  font-size: 13.5px;
+  min-width: 0;
+}
+
+.asy-split-bar {
+  height: 10px;
+  border-radius: 999px;
+  background: #38b56a;
+  overflow: hidden;
+}
+
+.asy-split-bar span {
+  display: block;
+  height: 100%;
+  background: var(--ax-accent, #4635ff);
+  border-right: 2px solid #fff;
+  transition: width 0.2s;
+}
+
+.asy-split-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+}
+
+.asy-dot {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  margin-right: 2px;
+}
+
+.asy-dot--platform { background: var(--ax-accent, #4635ff); }
+.asy-dot--teacher { background: #38b56a; }
+
+/* предпросмотр */
+
+.asy-preview {
+  border: 1px dashed #d8d4ca;
+  border-radius: 14px;
+  padding: 12px;
+  background: #fbfaf7;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+
+.asy-preview-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.asy-preview-head > span:first-child {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.asy-preview-off {
+  font-weight: 700;
+  font-size: 12px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: #f0eee9;
+  color: #55534e;
+}
+
+.asy-promo-frame {
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid var(--ax-line, #e9e6df);
+  background: #fff;
+  pointer-events: none;
+  user-select: none;
+  transition: opacity 0.2s, filter 0.2s;
+}
+
+.asy-promo-frame .promo {
+  position: relative;
+  padding-right: 48px;
+  padding-left: 48px;
+}
+
+.asy-promo-frame .promo a {
+  cursor: default;
+}
+
+.asy-promo-frame .promo-close {
+  display: grid;
+  place-items: center;
+}
+
+.asy-promo-frame.is-off {
+  opacity: 0.45;
+  filter: grayscale(0.9);
+}
+
+.asy-fake-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  background: #fff;
+}
+
+.asy-fake-logo {
+  display: inline-grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  background: var(--ax-accent, #4635ff);
+  color: #fff;
+  font-weight: 900;
+  font-size: 14px;
+  flex: none;
+}
+
+.asy-fake-line {
+  height: 8px;
+  width: 120px;
+  border-radius: 999px;
+  background: #ebe8e1;
+}
+
+.asy-fake-line--short {
+  width: 60px;
+  margin-left: auto;
+}
+
+.asy-preview-link {
+  margin: 0;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.asy-footer-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 16px;
+  border-radius: 10px;
+  background: #fff;
+  border: 1px solid var(--ax-line, #e9e6df);
+  line-height: 1.5;
+  max-width: 420px;
+}
+
+.asy-footer-logo {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 800;
+}
+
+.asy-footer-logo .asy-fake-logo {
+  background: var(--ax-accent, #4635ff);
+  color: #fff;
+}
+
+.asy-footer-preview small {
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.asy-footer-contacts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  align-items: baseline;
+}
+
+/* липкая панель сохранения */
+
+.asy-savebar {
+  position: sticky;
+  bottom: 12px;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 12px 14px 12px 18px;
+  border-radius: 16px;
+  background: #1d1c1a;
+  color: #fff;
+  box-shadow: 0 12px 32px rgba(20, 20, 20, 0.22);
+  animation: asy-rise 0.18s ease-out;
+}
+
+.asy-savebar-text {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 700;
+}
+
+.asy-savebar-text .ax-icon {
+  color: var(--sun, #fec466);
+}
+
+.asy-savebar-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.asy-savebar .btn {
+  min-height: 42px;
+  border-radius: 12px;
+}
+
+.asy-savebar .btn-ghost {
+  background: transparent;
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+.asy-savebar .btn-ghost:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.5);
+}
+
+@keyframes asy-rise {
+  from { transform: translateY(12px); opacity: 0; }
+  to { transform: none; opacity: 1; }
+}
+
+/* ---------- MCP ---------- */
+
+.asy-security {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  line-height: 1.55;
+}
+
+.asy-security .ax-icon {
+  flex: none;
+  margin-top: 2px;
+}
+
+.asy-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.asy-step-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.asy-step-num {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: var(--ax-accent-soft, #eeedff);
+  color: var(--ax-accent, #4635ff);
+  font-weight: 800;
+  font-size: 14px;
+}
+
+.asy-step-num.is-done {
+  background: var(--ok-bg, #e3f6ea);
+  color: #17773f;
+}
+
+.asy-step-body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding-left: 42px;
+  min-width: 0;
+}
+
+.asy-step-body > .asy-created {
+  margin-top: 0;
+}
+
+.asy-step-body .ax-tabs {
+  margin: 0;
+}
+
+.asy-server {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  font-size: 13.5px;
+}
+
+.asy-server .asy-code {
+  flex: 0 1 auto;
+}
+
+.asy-examples {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.asy-examples li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 10px 10px 14px;
+  border-radius: 12px;
+  background: #f8f7f3;
+  border: 1px solid var(--ax-line, #e9e6df);
+  line-height: 1.5;
+}
+
+.asy-examples li > .ax-icon {
+  flex: none;
+  align-self: flex-start;
+  margin-top: 3px;
+  color: var(--ax-accent, #4635ff);
+}
+
+.asy-examples li > span {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.asy-examples .ax-copy {
+  flex: none;
+  min-height: 36px;
+}
+
+.asy-details summary {
+  cursor: pointer;
+  font-weight: 700;
+  font-size: 14px;
+  color: var(--ax-accent, #4635ff);
+  min-height: 32px;
+  display: flex;
+  align-items: center;
+}
+
+.asy-tools {
+  margin: 10px 0 0;
+  display: grid;
+  gap: 8px;
+}
+
+.asy-tools > div {
+  display: grid;
+  grid-template-columns: minmax(0, 320px) minmax(0, 1fr);
+  gap: 12px;
+  font-size: 13.5px;
+}
+
+.asy-tools dt {
+  font-size: 12.5px;
+  overflow-wrap: anywhere;
+}
+
+.asy-tools dd {
+  margin: 0;
+  color: var(--muted);
+}
+
+.asy-token-icon {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  background: var(--ax-accent-soft, #eeedff);
+  color: var(--ax-accent, #4635ff);
+}
+
+.asy-token-icon.is-off {
+  background: #f0eee9;
+  color: #8f8c84;
+}
+
+/* ---------- журнал ---------- */
+
+.asy-chips {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 12px 20px;
+  border-bottom: 1px solid var(--ax-line, #e9e6df);
+}
+
+.asy-chip {
+  min-height: 34px;
+  padding: 6px 14px;
+  border-radius: 999px;
+  border: 1px solid #e0ddd5;
+  background: #fff;
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--fg);
+  cursor: pointer;
+}
+
+.asy-chip:hover {
+  background: var(--ax-hover, #f3f1ec);
+}
+
+.asy-chip.is-active {
+  background: var(--ax-accent-soft, #eeedff);
+  border-color: var(--ax-accent, #4635ff);
+  color: var(--ax-accent, #4635ff);
+}
+
+.asy-when {
+  display: flex;
+  flex-direction: column;
+  white-space: nowrap;
+}
+
+.asy-when small {
+  font-size: 12.5px;
+}
+
+.asy-action {
+  display: inline-flex;
+  gap: 8px;
+  align-items: flex-start;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.asy-action-tag {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  background: var(--ax-accent-soft, #eeedff);
+  color: var(--ax-accent, #4635ff);
+}
+
+.asy-who {
+  gap: 8px;
+}
+
+.asy-who .ax-avatar {
+  flex: none;
+}
+
+.asy-drawer-action {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+/* ---------- адаптив ---------- */
+
+@media (max-width: 1100px) {
+  .asy-lead {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 200px;
+  }
+  .asy-lead-method {
+    grid-column: 2;
+    grid-row: 2;
+  }
+  .asy-lead-actions {
+    grid-column: 3;
+    grid-row: 1 / span 2;
+  }
+  .asy-commission {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 720px) {
+  .asy-lead {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 10px;
+    padding: 14px 16px;
+  }
+  .asy-lead-method,
+  .asy-lead-actions {
+    grid-column: auto;
+    grid-row: auto;
+  }
+  .asy-lead-contacts {
+    padding-left: 50px;
+  }
+  .asy-lead-method {
+    padding-left: 50px;
+  }
+  .asy-lead-actions {
+    justify-content: stretch;
+  }
+  .asy-lead-actions .btn {
+    flex: 1 1 auto;
+    justify-content: center;
+  }
+
+  .asy-two,
+  .asy-three {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .asy-invite-form > .ax-field {
+    flex-basis: 100%;
+    max-width: none;
+  }
+  .asy-invite-submit {
+    margin-top: 0;
+    width: 100%;
+    justify-content: center;
+  }
+
+  .asy-secret-row,
+  .asy-codebox {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .asy-secret-row .ax-copy,
+  .asy-codebox .ax-copy {
+    align-self: flex-start;
+  }
+
+  .asy-step-body {
+    padding-left: 0;
+  }
+
+  .asy-examples li {
+    flex-wrap: wrap;
+  }
+  .asy-examples li > span {
+    flex-basis: calc(100% - 30px);
+  }
+  .asy-examples .ax-copy {
+    margin-left: 26px;
+  }
+
+  .asy-tools > div {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 2px;
+  }
+
+  .asy-chips {
+    padding: 10px 16px;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .asy-chip {
+    flex: none;
+  }
+
+  .asy-promo-frame .promo {
+    padding-left: 12px;
+  }
+
+  .asy-savebar {
+    bottom: 8px;
+    padding: 12px;
+  }
+  .asy-savebar-actions {
+    width: 100%;
+  }
+  .asy-savebar-actions .btn {
+    flex: 1 1 0;
+    justify-content: center;
+  }
+}
+
+.asy-nowrap {
+  white-space: nowrap;
+}

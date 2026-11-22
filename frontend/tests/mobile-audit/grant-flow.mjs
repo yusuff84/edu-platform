@@ -32,21 +32,28 @@ console.log('✓ пользователь зарегистрирован:', emai
 // 2. Админ выдаёт платный курс.
 const admin = await mk();
 await login(admin, process.env.AUDIT_ADMIN_EMAIL, process.env.AUDIT_ADMIN_PASSWORD);
-await admin.goto(base + '/admin/enrollments');
-await admin.fill('#ae-grant-email', email);
-const opt = admin.locator('#ae-grant-course option', { hasText: courseTitle }).first();
-await admin.selectOption('#ae-grant-course', await opt.getAttribute('value'));
-await admin.click('.ae-grant-form button[type=submit]');
-await admin.locator('.ae-grant-ok').waitFor();
-console.log('✓ админ:', await admin.locator('.ae-grant-ok').innerText());
+await admin.goto(base + '/admin/enrollments?grant=1');
+const dialog = admin.getByRole('dialog', { name: 'Выдать доступ к курсу' });
+await dialog.locator('input[type=email]').fill(email);
+await dialog.getByRole('option', { name: new RegExp(courseTitle) }).first().click();
+await dialog.getByRole('button', { name: 'Выдать доступ' }).click();
+await dialog.getByText('Выдать ещё').waitFor();
+console.log('✓ админ:', (await dialog.locator('.ax-note').innerText()).replace(/\s+/g, ' '));
 if (out) await admin.screenshot({ path: out + '/grant-admin.png' });
-await admin.click('.ae-grant-form button[type=submit]');
-await admin.locator('.ae-grant-ok', { hasText: 'уже есть доступ' }).waitFor();
-console.log('✓ повторная выдача:', await admin.locator('.ae-grant-ok').innerText());
-await admin.fill('#ae-grant-email', 'nobody-x@example.com');
-await admin.click('.ae-grant-form button[type=submit]');
-await admin.locator('.ae-grant .error').waitFor();
-console.log('✓ неизвестный email:', await admin.locator('.ae-grant .error').innerText());
+// Повторная выдача — «уже есть доступ», без изменений.
+await dialog.getByText('Выдать ещё').click();
+await dialog.locator('input[type=email]').fill(email);
+await dialog.getByRole('option', { name: new RegExp(courseTitle) }).first().click();
+await dialog.getByRole('button', { name: 'Выдать доступ' }).click();
+await dialog.getByText('уже есть доступ').waitFor();
+console.log('✓ повторная выдача: уже есть доступ');
+// Неизвестный email — понятная ошибка.
+await dialog.getByText('Выдать ещё').click();
+await dialog.locator('input[type=email]').fill('nobody-x@example.com');
+await dialog.getByRole('option', { name: new RegExp(courseTitle) }).first().click();
+await dialog.getByRole('button', { name: 'Выдать доступ' }).click();
+await admin.waitForTimeout(1200);
+console.log('✓ неизвестный email:', (await dialog.innerText()).match(/[^\n]*не найден[^\n]*/)?.[0] ?? '(нет текста ошибки)');
 
 // 3. У пользователя курс в «Моих курсах», урок открывается.
 await user.goto(base + '/me');

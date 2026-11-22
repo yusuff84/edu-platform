@@ -28,17 +28,25 @@ const MyCourses = lazy(() => import('../pages/MyCourses'));
 const Favorites = lazy(() => import('../pages/Favorites'));
 const Learn = lazy(() => import('../pages/Learn'));
 const Constructor = lazy(() => import('../pages/Constructor'));
-const Admin = lazy(() => import('../pages/Admin'));
-// T26/T27/T29/T30: подразделы, разведённые по задачам отдельными страницами,
-// чтобы агенты правили каждый свой файл и не конфликтовали.
-const AdminUsers = lazy(() => import('../pages/AdminUsers'));
-const AdminCourses = lazy(() => import('../pages/AdminCourses'));
-const AdminStats = lazy(() => import('../pages/AdminStats'));
-// T58: страница «Детали курса» — отдельный чанк подраздела «Курсы».
-const AdminCourseDetail = lazy(() => import('../pages/AdminCourseDetail'));
-// T49: экран «Записи на курсы» — отдельная страница подраздела.
-const AdminEnrollments = lazy(() => import('../pages/AdminEnrollments'));
-const AdminCertificates = lazy(() => import('../pages/AdminCertificates'));
+// Админка: каркас с боковым меню и разделы — отдельные чанки (pages/admin/*).
+const AdminLayout = lazy(() => import('../components/admin/AdminLayout'));
+const AdminOverview = lazy(() => import('../pages/admin/Overview'));
+const AdminUsers = lazy(() => import('../pages/admin/Users'));
+const AdminUserDetail = lazy(() => import('../pages/admin/UserDetail'));
+const AdminCourses = lazy(() => import('../pages/admin/Courses'));
+const AdminCourseDetail = lazy(() => import('../pages/admin/CourseDetail'));
+const AdminModeration = lazy(() => import('../pages/admin/Moderation'));
+const AdminQuestions = lazy(() => import('../pages/admin/Questions'));
+const AdminReviews = lazy(() => import('../pages/admin/Reviews'));
+const AdminEnrollments = lazy(() => import('../pages/admin/Enrollments'));
+const AdminCertificates = lazy(() => import('../pages/admin/Certificates'));
+const AdminPayments = lazy(() => import('../pages/admin/Payments'));
+const AdminPromoCodes = lazy(() => import('../pages/admin/PromoCodes'));
+const AdminLeads = lazy(() => import('../pages/admin/Leads'));
+const AdminInvites = lazy(() => import('../pages/admin/Invites'));
+const AdminSettings = lazy(() => import('../pages/admin/Settings'));
+const AdminMcp = lazy(() => import('../pages/admin/Mcp'));
+const AdminAudit = lazy(() => import('../pages/admin/Audit'));
 const CourseStudents = lazy(() => import('../pages/CourseStudents'));
 // T78: аналитика преподавателя — отдельный чанк подраздела кабинета.
 const TeacherStats = lazy(() => import('../pages/TeacherStats'));
@@ -112,7 +120,7 @@ function Layout(): JSX.Element {
       return false;
     }
   });
-  const hidePromoHere = /^\/(learn|login|register|forgot-password|reset-password|verify-email)(\/|$)/.test(
+  const hidePromoHere = /^\/(learn|login|register|forgot-password|reset-password|verify-email|admin)(\/|$)/.test(
     location.pathname,
   );
   const showPromo = Boolean(promoQuery.data?.promoBarEnabled) && !promoDismissed && !hidePromoHere;
@@ -126,6 +134,8 @@ function Layout(): JSX.Element {
   };
   // В уроке футер не нужен: ниже урока — нижняя панель навигации по шагам.
   const isLesson = /^\/learn\/[^/]+\/[^/]+/.test(location.pathname);
+  // Админка — рабочее приложение: без футера, на всю ширину.
+  const isAdmin = /^\/admin(\/|$)/.test(location.pathname);
   const isAuthor = user?.role === 'teacher' || user?.role === 'admin';
   // Тексты промо-полосы и контакты — из админки (пустое — значения по умолчанию).
   const site = promoQuery.data?.site ?? {};
@@ -133,7 +143,7 @@ function Layout(): JSX.Element {
   const contactEmail = site.contact_email || 'hello@edu-platform.ru';
 
   return (
-    <div className={isLesson ? 'app app--lesson' : 'app'}>
+    <div className={isLesson ? 'app app--lesson' : isAdmin ? 'app app--admin' : 'app'}>
       <ScrollToTop />
       <a href="#content" className="sr-only">
         {t('a11y.skipToContent')}
@@ -204,6 +214,7 @@ function Layout(): JSX.Element {
           </Suspense>
         </ErrorBoundary>
       </div>
+      {!isAdmin && (
       <footer className="footer">
         <div className="wrap footer-in">
           <div className="footer-brand">
@@ -252,12 +263,13 @@ function Layout(): JSX.Element {
             <div>
               <b>Авторам</b>
               <Link to="/teach">Конструктор курса</Link>
-              {user?.role === 'admin' && <Link to="/admin">Модерация</Link>}
-              {user?.role === 'admin' && <Link to="/admin">Приглашения</Link>}
+              {user?.role === 'admin' && <Link to="/admin/moderation">Модерация</Link>}
+              {user?.role === 'admin' && <Link to="/admin/invites">Приглашения</Link>}
             </div>
           )}
         </div>
       </footer>
+      )}
     </div>
   );
 }
@@ -289,17 +301,32 @@ export const router = createBrowserRouter([
       // маршрут перехватит «stats» и откроет конструктор.
       { path: '/teach/stats', element: <RequireRole roles={['teacher', 'admin']}><TeacherStats /></RequireRole> },
       { path: '/teach/:id', element: <RequireRole roles={['teacher', 'admin']}><Constructor /></RequireRole> },
-      { path: '/admin', element: <RequireRole roles={['admin']}><Admin /></RequireRole> },
-      // Подразделы супер-админки — отдельные страницы со своим роутом
-      // (каждая со своим владельцем-задачей).
-      { path: '/admin/users', element: <RequireRole roles={['admin']}><AdminUsers /></RequireRole> },
-      { path: '/admin/courses', element: <RequireRole roles={['admin']}><AdminCourses /></RequireRole> },
-      // T58: детали курса — строго ПОСЛЕ /admin/courses (react-router сам
-      // разрулит конфликт с /admin/courses/review: статичным путём владеет T07).
-      { path: '/admin/courses/:id', element: <RequireRole roles={['admin']}><AdminCourseDetail /></RequireRole> },
-      { path: '/admin/stats', element: <RequireRole roles={['admin']}><AdminStats /></RequireRole> },
-      { path: '/admin/enrollments', element: <RequireRole roles={['admin']}><AdminEnrollments /></RequireRole> },
-      { path: '/admin/certificates', element: <RequireRole roles={['admin']}><AdminCertificates /></RequireRole> },
+      // Админка: общий каркас (боковое меню, поиск, уведомления) + разделы.
+      {
+        path: '/admin',
+        element: <RequireRole roles={['admin']}><AdminLayout /></RequireRole>,
+        children: [
+          { index: true, element: <AdminOverview /> },
+          { path: 'users', element: <AdminUsers /> },
+          { path: 'users/:id', element: <AdminUserDetail /> },
+          { path: 'courses', element: <AdminCourses /> },
+          { path: 'courses/:id', element: <AdminCourseDetail /> },
+          { path: 'moderation', element: <AdminModeration /> },
+          { path: 'questions', element: <AdminQuestions /> },
+          { path: 'reviews', element: <AdminReviews /> },
+          { path: 'enrollments', element: <AdminEnrollments /> },
+          { path: 'certificates', element: <AdminCertificates /> },
+          { path: 'payments', element: <AdminPayments /> },
+          { path: 'promo-codes', element: <AdminPromoCodes /> },
+          { path: 'leads', element: <AdminLeads /> },
+          { path: 'invites', element: <AdminInvites /> },
+          { path: 'settings', element: <AdminSettings /> },
+          { path: 'mcp', element: <AdminMcp /> },
+          { path: 'audit', element: <AdminAudit /> },
+          { path: 'stats', element: <Navigate to="/admin" replace /> },
+          { path: '*', element: <Navigate to="/admin" replace /> },
+        ],
+      },
       // Ученики конкретного курса — автору курса и админу.
       { path: '/teach/:id/students', element: <RequireRole roles={['teacher', 'admin']}><CourseStudents /></RequireRole> },
       // Личный кабинет ученика: профиль и история платежей.

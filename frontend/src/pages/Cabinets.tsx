@@ -5,7 +5,6 @@ import { me, myTeaching } from '../api/client';
 import { t } from '../i18n/t';
 import { useSeo } from '../app/useSeo';
 import MyCoursesPage from './MyCourses';
-import AdminPage from './Admin';
 
 export function RequireRole({
   roles,
@@ -123,13 +122,5 @@ function TeacherCourses(): JSX.Element {
         );
       })}
     </ul>
-  );
-}
-
-export function AdminCab(): JSX.Element {
-  return (
-    <RequireRole roles={['admin']}>
-      <AdminPage />
-    </RequireRole>
   );
 }

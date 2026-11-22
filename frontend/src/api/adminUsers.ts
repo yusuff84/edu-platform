@@ -26,6 +26,8 @@ export type AdminUserRow = {
   coursesCount: number;
   /** Записи пользователя на курсы. */
   enrollmentsCount: number;
+  /** Подтвердил email по ссылке из письма (старый backend поле не отдаёт). */
+  emailVerified?: boolean;
 };
 
 /** Страница списка пользователей (конверт пагинации, как в остальных API). */

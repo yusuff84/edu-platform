@@ -360,6 +360,11 @@ type StoreAPI interface {
 	RevokeAPIToken(id string) bool
 	TouchAPIToken(id string)
 
+	// --- Журнал действий администраторов (020_admin_audit.sql) ---
+
+	AddAuditEntry(actorID, actorEmail, action, ip string)
+	ListAuditEntries(q string, page, limit int) ([]*AuditEntry, int)
+
 	// ---- T77: аналитика учителя ----
 
 	// TeacherOverview — сводка преподавателя одним вызовом: курсы по

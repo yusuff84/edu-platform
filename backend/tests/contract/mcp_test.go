@@ -118,6 +118,20 @@ func TestMCPServer(t *testing.T) {
 	if _, isErr := tool(t, router, created.Token, "publish_course", map[string]any{"course_id": cid}); isErr {
 		t.Fatal("publish_course")
 	}
+	// Вызовы инструментов попадают в журнал действий — по одной записи, с подписью MCP.
+	auditRec := doRequest(t, router, http.MethodGet, "/api/v1/admin/audit?q=MCP", nil, admin)
+	var auditOut struct {
+		Items []struct{ Action string } `json:"items"`
+	}
+	decodeBody(t, auditRec, &auditOut)
+	joined := ""
+	for _, it := range auditOut.Items {
+		joined += it.Action + "\n"
+	}
+	if !strings.Contains(joined, "Нейросеть (MCP): создан курс") || !strings.Contains(joined, "Нейросеть (MCP): опубликован курс «") ||
+		strings.Contains(joined, "Опубликован курс") {
+		t.Fatalf("MCP audit:\n%s", joined)
+	}
 	if rec := doRequest(t, router, http.MethodGet, "/api/v1/courses/"+course["slug"].(string), nil, nil); rec.Code != http.StatusOK {
 		t.Fatalf("курс не опубликован: %d", rec.Code)
 	}
