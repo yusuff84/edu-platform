@@ -33,7 +33,7 @@ import '../../styles/admin-content.css';
 const LIMIT = 20;
 
 /** Карточка вопроса ученика: контекст, ответы, ответ прямо в карточке, удаление. */
-export function QuestionCard({ question, showCourse = true }: { question: AdminQuestion; showCourse?: boolean }): JSX.Element {
+function QuestionCard({ question, showCourse = true }: { question: AdminQuestion; showCourse?: boolean }): JSX.Element {
   const qc = useQueryClient();
   const { confirm, toast } = useAdminUi();
   const [text, setText] = useState('');

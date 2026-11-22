@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import QRCode from 'qrcode';
 import '../styles/certdoc.css';
 
-export interface CertificateDocumentProps {
+interface CertificateDocumentProps {
   number: string;
   studentName: string;
   courseTitle: string;

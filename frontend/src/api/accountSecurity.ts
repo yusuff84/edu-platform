@@ -1,6 +1,6 @@
 import { apiFetch } from './client';
 
-export interface AccountSecurity {
+interface AccountSecurity {
   email: string;
   emailVerified: boolean;
   emailVerifiedAt: string | null;

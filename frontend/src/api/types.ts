@@ -548,7 +548,7 @@ export interface CompleteLessonInput {
 // ---------- P9: аналитика учителя (T77) ----------
 
 /** Счётчики курсов преподавателя по статусам (GET /teacher/stats). */
-export interface TeacherOverviewCourses {
+interface TeacherOverviewCourses {
   total: number;
   published: number;
   draft: number;
@@ -557,7 +557,7 @@ export interface TeacherOverviewCourses {
 }
 
 /** Записи на курсы преподавателя: всего активных и уникальных учеников. */
-export interface TeacherOverviewStudents {
+interface TeacherOverviewStudents {
   /** Активные записи (один ученик может быть записан на несколько курсов). */
   total: number;
   /** Уникальные ученики с активной записью. */
@@ -565,26 +565,26 @@ export interface TeacherOverviewStudents {
 }
 
 /** Деньги только по succeeded-платежам, в копейках. */
-export interface TeacherOverviewRevenue {
+interface TeacherOverviewRevenue {
   paidTotalCents: number;
   platformFeeCents: number;
   teacherCents: number;
 }
 
 /** Завершаемость: число записей с прогрессом 100 % и средний прогресс (0..100). */
-export interface TeacherOverviewCompletion {
+interface TeacherOverviewCompletion {
   completed: number;
   avgPercent: number;
 }
 
 /** Рейтинг по опубликованным курсам (средневзвешенный) и число оценок. */
-export interface TeacherOverviewRatings {
+interface TeacherOverviewRatings {
   avgRating: number;
   ratingsCount: number;
 }
 
 /** Активность за последние 30 дней: записи и succeeded-платежи. */
-export interface TeacherOverviewLast30d {
+interface TeacherOverviewLast30d {
   enrollments: number;
   revenueCents: number;
 }

@@ -20,7 +20,7 @@ const BASE: string =
   (import.meta.env.VITE_API_URL as string | undefined) ?? '/api/v1';
 
 /** Результат загрузки обложки (POST .../cover → 201 {"coverPath": "..."}). */
-export interface CoverUploadResult {
+interface CoverUploadResult {
   coverPath: string;
 }
 

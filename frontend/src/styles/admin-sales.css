@@ -145,12 +145,6 @@ a.asl-course-link:hover {
   align-self: flex-start;
 }
 
-.asl-btn-icon {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-
 .asl-actions-row {
   display: flex;
   flex-wrap: wrap;
@@ -514,10 +508,6 @@ a.asl-course-link:hover {
   display: flex;
   flex-direction: column;
   gap: 8px;
-}
-
-.asl-result-title {
-  font-weight: 800;
 }
 
 .asl-inline-input {

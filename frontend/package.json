@@ -12,14 +12,12 @@
     "test": "npm run test:build && node --test tests/api-contract/*.test.mjs"
   },
   "dependencies": {
-    "@hookform/resolvers": "^5.9.2",
     "@tanstack/react-query": "^5.51.0",
     "qrcode": "^1.5.4",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-hook-form": "^7.92.0",
-    "react-router-dom": "^7.18.5",
-    "zod": "^4.6.7"
+    "react-router-dom": "^7.18.5"
   },
   "devDependencies": {
     "@playwright/test": "^1.65.1",

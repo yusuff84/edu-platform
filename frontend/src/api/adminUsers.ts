@@ -7,7 +7,7 @@ import { apiFetch, buildQuery } from './client';
 import type { Role } from './types';
 
 /** Статус учётной записи (T24: активен / заблокирован). */
-export type UserStatus = 'active' | 'blocked';
+type UserStatus = 'active' | 'blocked';
 
 /** Строка таблицы пользователей GET /admin/users. */
 export type AdminUserRow = {
@@ -27,7 +27,7 @@ export type AdminUserRow = {
 };
 
 /** Страница списка пользователей (конверт пагинации, как в остальных API). */
-export type AdminUserPage = {
+type AdminUserPage = {
   items: AdminUserRow[];
   total: number;
   page: number;

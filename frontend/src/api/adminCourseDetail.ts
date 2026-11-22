@@ -12,7 +12,7 @@ import type { LessonKind } from './client';
 import type { AdminCourseRow } from './adminConsole';
 
 /** Строка курса в деталях: элемент GET /admin/courses (adminConsole.ts) + обложка (T54). */
-export type AdminCourseDetailCourse = AdminCourseRow & {
+type AdminCourseDetailCourse = AdminCourseRow & {
   /** Путь к обложке (/uploads/covers/…); null/отсутствует — обложки нет (T54). */
   coverPath?: string | null;
 };
@@ -38,7 +38,7 @@ export type AdminCourseDetailModule = {
  * (любой статус); activeCount — только active; paymentsCount/paidTotalCents —
  * только платежи succeeded; avgRating/reviewsCount — как в публичной карточке.
  */
-export type AdminCourseStats = {
+type AdminCourseStats = {
   studentsCount: number;
   activeCount: number;
   reviewsCount: number;

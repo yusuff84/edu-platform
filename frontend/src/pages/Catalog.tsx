@@ -22,15 +22,6 @@ import { t } from '../i18n/t';
 import type { RuKey } from '../i18n/t';
 import { useSeo } from '../app/useSeo';
 import '../styles/catalog.css';
-
-/** Русское склонение после числа: 1 курс, 2 курса, 5 курсов. */
-function pluralWord(n: number, one: string, few: string, many: string): string {
-  const m10 = n % 10;
-  const m100 = n % 100;
-  if (m10 === 1 && m100 !== 11) return one;
-  if (m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14)) return few;
-  return many;
-}
 import '../styles/catalog-filters.css';
 
 /** Размер страницы каталога (контракт: limit по умолч. 20, максимум 100). */
@@ -213,10 +204,6 @@ export default function Catalog(): JSX.Element {
       { replace: true },
     );
   }, [data, page, totalPages, setSearchParams]);
-
-  const avgRating =
-    items.length > 0 ? items.reduce((n, c) => n + c.avgRating, 0) / items.length : 0;
-  const totalReviews = items.reduce((n, c) => n + (c.ratingsCount ?? 0), 0);
 
   const filtersActive = Boolean(
     urlQ.trim() || category || price || minRating || sort !== DEFAULT_SORT,

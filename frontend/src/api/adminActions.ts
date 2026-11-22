@@ -23,7 +23,7 @@ export type AdminInviteRow = {
 };
 
 /** Страница списка приглашений (конверт пагинации, как в остальных API). */
-export type AdminInvitePage = {
+type AdminInvitePage = {
   items: AdminInviteRow[];
   total: number;
   page: number;

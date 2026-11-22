@@ -37,8 +37,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import type { FieldErrors } from 'react-hook-form';
-import { z } from 'zod';
-import { zodResolver } from '@hookform/resolvers/zod';
+import { coerceNumber, firstError, makeResolver, textLength } from '../app/formResolver';
 import {
   ApiError,
   createCourse,
@@ -264,19 +263,23 @@ function reorderLessons(courseId: string, items: ReorderItem[]): Promise<void> {
 // остаётся за backend (T41); пустое значение разрешено — slug сгенерируется.
 const SLUG_RE = /^[a-z0-9](?:[a-z0-9-]{1,118}[a-z0-9])?$/;
 
-const courseSchema = z.object({
-  title: z.string().min(3, 'Название слишком короткое'),
-  description: z.string().min(10, 'Описание слишком короткое'),
-  priceRub: z.coerce.number().min(0, 'Цена не может быть отрицательной'),
-  // T56: slug необязателен. Пусто (или пробелы) — разрешено, остальное валидно
-  // по SLUG_RE; сообщение об ошибке — из замороженного ключа словаря.
-  slug: z.string().refine(
-    (v) => v.trim() === '' || SLUG_RE.test(v.trim()),
-    t('p7.constructor.slugInvalid'),
-  ),
-});
+type CourseFormInput = { title: string; description: string; priceRub: number | string; slug: string };
+type CourseForm = { title: string; description: string; priceRub: number; slug: string };
 
-type CourseForm = z.infer<typeof courseSchema>;
+const courseResolver = makeResolver<CourseFormInput, CourseForm>((v) => {
+  const price = coerceNumber(v.priceRub);
+  const errors = {
+    title: firstError([textLength(v.title) < 3, 'Название слишком короткое']),
+    description: firstError([textLength(v.description) < 10, 'Описание слишком короткое']),
+    priceRub: price.ok ? firstError([price.value < 0, 'Цена не может быть отрицательной']) : price.message,
+    // T56: slug необязателен. Пусто (или пробелы) — разрешено, остальное валидно
+    // по SLUG_RE; сообщение об ошибке — из замороженного ключа словаря.
+    slug: firstError([!(v.slug.trim() === '' || SLUG_RE.test(v.slug.trim())), t('p7.constructor.slugInvalid')]),
+  };
+  return errors.title || errors.description || errors.priceRub || errors.slug || !price.ok
+    ? { errors }
+    : { values: { title: v.title, description: v.description, priceRub: price.value, slug: v.slug } };
+});
 
 // ---------- Состояние формы урока ----------
 
@@ -688,8 +691,8 @@ export default function Constructor(): JSX.Element {
   const [notice, setNotice] = useState<{ text: string; kind: 'ok' | 'error' } | null>(null);
 
   // ---------- Форма создания курса (/teach/new) ----------
-  const { register, handleSubmit, formState, watch } = useForm<z.input<typeof courseSchema>, unknown, CourseForm>({
-    resolver: zodResolver(courseSchema),
+  const { register, handleSubmit, formState, watch } = useForm<CourseFormInput, unknown, CourseForm>({
+    resolver: courseResolver,
     defaultValues: { title: '', description: '', priceRub: 0, slug: '' },
   });
 
@@ -699,7 +702,7 @@ export default function Constructor(): JSX.Element {
   const slugValue = watch('slug');
   const slugReady = slugValue.trim() === '' || SLUG_RE.test(slugValue.trim());
 
-  function onInvalidCourse(errs: FieldErrors<z.input<typeof courseSchema>>): void {
+  function onInvalidCourse(errs: FieldErrors<CourseFormInput>): void {
     focusField(
       errs.title
         ? 'course-title'

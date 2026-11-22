@@ -8,7 +8,7 @@ import { listAdminCourses, type AdminCourseRow } from './adminConsole';
 import { listAdminReviews, type AdminReview } from './adminHub';
 import type { CourseStatus, LessonKind } from './types';
 
-export type CourseTone = 'neutral' | 'ok' | 'warn' | 'danger' | 'info' | 'brand';
+type CourseTone = 'neutral' | 'ok' | 'warn' | 'danger' | 'info' | 'brand';
 
 /** Статус курса → подпись и цвет бейджа. */
 export const COURSE_STATUS: Record<CourseStatus, { label: string; tone: CourseTone }> = {
@@ -38,7 +38,7 @@ export const contentKeys = {
   stats: ['admin', 'stats'] as const,
 };
 
-export type CourseOption = { id: string; title: string; status: CourseStatus };
+type CourseOption = { id: string; title: string; status: CourseStatus };
 
 /** Все курсы платформы (для фильтров «по курсу»): постранично по 100, не больше 20 страниц. */
 export async function listCourseOptions(): Promise<CourseOption[]> {
@@ -69,17 +69,11 @@ export async function listAllAdminReviews(params: {
   return out;
 }
 
-/** Обложка курса: относительный путь /uploads/... или полный URL. */
-export function coverUrl(path: string | null | undefined): string | null {
-  if (!path) return null;
-  return path;
-}
-
 /* ------------------------------------------------------------------ */
 /* Состояние фильтров: в URL (на странице) или локально (во вкладке).   */
 /* ------------------------------------------------------------------ */
 
-export type FilterState = {
+type FilterState = {
   get: (key: string) => string;
   set: (patch: Record<string, string | null>, opts?: { replace?: boolean }) => void;
   reset: () => void;

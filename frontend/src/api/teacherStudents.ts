@@ -14,7 +14,7 @@ import type { Course, Module } from './types';
 export type EnrollmentStatus = 'active' | 'refunded' | 'revoked';
 
 /** Строка таблицы учеников (GET .../students, поле в поле по контракту T22). */
-export type CourseStudentRow = {
+type CourseStudentRow = {
   studentId: string;
   email: string;
   displayName: string;
@@ -27,7 +27,7 @@ export type CourseStudentRow = {
 };
 
 /** Страница списка учеников (paginate на бэкенде, limit ≤ 100, по умолчанию 20). */
-export type CourseStudentPage = {
+type CourseStudentPage = {
   items: CourseStudentRow[];
   total: number;
   page: number;
@@ -35,7 +35,7 @@ export type CourseStudentPage = {
 };
 
 /** Плитки статистики курса (GET .../stats, поле в поле по контракту T22). */
-export type CourseStats = {
+type CourseStats = {
   studentsTotal: number;
   studentsActive: number;
   studentsCompleted: number;
@@ -74,7 +74,7 @@ export function courseStats(courseId: string): Promise<CourseStats> {
  * «Ученики курса» (ключ ['teach-course', id]) — форма ответа у обеих страниц
  * должна совпадать, поэтому функция ничего не распаковывает.
  */
-export type TeacherCourseDetail = {
+type TeacherCourseDetail = {
   course: Course;
   modules: Module[];
 };

@@ -32,7 +32,6 @@ video {
 .page li a:not(.btn),
 .auth-links a,
 .shell-center p a,
-.form-links a,
 .crumbs a {
   color: var(--accent);
   font-weight: 700;
@@ -543,10 +542,6 @@ video {
     font-size: 15.5px;
   }
 
-  .hero .stats {
-    gap: 22px;
-  }
-
   /* Вкладки «Создаём опору»: вертикальная стопка в «пилюле» превращалась
      в овал. На телефоне — горизонтальная лента с прокруткой. */
   .support-card {
@@ -576,32 +571,6 @@ video {
     font-size: 14px;
     white-space: nowrap;
     scroll-snap-align: start;
-  }
-
-  /* «Сделайте первый шаг…» — 5–6 огромных карточек подряд (по 340px)
-     давали лишние экраны прокрутки: на телефоне — лента с прокруткой вбок. */
-  .dreams-row {
-    display: flex !important;
-    gap: 12px;
-    overflow-x: auto;
-    scroll-snap-type: x mandatory;
-    margin: 24px -16px 0;
-    padding: 0 16px 8px;
-    scrollbar-width: none;
-  }
-
-  .dreams-row::-webkit-scrollbar {
-    display: none;
-  }
-
-  .dreams-row > * {
-    flex: 0 0 72%;
-    scroll-snap-align: center;
-  }
-
-  .dream,
-  .dream.hot {
-    min-height: 260px !important;
   }
 
   /* Финальный призыв: декоративные картинки наезжали на заголовок. */
@@ -655,12 +624,6 @@ video {
   color: #fff;
 }
 
-@media (max-width: 400px) {
-  .ac-sort {
-    flex-wrap: wrap;
-  }
-}
-
 /* Поле-ловушка формы заявки: недоступно людям, видно только ботам. */
 .lead-hp {
   position: absolute !important;
@@ -697,19 +660,6 @@ video {
   margin: 0;
 }
 
-.svis-simple-icon {
-  display: grid;
-  place-items: center;
-  width: 56px;
-  height: 56px;
-  margin-bottom: 6px;
-  border-radius: 18px;
-  background: var(--accent);
-  color: #fff;
-  font-size: 24px;
-  font-weight: 800;
-}
-
 @keyframes svis-in {
   from { opacity: 0; transform: translateY(6px); }
 }
@@ -725,175 +675,9 @@ video {
 }
 
 /* ---------- Расширенная админка: действия пользователя, сертификаты, тексты ---------- */
-.aua {
-  display: grid;
-  gap: 14px;
-  margin: 14px 0;
-}
-
-.aua-section {
-  display: grid;
-  gap: 10px;
-  padding: 14px 0;
-  border-top: 1px solid var(--line);
-}
-
-.panel.aua-section {
-  border-top: 1px solid var(--line);
-  padding: 20px;
-  margin-bottom: 16px;
-}
-
-.aua-section h2,
-.aua-section h3 {
-  margin: 0;
-}
-
-.aua-section h3 {
-  font-size: 16px;
-}
-
-.aua-courses {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: grid;
-  gap: 10px;
-}
-
-.aua-course {
-  display: grid;
-  gap: 6px;
-  padding: 12px 14px;
-  border: 1px solid var(--line);
-  border-radius: 14px;
-  background: #fff;
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
-
-.aua-course-head {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
-}
-
-.aua-status {
-  font-size: 12.5px;
-  font-weight: 700;
-  padding: 3px 10px;
-  border-radius: 999px;
-  background: #eef0f3;
-}
-
-.aua-status--active { background: #e4f5ea; color: #14663a; }
-.aua-status--revoked,
-.aua-status--refunded { background: #fdecea; color: #b42318; }
-
-.aua-progress {
-  height: 6px;
-  border-radius: 999px;
-  background: #ececf0;
-  overflow: hidden;
-}
-
-.aua-progress i {
-  display: block;
-  height: 100%;
-  background: var(--accent);
-}
-
-.aua-meta {
-  font-size: 13px;
-}
-
-.aua-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.aua-danger {
-  color: #b42318 !important;
-  border-color: #f3c3bd !important;
-}
-
-.aua-inline {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-  align-items: center;
-}
-
-.aua-inline .input {
-  flex: 1 1 220px;
-  min-width: 0;
-}
-
-.aua-form {
-  display: grid;
-  gap: 10px;
-}
-
-.aua-form label {
-  display: grid;
-  gap: 4px;
-  font-size: 13.5px;
-  font-weight: 600;
-}
-
-.aua-form .btn {
-  justify-self: start;
-}
-
-.au-create {
-  margin-bottom: 16px;
-}
-
-.au-create-form {
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  align-items: end;
-  margin-top: 12px;
-}
-
-.au-create-form .btn {
-  justify-self: stretch;
-}
-
-.aua-note,
-.aua-password {
-  margin: 0;
-  padding: 10px 14px;
-  border-radius: 12px;
-  background: var(--accent-soft);
-  font-weight: 600;
-  overflow-wrap: anywhere;
-}
-
-.aua-password code {
-  font-size: 15px;
-  padding: 2px 6px;
-  border-radius: 6px;
-  background: #fff;
-}
-
-.site-settings-form {
-  margin-top: 18px;
-  padding-top: 16px;
-  border-top: 1px solid var(--line);
-}
-
 .cert-finish-name {
   margin: 0 0 8px;
   font-size: 14px;
-}
-
-@media (max-width: 620px) {
-  .aua-actions .btn {
-    flex: 1 1 calc(50% - 6px);
-  }
 }
 
 /* ---------- Главная: доверие, курс в центре внимания, сертификат, FAQ ---------- */
@@ -1211,55 +995,4 @@ video {
 .perk-ico svg {
   width: 150px;
   height: 125px;
-}
-
-/* ---------- MCP в админке ---------- */
-.admin-mcp h3 {
-  margin: 18px 0 8px;
-  font-size: 16px;
-}
-
-.mcp-token {
-  margin-top: 12px;
-  padding: 14px;
-  border-radius: 14px;
-  background: #fff8e1;
-  border: 1px solid #f5d27a;
-}
-
-.mcp-token p {
-  margin: 0 0 8px;
-}
-
-.mcp-code {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  padding: 10px 12px;
-  border-radius: 12px;
-  background: #141414;
-  color: #e9e9ef;
-  margin-bottom: 10px;
-}
-
-.mcp-code code,
-.mcp-code pre {
-  flex: 1;
-  min-width: 0;
-  margin: 0;
-  font-family: ui-monospace, 'SF Mono', SFMono-Regular, Menlo, 'Cascadia Code', Consolas, 'Roboto Mono', 'DejaVu Sans Mono', 'Liberation Mono', monospace;
-  font-size: 12.5px;
-  line-height: 1.5;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-  color: inherit;
-  background: none;
-}
-
-.mcp-code .btn {
-  flex: none;
-}
-
-.admin-mcp .aua-course.is-revoked {
-  opacity: 0.55;
 }

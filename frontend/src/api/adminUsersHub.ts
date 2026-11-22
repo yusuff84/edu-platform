@@ -8,7 +8,7 @@ import type { AdminUserCourse } from './adminOps';
 import { adminListCertificates, type AdminCertificate } from './adminOps';
 import { listAdminCourses, type AdminCourseRow } from './adminConsole';
 
-export type AdminUserCard = { user: AdminUserRow; items: AdminUserCourse[] };
+type AdminUserCard = { user: AdminUserRow; items: AdminUserCourse[] };
 
 /** Ключи кэша раздела: всё про одного пользователя — под ['admin','user',id]. */
 export const usersListKey = ['admin', 'users'] as const;

@@ -8,7 +8,6 @@
 // Оформление — Skillbox-style (panel/pill/btn из styles.css).
 
 import { useId, useState } from 'react';
-import type { ReactNode } from 'react';
 import type { CompleteLessonInput, Lesson } from '../api/client';
 import { formatDate } from '../api/client';
 import { t } from '../i18n/t';
@@ -53,7 +52,7 @@ export { Markdown };
 
 // ---------- Квиз ----------
 
-export function QuizForm({
+function QuizForm({
   lesson,
   onSubmit,
   disabled,
@@ -140,7 +139,7 @@ export function QuizForm({
 
 // ---------- Код ----------
 
-export function CodeEditor({
+function CodeEditor({
   lesson,
   onSubmit,
   disabled,

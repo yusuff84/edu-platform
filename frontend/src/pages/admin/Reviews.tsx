@@ -37,7 +37,7 @@ import '../../styles/admin-content.css';
 
 const LIMIT = 20;
 
-export function Stars({ rating }: { rating: number }): JSX.Element {
+function Stars({ rating }: { rating: number }): JSX.Element {
   const r = Math.max(0, Math.min(5, Math.round(rating)));
   return (
     <span className={`acn-stars acn-stars--${r}`} role="img" aria-label={`Оценка ${r} из 5`}>
@@ -50,7 +50,7 @@ export function Stars({ rating }: { rating: number }): JSX.Element {
 }
 
 /** Карточка отзыва: оценка, текст, автор, курс; публичный ответ; удаление. */
-export function ReviewCard({ review, showCourse = true }: { review: AdminReview; showCourse?: boolean }): JSX.Element {
+function ReviewCard({ review, showCourse = true }: { review: AdminReview; showCourse?: boolean }): JSX.Element {
   const qc = useQueryClient();
   const { confirm, toast } = useAdminUi();
   const [editing, setEditing] = useState(false);

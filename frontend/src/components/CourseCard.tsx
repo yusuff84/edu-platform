@@ -42,7 +42,7 @@ export function coverFor(key: string): string {
 }
 
 /** Звёзды рейтинга: дробное значение округляется, 0 → «пока без оценок». */
-export function Stars({ value }: { value: number }): JSX.Element {
+function Stars({ value }: { value: number }): JSX.Element {
   const filled = Math.max(0, Math.min(5, Math.round(value)));
   return (
     <span role="img" aria-label={`${t('a11y.ratingLabel')}: ${value.toFixed(1)}`}>

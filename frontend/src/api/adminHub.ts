@@ -1,7 +1,7 @@
 // Новая админка: сводка, журнал действий, сквозные списки (backend: handler/admin_hub.go).
 import { apiFetch, buildQuery } from './client';
 
-export type OverviewAttention = {
+type OverviewAttention = {
   newLeads: number;
   reviewQueue: number;
   unansweredQuestions: number;
@@ -19,7 +19,7 @@ export type OverviewDay = {
   payments: number;
 };
 
-export type OverviewUser = {
+type OverviewUser = {
   id: string;
   email: string;
   displayName: string;
@@ -27,7 +27,7 @@ export type OverviewUser = {
   createdAt: string;
 };
 
-export type OverviewPayment = {
+type OverviewPayment = {
   id: string;
   studentId: string;
   studentEmail: string;
@@ -47,7 +47,7 @@ export type AuditEntry = {
   createdAt: string;
 };
 
-export type AdminOverview = {
+type AdminOverview = {
   attention: OverviewAttention;
   series: OverviewDay[];
   recentUsers: OverviewUser[];
@@ -67,7 +67,7 @@ export function listAudit(params: { q?: string; page?: number; limit?: number })
   );
 }
 
-export type AdminQuestionAnswer = {
+type AdminQuestionAnswer = {
   id: string;
   questionId: string;
   authorId: string;

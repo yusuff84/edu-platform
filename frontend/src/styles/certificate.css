@@ -10,83 +10,6 @@
   max-width: 960px;
 }
 
-/* «Бумажная» карточка: тёплый фон, двойная рамка и печать справа сверху.
-   Селектор .panel.cert-card перебивает общий .panel из styles.css независимо
-   от порядка подключения стилей. */
-.panel.cert-card {
-  position: relative;
-  overflow: hidden;
-  padding: 38px 42px 32px;
-  border: 2px solid #eadfc8;
-  border-radius: var(--r-lg);
-  background:
-    radial-gradient(circle at 100% 0%, rgba(254, 196, 102, 0.34), transparent 46%),
-    linear-gradient(180deg, #fffdf7 0%, var(--surface) 70%);
-  box-shadow: var(--shadow);
-}
-
-.panel.cert-card::before {
-  content: '';
-  position: absolute;
-  inset: 12px;
-  border: 1px solid rgba(232, 196, 111, 0.55);
-  border-radius: calc(var(--r-lg) - 8px);
-  pointer-events: none;
-}
-
-.cert-kicker {
-  margin: 0 0 6px;
-  color: var(--brand);
-  font-size: 12.5px;
-  font-weight: 800;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-}
-
-.cert-title {
-  margin: 0 0 26px;
-  max-width: calc(100% - 150px);
-}
-
-.cert-facts {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 20px 32px;
-  margin: 0 0 26px;
-}
-
-.cert-fact {
-  min-width: 0;
-}
-
-.cert-fact dt {
-  color: var(--muted);
-  font-size: 12px;
-  font-weight: 800;
-  letter-spacing: 0.07em;
-  text-transform: uppercase;
-}
-
-.cert-fact dd {
-  margin: 5px 0 0;
-  font-size: 18px;
-  font-weight: 700;
-  overflow-wrap: anywhere;
-}
-
-/* Номер — «машинный» моноширинный, чтобы его было легко продиктовать/сверить. */
-.cert-number {
-  display: inline-block;
-  padding: 3px 9px;
-  border: 1px dashed #e0bd6b;
-  border-radius: 8px;
-  background: var(--sun-soft);
-  font-family: ui-monospace, 'SF Mono', SFMono-Regular, Menlo, 'Cascadia Code', Consolas, 'Roboto Mono', 'DejaVu Sans Mono', 'Liberation Mono', monospace;
-  font-size: 15.5px;
-  font-weight: 700;
-  letter-spacing: 0.05em;
-}
-
 .cert-actions {
   display: flex;
   align-items: center;
@@ -100,36 +23,6 @@
   color: #14663a;
   font-size: 13.5px;
   font-weight: 700;
-}
-
-/* Печать платформы — декоративная, от текста отделена. */
-.cert-seal {
-  position: absolute;
-  top: 30px;
-  right: 34px;
-  display: grid;
-  place-items: center;
-  gap: 2px;
-  width: 104px;
-  height: 104px;
-  border: 2px dashed #d9ae4f;
-  border-radius: 50%;
-  color: #8a5e14;
-  transform: rotate(-8deg);
-  pointer-events: none;
-}
-
-.cert-seal-mark {
-  font-size: 30px;
-  font-weight: 800;
-  line-height: 1;
-}
-
-.cert-seal-text {
-  font-size: 10px;
-  font-weight: 800;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
 }
 
 /* 404 по номеру — в общем «пустом» блоке, заголовок — обычного цвета. */
@@ -196,24 +89,6 @@
 /* ---------- Адаптив ---------- */
 
 @media (max-width: 620px) {
-  .panel.cert-card {
-    padding: 26px 20px 24px;
-  }
-
-  /* На узком экране печать мешала бы заголовку — убираем декор. */
-  .cert-seal {
-    display: none;
-  }
-
-  .cert-title {
-    max-width: none;
-  }
-
-  .cert-facts {
-    grid-template-columns: 1fr;
-    gap: 16px;
-  }
-
   .cert-actions .btn {
     flex: 1 1 auto;
     justify-content: center;

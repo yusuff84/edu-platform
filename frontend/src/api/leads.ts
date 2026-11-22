@@ -3,7 +3,7 @@ import { apiFetch } from './client';
 
 export type LeadContactMethod = 'phone' | 'telegram' | 'vk' | 'max';
 
-export type CreateLeadInput = {
+type CreateLeadInput = {
   name: string;
   phone: string;
   email: string;

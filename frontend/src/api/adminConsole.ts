@@ -7,7 +7,7 @@ import { apiFetch, buildQuery } from './client';
 import type { CourseStatus } from './client';
 
 /** Агрегаты сводки (GET /admin/stats). Денежные суммы — в копейках. */
-export type AdminStats = {
+type AdminStats = {
   users: {
     total: number;
     students: number;
@@ -57,7 +57,7 @@ export type AdminCourseRow = {
 };
 
 /** Страница админского списка курсов: total — до пагинации. */
-export type AdminCoursePage = {
+type AdminCoursePage = {
   items: AdminCourseRow[];
   total: number;
   page: number;
@@ -71,7 +71,7 @@ export type AdminCourseSort = 'createdAt' | 'updatedAt' | 'title' | 'price' | 's
 export type AdminCourseDir = 'asc' | 'desc';
 
 /** Параметры админского списка курсов (все необязательны, кроме новых — аддитивных). */
-export type AdminCourseListParams = {
+type AdminCourseListParams = {
   status?: string;
   q?: string;
   page?: number;
@@ -86,16 +86,6 @@ export type AdminCourseListParams = {
   from?: string;
   /** Верхняя граница периода по createdAt, ГГГГ-ММ-ДД (включительно, T48). */
   to?: string;
-};
-
-/** Строка отзыва курса (GET /admin/courses/{id}/reviews). */
-export type AdminReviewRow = {
-  id: string;
-  studentId: string;
-  studentEmail: string;
-  rating: number;
-  body: string;
-  createdAt: string;
 };
 
 /** GET /admin/stats — все агрегаты сводки одним запросом. */
@@ -150,13 +140,6 @@ export function unarchiveAdminCourse(id: string): Promise<{ course: AdminCourseR
   return apiFetch<{ course: AdminCourseRow }>(
     `/admin/courses/${encodeURIComponent(id)}/unarchive`,
     { method: 'POST' },
-  );
-}
-
-/** GET /admin/courses/{id}/reviews — items всегда массив; 404, если курса нет. */
-export function listCourseReviews(courseId: string): Promise<{ items: AdminReviewRow[] }> {
-  return apiFetch<{ items: AdminReviewRow[] }>(
-    `/admin/courses/${encodeURIComponent(courseId)}/reviews`,
   );
 }
 

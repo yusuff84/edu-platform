@@ -4,9 +4,8 @@ import { useQuery } from '@tanstack/react-query';
 import { me, myTeaching } from '../api/client';
 import { t } from '../i18n/t';
 import { useSeo } from '../app/useSeo';
-import MyCoursesPage from './MyCourses';
 
-export function RequireRole({
+function RequireRole({
   roles,
   children,
 }: {
@@ -49,20 +48,9 @@ export function RequireRole({
   return <>{children}</>;
 }
 
-export function StudentCab(): JSX.Element {
-  useSeo('Кабинет ученика — skillex.space');
-  return (
-    <RequireRole roles={['student', 'teacher', 'admin']}>
-      <MyCoursesPage />
-    </RequireRole>
-  );
-}
-
 /**
  * Кабинет учителя. Основной гвард роли стоит в router.tsx (RouteGuards.tsx,
- * общий query ['me']); локальный RequireRole ниже оставлен как второй рубеж
- * и для совместимости с разводкой, где кабинеты гвардируются сами. StudentCab
- * и AdminCab сохранены — их использует такая разводка маршрутов.
+ * общий query ['me']); локальный RequireRole выше оставлен как второй рубеж.
  */
 export function TeacherCab(): JSX.Element {
   useSeo('Кабинет преподавателя — skillex.space');

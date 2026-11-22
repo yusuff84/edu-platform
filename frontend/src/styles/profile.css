@@ -312,30 +312,6 @@
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 14px;
 }
-.learning-dashboard-tile {
-  display: grid;
-  align-content: start;
-  gap: 10px;
-  min-width: 0;
-}
-.learning-dashboard-tile-art {
-  display: grid;
-  place-items: center;
-  aspect-ratio: 1.65;
-  border-radius: 16px;
-  color: #fff;
-  font-size: 32px;
-}
-.learning-dashboard-tile-name {
-  color: var(--muted);
-  font-size: 13px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.learning-dashboard-tile strong {
-  font-size: 15px;
-}
 .learning-dashboard .cab-head {
   display: flex;
   align-items: center;
@@ -352,9 +328,6 @@
   box-shadow: none;
   min-height: 330px;
   padding: 28px;
-}
-.learning-dashboard-course .enrolled-cover {
-  display: none;
 }
 .learning-dashboard-course .learning-dashboard-course-label,
 .learning-dashboard-course .progress-meta {
@@ -406,39 +379,6 @@
   /* «Продолжить обучение»: плитка — строкой на всю ширину. */
   .learning-dashboard-tiles {
     grid-template-columns: 1fr !important;
-  }
-
-  .learning-dashboard-tile {
-    display: grid !important;
-    grid-template-columns: 96px minmax(0, 1fr);
-    grid-template-areas: 'art name' 'art meta';
-    align-items: center;
-    column-gap: 14px;
-    padding: 10px;
-    border-radius: 18px;
-    background: #fff;
-    border: 1px solid var(--line);
-  }
-
-  .learning-dashboard-tile-art {
-    grid-area: art;
-    width: 96px !important;
-    height: 64px !important;
-    aspect-ratio: auto !important;
-    border-radius: 12px;
-  }
-
-  .learning-dashboard-tile-name {
-    grid-area: name;
-    align-self: end;
-    font-weight: 800;
-    font-size: 15px;
-    color: var(--fg);
-  }
-
-  .learning-dashboard-tile > :nth-child(3) {
-    grid-area: meta;
-    align-self: start;
   }
 
   .learning-dashboard-course .btn-row .btn {

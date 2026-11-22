@@ -6,7 +6,7 @@ import { apiFetch, buildQuery } from './client';
 import type { PaymentStatus, User } from './types';
 
 /** Прогресс ученика по курсу (GET /me/courses/{id}/progress). */
-export type CourseProgress = {
+type CourseProgress = {
   courseId: string;
   /** id пройденных уроков в порядке программы; всегда массив (пустой — []). */
   completedLessonIds: string[];
@@ -20,7 +20,7 @@ export type CourseProgress = {
 };
 
 /** Строка истории платежей (GET /me/payments). */
-export type PaymentRow = {
+type PaymentRow = {
   id: string;
   courseId: string;
   /** Название курса; пустая строка, если курс удалён. */
@@ -35,14 +35,14 @@ export type PaymentRow = {
 };
 
 /** Страница истории платежей (конверт пагинации контракта T23). */
-export type PaymentPage = { items: PaymentRow[]; total: number; page: number; limit: number };
+type PaymentPage = { items: PaymentRow[]; total: number; page: number; limit: number };
 
 /**
  * Профиль из GET /me/profile: все поля User плюс createdAt.
  * createdAt в общий types.ts не добавлен — этот файл не принадлежит T30,
  * поэтому поле расширяем здесь (подтип User совместим со спекой задачи).
  */
-export type MeProfile = User & { createdAt: string };
+type MeProfile = User & { createdAt: string };
 
 /** Прогресс ученика по курсу. 403 — нет активной записи, 404 — курса нет. */
 export function courseProgress(courseId: string): Promise<CourseProgress> {

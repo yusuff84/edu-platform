@@ -57,7 +57,7 @@ const PAGE_LIMIT = 20;
 const EXPORT_PAGE_LIMIT = 100;
 const EXPORT_MAX_PAGES = 50;
 
-export const ROLE_TONE: Record<string, Tone> = { student: 'neutral', teacher: 'info', admin: 'brand' };
+const ROLE_TONE: Record<string, Tone> = { student: 'neutral', teacher: 'info', admin: 'brand' };
 
 export function RoleBadge({ role }: { role: string }): JSX.Element {
   return <Badge tone={ROLE_TONE[role] ?? 'neutral'}>{ROLE_LABEL[role] ?? role}</Badge>;
@@ -495,7 +495,7 @@ const COURSE_STATUS: Record<string, { label: string; tone: Tone }> = {
   archived: { label: 'В архиве', tone: 'neutral' },
 };
 
-export function GrantCourseModal({ user, onClose }: { user: AdminUserRow; onClose: () => void }): JSX.Element {
+function GrantCourseModal({ user, onClose }: { user: AdminUserRow; onClose: () => void }): JSX.Element {
   const { toast } = useAdminUi();
   const invalidate = useInvalidateUsers();
   const qc = useQueryClient();

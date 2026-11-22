@@ -89,7 +89,6 @@
   align-items: stretch;
 }
 
-.asy-codebox--block .pre,
 .asy-codebox--block .asy-pre {
   width: 100%;
   box-sizing: border-box;

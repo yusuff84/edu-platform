@@ -3,7 +3,7 @@
 // переходах страница уточняет их под свой контент.
 import { useEffect } from 'react';
 
-export const DEFAULT_TITLE = 'skillex.space — IT-курсы для начинающих';
+const DEFAULT_TITLE = 'skillex.space — IT-курсы для начинающих';
 export const DEFAULT_DESCRIPTION =
   'Онлайн-курсы для начинающих: короткие видеоуроки, конспекты и тесты с автоматической проверкой. Учитесь в своём темпе и получайте сертификат о прохождении курса.';
 

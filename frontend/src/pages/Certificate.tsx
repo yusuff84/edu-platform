@@ -37,18 +37,6 @@ async function copyToClipboard(value: string): Promise<boolean> {
   }
 }
 
-/** Дата выдачи без времени: «19.10.2026». Пустое/некорректное значение → «—». */
-function formatIssuedDate(value: string): string {
-  if (!value) return '—';
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return '—';
-  return d.toLocaleDateString('ru-RU', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-  });
-}
-
 /** Дружелюбный 404: сертификата с таким номером нет (или номер пуст). */
 function CertificateNotFound(): JSX.Element {
   return (

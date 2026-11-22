@@ -1,8 +1,7 @@
 import { useState } from 'react';
 import { Link, Navigate, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
-import { z } from 'zod';
-import { zodResolver } from '@hookform/resolvers/zod';
+import { EMAIL_RE, firstError, makeResolver, textLength } from '../app/formResolver';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ApiError, login, register } from '../api/client';
 // Те же опции query ['me'], что у RouteGuards/Layout: один ключ — один запрос,
@@ -17,23 +16,30 @@ import { setSessionUser } from '../app/sessionCache';
 // teacher@local) заводятся с локальным доменом, а проверку учётных данных
 // всё равно делает сервер. Достаточно непустой строки с «@» — иначе
 // браузерная валидация блокировала вход в документированные демо-учётки.
-const loginSchema = z.object({
-  email: z
-    .string()
-    .trim()
-    .min(1, 'Укажите email')
-    .refine((v) => v.includes('@'), 'Некорректный email'),
-  password: z.string().min(1, 'Укажите пароль'),
+type LoginForm = { email: string; password: string };
+type RegisterForm = { email: string; password: string; inviteToken?: string };
+
+const loginResolver = makeResolver<LoginForm, LoginForm>((v) => {
+  const email = v.email.trim();
+  const errors = {
+    email: firstError([email.length < 1, 'Укажите email'], [!email.includes('@'), 'Некорректный email']),
+    password: firstError([v.password.length < 1, 'Укажите пароль']),
+  };
+  return errors.email || errors.password ? { errors } : { values: { email, password: v.password } };
 });
 
-const registerSchema = z.object({
-  email: z.string().min(1, 'Укажите email').email('Некорректный email'),
-  password: z.string().min(8, 'Пароль не короче 8 символов').refine(value => new TextEncoder().encode(value).length <= 72, 'Пароль слишком длинный. Сократите его.'),
-  inviteToken: z.string().optional(),
+const registerResolver = makeResolver<RegisterForm, RegisterForm>((v) => {
+  const errors = {
+    email: firstError([v.email.length < 1, 'Укажите email'], [!EMAIL_RE.test(v.email), 'Некорректный email']),
+    password: firstError(
+      [textLength(v.password) < 8, 'Пароль не короче 8 символов'],
+      [new TextEncoder().encode(v.password).length > 72, 'Пароль слишком длинный. Сократите его.'],
+    ),
+  };
+  return errors.email || errors.password
+    ? { errors }
+    : { values: { email: v.email, password: v.password, ...(v.inviteToken !== undefined ? { inviteToken: v.inviteToken } : {}) } };
 });
-
-type LoginForm = z.infer<typeof loginSchema>;
-type RegisterForm = z.infer<typeof registerSchema>;
 
 /**
  * Внутренний путь SPA: начинается ровно с одного «/», второй символ — не «/»
@@ -115,7 +121,7 @@ export function Login(): JSX.Element {
     register: rf,
     handleSubmit,
     formState: { errors },
-  } = useForm<LoginForm>({ resolver: zodResolver(loginSchema) });
+  } = useForm<LoginForm>({ resolver: loginResolver });
 
   const mutation = useMutation({
     mutationFn: (v: LoginForm) => login(v),
@@ -224,7 +230,7 @@ export function Register(): JSX.Element {
     handleSubmit,
     formState: { errors },
   } = useForm<RegisterForm>({
-    resolver: zodResolver(registerSchema),
+    resolver: registerResolver,
     // Токен из ссылки сразу в поле формы: пользователь видит, что он приглашён,
     // поле остаётся редактируемым, а при отправке значение уходит в register().
     defaultValues: { inviteToken: inviteFromUrl },

@@ -95,7 +95,7 @@ export function CourseStatusBadge({ status }: { status: CourseStatus }): JSX.Ele
 }
 
 /** Минимум данных о курсе для действий администратора. */
-export type OpsCourse = {
+type OpsCourse = {
   id: string;
   slug: string;
   title: string;

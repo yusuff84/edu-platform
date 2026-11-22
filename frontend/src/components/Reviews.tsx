@@ -2,8 +2,7 @@ import { useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
-import { z } from 'zod';
-import { zodResolver } from '@hookform/resolvers/zod';
+import { coerceNumber, firstError, makeResolver, textLength } from '../app/formResolver';
 import {
   ApiError,
   createReview,
@@ -21,21 +20,22 @@ import '../styles/reviews-extra.css';
 
 // Сообщения валидации: ключей словаря для них нет (см. отчёт T04) —
 // оставляем литералы, как и было в исходной форме.
-const schema = z.object({
-  rating: z.coerce
-    .number()
-    .int('Оценка от 1 до 5')
-    .min(1, 'Оценка от 1 до 5')
-    .max(5, 'Оценка от 1 до 5'),
-  // Ключ текста отзыва в контракте — body (не text): {rating, body}.
-  body: z
-    .string()
-    .trim()
-    .min(1, 'Напишите текст отзыва')
-    .max(2000, 'Отзыв слишком длинный'),
-});
+// Ключ текста отзыва в контракте — body (не text): {rating, body}.
+type FormInput = { rating: number | string; body: string };
+type Form = { rating: number; body: string };
 
-type Form = z.infer<typeof schema>;
+const RATING_ERROR = 'Оценка от 1 до 5';
+const reviewResolver = makeResolver<FormInput, Form>((v) => {
+  const n = coerceNumber(v.rating);
+  const body = v.body.trim();
+  const errors = {
+    rating: n.ok
+      ? firstError([!Number.isInteger(n.value) || n.value < 1 || n.value > 5, RATING_ERROR])
+      : n.message,
+    body: firstError([body.length < 1, 'Напишите текст отзыва'], [textLength(body) > 2000, 'Отзыв слишком длинный']),
+  };
+  return errors.rating || errors.body || !n.ok ? { errors } : { values: { rating: n.value, body } };
+});
 
 /** T69: текст ответа по контракту — после trim 3..2000; ключа словаря нет. */
 const REPLY_LENGTH_ERROR = 'Ответ: от 3 до 2000 символов';
@@ -88,8 +88,8 @@ export default function Reviews({
     handleSubmit,
     reset,
     formState: { errors },
-  } = useForm<z.input<typeof schema>, unknown, Form>({
-    resolver: zodResolver(schema),
+  } = useForm<FormInput, unknown, Form>({
+    resolver: reviewResolver,
     defaultValues: { rating: 5, body: '' },
   });
 

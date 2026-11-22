@@ -35,7 +35,7 @@ export type AdminEnrollmentPage = {
 };
 
 /** Ответ POST revoke/unrevoke (T16): новая пара ученик↔курс со статусом. */
-export type AdminEnrollmentStatusResponse = {
+type AdminEnrollmentStatusResponse = {
   studentId: string;
   courseId: string;
   status: AdminEnrollmentStatus;

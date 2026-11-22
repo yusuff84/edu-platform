@@ -91,7 +91,7 @@ function splitRow(line: string): string[] {
 }
 
 /** Разбирает markdown на блоки. */
-export function parseBlocks(src: string): MdBlock[] {
+function parseBlocks(src: string): MdBlock[] {
   const lines = src.replace(/\r\n?/g, '\n').split('\n');
   const blocks: MdBlock[] = [];
   let i = 0;
@@ -204,7 +204,7 @@ export function parseBlocks(src: string): MdBlock[] {
 const RE_INLINE =
   /(!?\[[^\]\n]*\]\([^\s)]+\)|\[\[[^\]\n]{1,24}\]\]|==[^=\n]+==|\*\*\*[^*\n]+\*\*\*|\*\*[^*\n]+\*\*|`[^`]+`|\*(?:[^*\n]|\*\*[^*\n]+\*\*)+\*)/g;
 
-export function safeMarkdownUrl(value: string): string | null {
+function safeMarkdownUrl(value: string): string | null {
   if (value.startsWith('/') && !value.startsWith('//') && !value.includes('\\')) return value;
   try {
     const url = new URL(value);
@@ -214,7 +214,7 @@ export function safeMarkdownUrl(value: string): string | null {
   }
 }
 
-export function renderInline(text: string, keyBase: string): ReactNode[] {
+function renderInline(text: string, keyBase: string): ReactNode[] {
   return text
     .split(RE_INLINE)
     .filter((part) => part !== '')

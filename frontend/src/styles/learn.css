@@ -190,14 +190,6 @@
   font-weight: 600;
 }
 
-.quiz-explanation {
-  background: #fff8e1;
-  border-left: 3px solid #f9a825;
-  border-radius: 0 6px 6px 0;
-  margin: 0.5rem 0;
-  padding: 0.5rem 0.75rem;
-}
-
 /* ---------- Код ---------- */
 
 .code-template {
