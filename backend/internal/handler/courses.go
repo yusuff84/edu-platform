@@ -190,6 +190,9 @@ type lessonView struct {
 	StartsAt  *time.Time `json:"startsAt,omitempty"`
 	Quiz      any        `json:"quiz,omitempty"`
 	CodeTask  any        `json:"codeTask,omitempty"`
+	// HasText — только в режиме оглавления (?view=outline): у урока есть текст,
+	// хотя сам текст не передаётся.
+	HasText bool `json:"hasText,omitempty"`
 }
 
 type moduleView struct {
@@ -237,6 +240,9 @@ func lessonToView(l *repo.Lesson, full bool) lessonView {
 
 // GetCourse — GET /courses/{slug}: страница курса с модулями и уроками.
 // Неопубликованные курсы видят только владелец и админ.
+// ?view=outline — только оглавление: без текстов уроков, тестов и заданий
+// (страница курса, витрина на главной, плитка «Продолжить» — им тексты не нужны,
+// а у больших курсов это сотни килобайт).
 func (a *App) GetCourse(w http.ResponseWriter, r *http.Request) {
 	slug := chi.URLParam(r, "slug")
 	c, ok := a.Store.GetCourseBySlug(slug)
@@ -256,6 +262,7 @@ func (a *App) GetCourse(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusNotFound, "Курс не найден")
 		return
 	}
+	outline := r.URL.Query().Get("view") == "outline"
 	mods := a.Store.ListModulesByCourse(c.ID)
 	byModule := a.lessonsByModule(c.ID)
 	mv := make([]moduleView, 0, len(mods))
@@ -267,6 +274,10 @@ func (a *App) GetCourse(w http.ResponseWriter, r *http.Request) {
 			if !full && !canLearn && c.PriceCents > 0 && !l.IsPreview {
 				view.BodyMD, view.VideoURL, view.LiveURL = "", "", ""
 				view.StartsAt, view.Quiz, view.CodeTask = nil, nil, nil
+			}
+			if outline {
+				view.HasText = view.BodyMD != ""
+				view.BodyMD, view.Quiz, view.CodeTask = "", nil, nil
 			}
 			lv = append(lv, view)
 		}

@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { formatPrice, getCourse } from '../api/client';
+import { formatPrice, getCourseOutline } from '../api/client';
 import type { CourseItem } from '../api/types';
 import { coverUrl } from '../api/teacherCover';
 import { coverFor } from './CourseCard';
@@ -19,7 +19,7 @@ function plural(n: number, one: string, few: string, many: string): string {
  * что внутри, ещё до перехода на страницу курса.
  */
 export function FeaturedCourse({ course, loggedIn }: { course: CourseItem; loggedIn: boolean }): JSX.Element {
-  const detail = useQuery({ queryKey: ['course', course.slug], queryFn: () => getCourse(course.slug), staleTime: 60_000 });
+  const detail = useQuery({ queryKey: ['course', course.slug], queryFn: () => getCourseOutline(course.slug), staleTime: 60_000 });
   const modules = detail.data?.modules ?? [];
   const lessons = modules.flatMap((m) => m.lessons);
   const quizzes = lessons.filter((l) => l.kind === 'quiz').length;

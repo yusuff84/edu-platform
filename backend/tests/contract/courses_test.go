@@ -141,3 +141,29 @@ func TestCoursesCatalogAndPage(t *testing.T) {
 		t.Fatalf("student create course: status=%d body=%s", rec.Code, rec.Body.String())
 	}
 }
+
+// ?view=outline — оглавление без текстов уроков и тестов (страница курса,
+// витрина на главной): у больших курсов полный ответ весит сотни килобайт.
+func TestCoursePageOutline(t *testing.T) {
+	app, router := newTestApp()
+	_, _, slug := seedPublishedCourse(t, app, router, 0)
+
+	full := doRequest(t, router, http.MethodGet, "/api/v1/courses/"+slug, nil, nil)
+	out := doRequest(t, router, http.MethodGet, "/api/v1/courses/"+slug+"?view=outline", nil, nil)
+	if full.Code != http.StatusOK || out.Code != http.StatusOK {
+		t.Fatalf("status full=%d outline=%d", full.Code, out.Code)
+	}
+	if !strings.Contains(full.Body.String(), `"quiz":`) {
+		t.Fatalf("полный ответ бесплатного курса должен содержать тест урока: %s", full.Body.String())
+	}
+	body := out.Body.String()
+	if strings.Contains(body, `"bodyMd"`) || strings.Contains(body, `"quiz":`) || strings.Contains(body, `"codeTask"`) {
+		t.Fatalf("оглавление содержит тексты или тесты: %s", body)
+	}
+	if !strings.Contains(body, `"title":"Переменные"`) || !strings.Contains(body, `"kind":"quiz"`) {
+		t.Fatalf("оглавление без названий и типов уроков: %s", body)
+	}
+	if len(body) >= len(full.Body.String()) {
+		t.Fatalf("оглавление не меньше полного ответа: %d >= %d", len(body), len(full.Body.String()))
+	}
+}

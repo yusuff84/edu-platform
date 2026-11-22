@@ -9,7 +9,7 @@ import {
   formatDate,
   formatMoney,
   formatPrice,
-  getCourse,
+  getCourseOutline,
   getLessonPreview,
   me,
   myCourses,
@@ -56,7 +56,7 @@ const ALL_CLOSED = '__closed';
 function lessonKindLabel(l: Lesson): string {
   if (l.kind === 'video_text') {
     if (l.videoUrl) return 'Видео';
-    if (l.bodyMd) return 'Текст';
+    if (l.bodyMd || l.hasText) return 'Текст';
   }
   return t(`kind.${l.kind}`);
 }
@@ -80,7 +80,7 @@ export default function Course(): JSX.Element {
   // После T01 getCourse распаковывает конверт { course, modules } в CourseDetail.
   const courseQuery = useQuery({
     queryKey: ['course', slug],
-    queryFn: () => getCourse(slug),
+    queryFn: () => getCourseOutline(slug),
     enabled: Boolean(slug),
     retry: false,
   });

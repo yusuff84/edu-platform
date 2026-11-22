@@ -194,6 +194,8 @@ export interface Lesson {
   position: number;
   /** Markdown-текст урока (omitempty). */
   bodyMd?: string;
+  /** Только в оглавлении (getCourseOutline): у урока есть текст. */
+  hasText?: boolean;
   videoUrl?: string;
   liveUrl?: string;
   /** RFC3339 (omitempty). */

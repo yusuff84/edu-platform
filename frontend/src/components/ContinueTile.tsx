@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { getCourse } from '../api/client';
+import { getCourseOutline } from '../api/client';
 import { LessonKindIcon } from './LessonKindIcon';
 import { VideoPoster } from './VideoPoster';
 import { videoPosterUrl } from '../app/media';
@@ -19,7 +19,7 @@ interface Props {
  * и процент прохождения курса.
  */
 export function ContinueTile({ courseId, courseSlug, courseTitle, nextLessonId, percent }: Props): JSX.Element {
-  const course = useQuery({ queryKey: ['course', courseSlug], queryFn: () => getCourse(courseSlug), enabled: Boolean(courseSlug), staleTime: 60_000 });
+  const course = useQuery({ queryKey: ['course', courseSlug], queryFn: () => getCourseOutline(courseSlug), enabled: Boolean(courseSlug), staleTime: 60_000 });
   const lessons = (course.data?.modules ?? []).flatMap((m) => m.lessons);
   const lesson = (nextLessonId ? lessons.find((l) => l.id === nextLessonId) : undefined) ?? lessons[0];
   const href = lesson ? `/learn/${courseId}/${lesson.id}` : `/learn/${courseId}`;

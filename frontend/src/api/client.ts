@@ -230,6 +230,17 @@ export function getCourse(slug: string): Promise<CourseDetail> {
 }
 
 /**
+ * Оглавление курса (?view=outline): модули и уроки без текстов, тестов и заданий —
+ * для страницы курса, витрины и плитки «Продолжить». У урока с текстом — hasText.
+ * Обучению (Learn) нужен полный getCourse.
+ */
+export function getCourseOutline(slug: string): Promise<CourseDetail> {
+  return apiFetch<{ course: Course; modules: Module[] }>(
+    `/courses/${encodeURIComponent(slug)}?view=outline`,
+  ).then((res) => ({ ...res.course, modules: res.modules }));
+}
+
+/**
  * T80: похожие курсы (T79): GET /courses/{id}/similar?limit=N.
  * id — UUID курса (не slug), поэтому кодируется в пути. Конверт
  * { items, total } распаковывается в массив CourseItem; пустой список —

@@ -58,6 +58,8 @@ export default function Questions({
 
   const [page, setPage] = useState(1);
   const [questionDraft, setQuestionDraft] = useState('');
+  // Поле вопроса компактное: раскрывается при фокусе или когда в нём есть текст.
+  const [askFocused, setAskFocused] = useState(false);
   const [questionError, setQuestionError] = useState('');
   const [answerForId, setAnswerForId] = useState<string | null>(null);
   const [answerDraft, setAnswerDraft] = useState('');
@@ -378,18 +380,19 @@ export default function Questions({
         <p className="muted">{t('p9.qa.enrollToAsk')}</p>
       )}
       {canWrite && (
-        <div className="qa-ask">
-          <h3>{t('p9.qa.ask')}</h3>
+        <div className={`qa-ask${askFocused || questionDraft ? ' is-open' : ''}`}>
           <form className="qa-form" onSubmit={submitQuestion}>
-            <label className="field" htmlFor="qa-question-text">
-              <span>{t('p9.qa.askTitle')}</span>
+            <label className="qa-ask-field" htmlFor="qa-question-text">
+              <span className="sr-only">{t('p9.qa.askTitle')}</span>
               <textarea
                 id="qa-question-text"
                 className="input"
-                rows={4}
+                rows={askFocused || questionDraft ? 3 : 1}
                 maxLength={2000}
-                placeholder={t('p9.qa.placeholder')}
+                placeholder={askFocused ? t('p9.qa.placeholder') : 'Задать вопрос по уроку…'}
                 value={questionDraft}
+                onFocus={() => setAskFocused(true)}
+                onBlur={() => setAskFocused(false)}
                 aria-invalid={Boolean(questionError)}
                 aria-describedby={questionError ? 'qa-question-error' : undefined}
                 onChange={(e) => {
@@ -398,20 +401,24 @@ export default function Questions({
                 }}
               />
             </label>
-            <div className="qa-form-foot">
-              <span
-                className={`qa-counter${questionDraft.length > 2000 ? ' over' : ''}`}
-              >
-                {questionDraft.length}/2000
-              </span>
-              <button
-                type="submit"
-                className="btn btn-primary"
-                disabled={askMutation.isPending}
-              >
-                {t('p9.qa.send')}
-              </button>
-            </div>
+            {(askFocused || questionDraft) && (
+              <div className="qa-form-foot">
+                <span
+                  className={`qa-counter${questionDraft.length > 2000 ? ' over' : ''}`}
+                >
+                  {questionDraft.length}/2000
+                </span>
+                <button
+                  type="submit"
+                  className="btn btn-primary btn-sm"
+                  disabled={askMutation.isPending || !questionDraft.trim()}
+                  // mousedown до blur: иначе поле свернётся раньше, чем сработает клик.
+                  onMouseDown={(e) => e.preventDefault()}
+                >
+                  {t('p9.qa.send')}
+                </button>
+              </div>
+            )}
             {questionError && (
               <p className="err" id="qa-question-error" role="alert">
                 {questionError}
@@ -438,12 +445,9 @@ export default function Questions({
       )}
 
       {questionsQuery.isSuccess && questions.length === 0 && (
-        <div className="qa-empty">
-          <p>
-            <strong>{t('p9.qa.empty')}</strong>
-          </p>
-          <p className="muted">{t('p9.qa.emptyHint')}</p>
-        </div>
+        <p className="qa-empty">
+          {t('p9.qa.empty')}.{canWrite ? ' Задайте первый — преподаватель или другие ученики ответят.' : ''}
+        </p>
       )}
 
       {questions.length > 0 && (
