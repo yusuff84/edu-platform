@@ -1,8 +1,8 @@
 package handler
 
 // T41: тесты транслитерации кириллицы в slug и уникализации авто-slug.
-// Таблица примеров — из постановки Task/T41-slug-translit.md и контракта
-// (Task/00-api-contract.md, «Slug: транслитерация кириллицы (T41)»).
+// Таблица примеров — из постановки docs/api-contract.md (раздел T41) и контракта
+// (docs/api-contract.md, «Slug: транслитерация кириллицы (T41)»).
 
 import (
 	"encoding/json"

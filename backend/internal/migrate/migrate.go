@@ -108,20 +108,6 @@ func isSeedFile(name string) bool {
 	return strings.Contains(base, "seed") || base == "005_price_fix.sql"
 }
 
-func applyFile(ctx context.Context, pool *pgxpool.Pool, path string) error {
-	sql, err := os.ReadFile(path)
-	if err != nil {
-		return fmt.Errorf("чтение миграции %s: %w", path, err)
-	}
-	if strings.TrimSpace(string(sql)) == "" {
-		return nil
-	}
-	if _, err := pool.Exec(ctx, string(sql)); err != nil {
-		return fmt.Errorf("применение миграции %s: %w", filepath.Base(path), err)
-	}
-	return nil
-}
-
 // SeedIfEmpty применяет seedFile, только если таблица courses пуста.
 // Вызывается cmd/api ТОЛЬКО в dev-режиме: в production демо-данные запрещены.
 // Файл должен быть идемпотентным (ON CONFLICT DO NOTHING).

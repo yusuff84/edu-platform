@@ -8,7 +8,7 @@ package contract_test
 //   DELETE /admin/reviews/{id}                 — удаление отзыва;
 //   GET  /admin/enrollments                    — все записи на курсы.
 //
-// Форма ответов — ровно по Task/T25-admin-console.md (фронтенд T27
+// Форма ответов — ровно по docs/api-contract.md (раздел T25) (фронтенд T27
 // пишется параллельно): items всегда массив, суммы в копейках. Отдельно
 // закреплено, что новые маршруты не затирают существующую очередь
 // модерации /admin/courses/review и её контракт.
@@ -82,22 +82,6 @@ func courseItemByID(t *testing.T, items []any, id string) map[string]any {
 		}
 	}
 	t.Fatalf("курс %s не найден среди %d строк", id, len(items))
-	return nil
-}
-
-// enrollRowByEmail находит строку записи на курс по email ученика.
-func enrollRowByEmail(t *testing.T, items []any, email string) map[string]any {
-	t.Helper()
-	for _, raw := range items {
-		row, ok := raw.(map[string]any)
-		if !ok {
-			continue
-		}
-		if row["studentEmail"] == email {
-			return row
-		}
-	}
-	t.Fatalf("запись ученика %s не найдена среди %d строк", email, len(items))
 	return nil
 }
 

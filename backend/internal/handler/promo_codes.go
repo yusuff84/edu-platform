@@ -3,7 +3,7 @@ package handler
 // T63 — промокоды: создание/список/деактивация у преподавателя, проверка
 // кода на странице курса и покупка со скидкой.
 //
-// Источник правды — Task/00-api-contract.md, раздел «T63 — промокоды»
+// Источник правды — docs/api-contract.md, раздел «T63 — промокоды»
 // (заморожен). Маршруты учителя регистрируются RegisterTeacherPromoRoutes
 // внутри r.Route("/teacher", ...) рядом с остальными Register*-методами
 // (middleware.go): requireAuth + requireRole(teacher, admin) уже навешены

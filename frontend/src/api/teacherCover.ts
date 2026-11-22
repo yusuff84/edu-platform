@@ -1,4 +1,4 @@
-// T57: API-клиент обложки курса (контракт T54 из Task/00-api-contract.md,
+// T57: API-клиент обложки курса (контракт T54 из docs/api-contract.md,
 // раздел «Эндпоинты волны P7»). Всё только с credentials:include (cookie-сессии),
 // ошибки — через ApiError из api/client.ts.
 //

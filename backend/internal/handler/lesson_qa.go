@@ -1,7 +1,7 @@
 package handler
 
 // T71 — вопросы и ответы по урокам (волна P9).
-// Контракт — Task/00-api-contract.md, раздел «T71 — Вопросы и ответы по
+// Контракт — docs/api-contract.md, раздел «T71 — Вопросы и ответы по
 // урокам» (заморожен):
 //   - GET  /courses/{id}/questions?lessonId=&page=&limit= — публичный;
 //   - POST /courses/{id}/questions — записанные, владелец курса, admin;

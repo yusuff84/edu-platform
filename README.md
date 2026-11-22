@@ -47,8 +47,7 @@ origin'у** — просто перенаправить 3000 на другой �
 ```bash
 # PowerShell
 $env:WEB_PORT="3001"
-# Важно: список — это allowlist. Оставьте в нём и :3000, иначе сквозные
-# скрипты (они шлют Origin http://localhost:3000) получат 403 на не-GET.
+# Важно: список — это allowlist; перечислите все адреса, с которых открываете UI.
 $env:ALLOWED_ORIGINS="http://localhost:3000,http://127.0.0.1:3000,http://localhost:3001,http://127.0.0.1:3001"
 docker compose up -d --build --force-recreate api web
 
@@ -61,8 +60,7 @@ WEB_PORT=3001 ALLOWED_ORIGINS="http://localhost:3000,http://127.0.0.1:3000,http:
 (см. `docker-compose.yml`, `internal/config/config.go`). Если фронтенд отдаётся
 на другом порту, а `ALLOWED_ORIGINS` не поправлен, UI отвечает
 `403 «Недопустимый источник запроса»` на любой не-GET — вход, сохранение,
-архивацию курса. Сквозные скрипты принимают порт отдельно:
-`powershell -File qa-abc.ps1 -WebUrl http://localhost:3001`.
+архивацию курса.
 
 ## Демо-учётки
 
@@ -137,51 +135,15 @@ docker run --rm -v "${PWD}\runner:/src" -w /src golang:1.24-bookworm sh -c "apt-
 недоступен из вашей сети, замените `deb.debian.org` на рабочее зеркало
 (например, `mirror.yandex.ru`) в команде `apt-get update`.
 
-Сквозной QA-скрипт (**49 проверок**, код возврата 0/1):
+### Сквозные проверки
 
-```bash
-# Требует запущенного стенда. web (фронтенд) не обязателен — недоступность
-# считается SKIP, а не провалом:
-docker compose up -d db api runner
-
-powershell -File qa-abc.ps1 -AdminEmail admin@local -AdminPassword admin1234
-pwsh -File qa-abc.ps1 -AdminEmail admin@local -AdminPassword admin1234  # PS 7
-
-# Скрипт идемпотентен: каждый запуск регистрирует qa-<timestamp>@example.test,
-# второй прогон на «грязной» БД тоже даёт 49/49.
-# Значения -AdminEmail/-AdminPassword — из ADMIN_EMAIL/ADMIN_PASSWORD в .env
-# (там уже подставлены dev-заглушки, см. «Демо-учётки»).
-powershell -File qa-abc.ps1 -SkipAdmin         # без админ-блока (US6)
-powershell -File qa-abc.ps1 -BaseUrl http://127.0.0.1:8082 -WebUrl http://127.0.0.1:3001
-```
-
-Все не-GET запросы в сценарии шлют `Origin: http://localhost:3000` — иначе
-CSRF-защита (T10) вернёт `403`. Лимиты rate-limit на `/auth/login` составляют
-10/мин на IP; при частых повторных запусках задайте `RATE_LIMIT_AUTH_PER_MIN=0`
-на время прогона ( сами лимиты покрыты контрактными тестами).
-
-Автосид qa-админа: при неудачном входе под `-AdminEmail` `qa-abc.ps1` один раз запускает
-`qa-seed-admin.ps1` — тот заводит учётку через сид-админа (`-SeedAdminEmail`/`-SeedAdminPassword`,
-дефолты `admin@local`/`admin1234` — как в .env) и выдаёт роль admin, затем вход повторяется.
-Отключается switch'ем `-NoAutoSeed`; отдельный запуск — `powershell -File qa-seed-admin.ps1`.
-
-### Волна P3: `qa-p3.ps1` (**80 проверок**)
-
-Разделы «конструктор курса», «ученики», «супер-админ» проверяет отдельный
-скрипт — прежние 49 проверок остаются в `qa-abc.ps1` как регрессия:
-
-```bash
-docker compose up -d --build db api web runner
-
-# Блоки: D — конструктор (T21), E — ученики курса (T22),
-#        F — кабинет ученика (T23), G — супер-админ (T24/T25).
-powershell -File qa-p3.ps1 -AdminEmail admin@local -AdminPassword admin1234
-```
-
-Скрипт создаёт свои сущности с меткой времени (`p3-teacher-<stamp>@example.test`
-и т. д.), поэтому повторный прогон на той же базе тоже даёт 80/80. Требуется
-поднятый `web` — но только для проверки `P0`; без него она уходит в `SKIP`
-(`-SkipWeb`, чтобы не проверять вовсе).
+- `backend/tests/contract` — контрактные тесты API (входят в `go test ./...`): авторизация,
+  каталог, обучение, платежи, админка, журнал действий, MCP-сервер и загрузка медиа.
+- `frontend/tests/api-contract` — тесты API-клиента фронтенда: `cd frontend && npm test`.
+- `frontend/tests/e2e` — браузерные сценарии Playwright (`npm run test:e2e`, нужен поднятый стенд;
+  подробности — в [`docs/OPERATIONS.md`](docs/OPERATIONS.md)).
+- `frontend/tests/mobile-audit` — снимки страниц на 360/390/1280 и поиск горизонтальной прокрутки
+  (`audit.mjs`) и сквозные сценарии заявки и выдачи курса (`lead-flow.mjs`, `grant-flow.mjs`).
 
 ### Интеграционные тесты Postgres (`backend/tests/postgres`)
 
@@ -227,22 +189,24 @@ Q&A и правка ответов, избранное, похожие курс�
 ## Документация API
 
 - [`docs/API.md`](docs/API.md) — сводный обзор эндпоинтов, формы запросов/ответов и таблица кодов ошибок.
-- `specs/001-it-courses-mvp/contracts/openapi.yaml` — машинно-читаемый контракт
-  (OpenAPI 3.0). **Может отставать от кода**: эндпоинты US6 (`/admin/payments`,
-  `/admin/settings`) и mock-страница оплаты добавлены позже и в yaml не отражены.
+- [`docs/api-contract.md`](docs/api-contract.md) — подробный контракт эндпоинтов по разделам (T01…T83):
+  поля, коды ответов, ограничения. На него ссылаются комментарии в коде.
 
-## Доработки (папка `Task/`)
+## Контент курсов и MCP
 
-`Task/` — единый источник правды по доработкам репозитория:
-зафиксированный контракт API (`Task/00-api-contract.md`), описание каждой
-задачи (один файл = один агент = один git-worktree) и карта владения файлами.
-
-- Как читать: начни с [`Task/README.md`](Task/README.md), затем
-  `Task/00-api-contract.md` и нужный файл `Task/T**-*.md`.
-- Как добавить задачу: создай `Task/T<номер>-<ключ>.md` по образцу существующих
-  (проблема, владение файлами, что сделать, критерии приёмки, проверка, отчёт)
-  и добавь строку в таблицу «Задачи» `Task/README.md`. Работай только
-  в своём worktree и только со своими файлами.
+- **MCP-сервер** `POST /api/v1/mcp` — нейросеть (Claude, Cursor и др.) создаёт и правит курсы по токену
+  администратора; токены выпускаются в админке («MCP для нейросети»), все действия — в «Журнале действий».
+  Картинки и видео для уроков — `POST /api/v1/mcp/media` или инструмент `upload_media`.
+- **Разметка уроков** — Markdown с выносками (`> [!SUMMARY]`, `TIP`, `WARNING`…), таблицами, рисунками,
+  `==маркером==` и клавишами `[[Ctrl]]` (`frontend/src/components/Markdown.tsx`); правила оформления —
+  [`scripts/course-content/sysadmin/STYLE.md`](scripts/course-content/sysadmin/STYLE.md).
+- **`scripts/course-content/`** — курс «Системное администрирование: база» в виде данных (`sysadmin/`: тексты,
+  схемы `media_src/` → `media/`), загрузчик `load_course_via_mcp.py` (`--sync` — обновить тексты, схемы и видео),
+  обложки (`covers/`, `set_cover_via_mcp.py`), правки «только оформление» (`check_same_words.py`,
+  `apply_edits_via_mcp.py`).
+- **`frontend/scripts/`** — рендер схем из HTML (`render-html.mjs`) и предпросмотр урока (`preview-lesson.mjs`).
+- **`scripts/stepik/`** — импорт курса из выгрузки Stepik; `scripts/generate-video-posters.sh` — превью-кадры видео.
+- **Видеоуроки с озвучкой** собираются в отдельном проекте `skillex-video-studio` и загружаются сюда через MCP.
 
 ## Окружение
 
@@ -335,7 +299,7 @@ dev-значения (`SESSION_SECRET=change-me` и т.п.) — иначе не 
 и подпись вебхуков (T09), подпись cookie, rate-limit, CSRF, displayName (T10),
 песочница runner (T11), редирект после входа (T15).
 
-Завершено (волна 3): контрактные тесты и qa-скрипт `qa-abc.ps1` (T12),
+Завершено (волна 3): контрактные тесты (T12),
 сквозная проводка маршрутов и compose (T13), документация (T14).
 
 Закрыто (волны A–C): 7 бэкенд-багов включая **демо-учётки** (T16),
@@ -348,8 +312,9 @@ dev-значения (`SESSION_SECRET=change-me` и т.п.) — иначе не 
 жизненный цикл учителя и обложки (P7), промокоды/сертификаты/отзывы (P8),
 Q&A/избранное/превью/аналитика/похожие курсы/профиль учителя (P9).
 
-Текущее состояние и история волн — [`Task/STATUS.md`](Task/STATUS.md),
-актуальный статус исправлений и остатки — [`Task/REVIEW-2026-11-17.md`](Task/REVIEW-2026-11-17.md).
+Ноябрь 2026: мобильная версия, заявки с главной, выдача курсов вручную, сертификаты в PDF,
+новая админка (обзор, карточки пользователей и курсов, модерация, вопросы, отзывы, платежи,
+промокоды, журнал действий), MCP-сервер для нейросетей, оформление уроков и медиа.
 
 Известные ограничения:
 
@@ -371,13 +336,7 @@ Q&A/избранное/превью/аналитика/похожие курсы
 - сброс пароля и подтверждение email требуют настроенного SMTP и `PUBLIC_APP_URL`;
   локальная тестовая почта включается через `docker-compose.dev-mail.yml`.
 
-## Спецификации
+## Эксплуатация
 
 Приёмка, browser E2E, sandbox runner, резервирование и восстановление:
 [`docs/OPERATIONS.md`](docs/OPERATIONS.md).
-
-Разработано по SDD-процессу (Spec Kit):
-
-- `.specify/memory/constitution.md` — конституция проекта
-- `specs/001-it-courses-mvp/` — spec, plan, data-model, tasks, quickstart, converge-report
-- `specs/001-it-courses-mvp/contracts/openapi.yaml` — контракт API (может отставать, см. «Документация API»)

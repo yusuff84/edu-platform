@@ -4,7 +4,7 @@ package handler
 //   GET  /admin/invites          — список (createdAt DESC, page/limit);
 //   POST /admin/invites/{id}/revoke — отзыв из статуса sent (200/404/409).
 //
-// Форма ответов заморожена в Task/00-api-contract.md («Эндпоинты волны P6»):
+// Форма ответов заморожена в docs/api-contract.md («Эндпоинты волны P6»):
 // элемент списка несёт tokenPrefix, но НЕ token/tokenHash — после создания
 // сырой токен невосстановим (в БД хранится только хеш), в списке виден
 // только префикс. `status` — сырой статус хранилища (sent | accepted |

@@ -8,7 +8,7 @@ package handler
 //
 // Права: teacher видит только свои курсы, admin — все курсы платформы
 // (флаг all в вызовах StoreAPI). Форма ответов — ровно по замороженному
-// контракту P9 (Task/00-api-contract.md, раздел T77).
+// контракту P9 (docs/api-contract.md, раздел T77).
 
 import (
 	"net/http"

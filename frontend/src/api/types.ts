@@ -1,4 +1,4 @@
-// Доменные типы API-клиента. Имена полей — строго по Task/00-api-contract.md
+// Доменные типы API-клиента. Имена полей — строго по docs/api-contract.md
 // и фактическим JSON-формам backend/internal/handler/*.go, repo/models.go.
 // Здесь только типы; транспорт и функции — в client.ts.
 

@@ -3,7 +3,7 @@ package contract_test
 // Контрактные тесты T55 — детали курса для админа (GET /admin/courses/{id}):
 // форма ответа и порядок программы, 404/403/401, статистика.
 //
-// Форма заморожена разделом T55 Task/00-api-contract.md: course — элемент
+// Форма заморожена разделом T55 docs/api-contract.md: course — элемент
 // GET /admin/courses (T25) плюс coverPath; lessons внутри модуля — ТОЛЬКО
 // id/title/kind/position (лишних полей быть не должно); stats полностью
 // нулевой у курса, на который никто не записывался.

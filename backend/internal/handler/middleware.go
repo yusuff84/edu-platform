@@ -680,7 +680,7 @@ func (a *App) allowedOrigin(r *http.Request) bool {
 //   - CSRF_ALLOW_MISSING_ORIGIN=true — пропускаем (локальные qa-скрипты, curl);
 //   - dev-режим — пропускаем (контрактные тесты, локальная отладка);
 //   - прод — пропускаем только «заведомо безопасные» запросы: с bearer-заголовком
-//     или multipart/form-data (см. Task/T10-auth-security.md §3).
+//     или multipart/form-data (см. docs/api-contract.md (раздел T10) §3).
 func (a *App) allowMissingOrigin(r *http.Request) bool {
 	if a.Config.CSRFAllowMissingOrigin {
 		return true

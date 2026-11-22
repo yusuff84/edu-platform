@@ -14,7 +14,7 @@ package contract_test
 //	GET  /admin/enrollments         — q (email ИЛИ displayName ученика) и
 //	                                  status (active|refunded|revoked).
 //
-// Формы ответов и тексты ошибок — по Task/00-api-contract.md, раздел
+// Формы ответов и тексты ошибок — по docs/api-contract.md, раздел
 // «Эндпоинты волны P6». Здесь проверяется in-memory-реализация; SQL-ветка
 // (postgres_admin_console.go) прогнана отдельно на живом Postgres — см.
 // отчёт backend/tests/T48-admin-filters.md.

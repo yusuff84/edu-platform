@@ -1,6 +1,6 @@
 // T49: API-клиент экрана «Записи на курсы» супер-админки (/admin/enrollments).
 // Транспорт берётся из client.ts (apiFetch/buildQuery), не дублируется.
-// Контракт — Task/00-api-contract.md: GET /admin/enrollments (T25) с
+// Контракт — docs/api-contract.md: GET /admin/enrollments (T25) с
 // фильтрами q/status из волны P6 (T48) и ручной отзыв/возврат доступа (T16).
 // Тела запросов не шлём: POST revoke/unrevoke без body — backend так и ждёт.
 

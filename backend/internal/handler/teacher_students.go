@@ -9,7 +9,7 @@ package handler
 // существующий ownCourse (teacher.go) — 404 для несуществующего курса,
 // 403 для чужого.
 //
-// JSON-поля отдаются ровно в форме Task/00-api-contract.md (T22): фронтенд
+// JSON-поля отдаются ровно в форме docs/api-contract.md (T22): фронтенд
 // пишется параллельно и ждёт studentId, email, displayName, enrolledAt,
 // status, completedLessons, totalLessons, percent, lastActivityAt; items —
 // всегда массив, lastActivityAt — null, если ученик не начинал курс.

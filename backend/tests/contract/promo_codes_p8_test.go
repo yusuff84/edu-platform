@@ -6,7 +6,7 @@ package contract_test
 //   - расширение POST /enrollments (promoCode, amountCents, поля платежа);
 //   - идемпотентность usedCount и аддитивные поля журнала админа.
 //
-// Источник правды — Task/00-api-contract.md, раздел «T63 — промокоды»
+// Источник правды — docs/api-contract.md, раздел «T63 — промокоды»
 // (заморожен). Проверяются дословные тексты ошибок и коды ответов.
 
 import (

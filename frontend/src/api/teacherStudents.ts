@@ -1,5 +1,5 @@
 // T29: API-клиент экрана «Ученики курса» (/teach/:id/students).
-// Контракт — Task/T22-teacher-students.md (бэкенд пишется параллельно);
+// Контракт — docs/api-contract.md (раздел T22) (бэкенд пишется параллельно);
 // имена полей берутся буквально из контракта, ни одного «своего» поля.
 // Транспорт (apiFetch/buildQuery) — общий из api/client.ts, чужой файл не правим.
 
@@ -86,11 +86,3 @@ export function getTeacherCourseDetail(courseId: string): Promise<TeacherCourseD
   );
 }
 
-/**
- * GET /teacher/courses/{id} (эндпоинт T13) — только название и статус курса
- * для шапки. Обёртка над getTeacherCourseDetail: странице «Ученики курса»
- * нужен лишь course. Для данных общего кэша используйте getTeacherCourseDetail.
- */
-export function getTeacherCourse(courseId: string): Promise<Course> {
-  return getTeacherCourseDetail(courseId).then((res) => res.course);
-}

@@ -2,7 +2,7 @@ package contract_test
 
 // Контрактные тесты обложки курса (волна P7, T54):
 // POST/DELETE /teacher/courses/{id}/cover и coverPath (string|null) в видах.
-// Источник правды — Task/00-api-contract.md, раздел «T54 — обложка курса
+// Источник правды — docs/api-contract.md, раздел «T54 — обложка курса
 // (cover)» (заморожен). Хранилище файлов подменяется двойником: контрактные
 // тесты не должны писать в uploads/ рабочего каталога.
 

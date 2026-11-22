@@ -1,4 +1,4 @@
-# 00 — Зафиксированный контракт API (Task/00-api-contract.md)
+# 00 — Зафиксированный контракт API (api-contract.md)
 
 T83 (17.11.2026): добавлены `/auth/password/forgot`, `/auth/password/reset`,
 `/auth/email/verify`, `/me/security`, `/me/email/verification`, `/me/sessions`,

@@ -1,7 +1,7 @@
 package contract_test
 
 // Контрактные тесты T47: список приглашений (GET /admin/invites) и отзыв
-// (POST /admin/invites/{id}/revoke) — формы из Task/00-api-contract.md
+// (POST /admin/invites/{id}/revoke) — формы из docs/api-contract.md
 // («Эндпоинты волны P6»): элемент без token/tokenHash, но с tokenPrefix;
 // статус — сырой статус хранилища; revoke только из sent (200/404/409).
 

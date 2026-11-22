@@ -4,7 +4,7 @@ package contract_test
 //   PUT/DELETE /me/favorites/{courseId} — идемпотентные 204;
 //   GET /me/favorites — 200 {"items":[CourseItem],"total":N}, новые первыми;
 //   только published-курсы; чужое избранное не видно; без входа — 401.
-// Контракт заморожен в Task/00-api-contract.md (раздел «T73 — Избранное»).
+// Контракт заморожен в docs/api-contract.md (раздел «T73 — Избранное»).
 
 import (
 	"encoding/json"

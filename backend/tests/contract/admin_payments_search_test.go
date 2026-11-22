@@ -2,7 +2,7 @@ package contract_test
 
 // Контрактные тесты T31 (P4): поиск по студенту и период в журнале платежей
 // GET /admin/payments?q=&status=&courseId=&from=&to=&page=&limit=
-// (Task/00-api-contract.md, раздел «Эндпоинты волны P4»):
+// (docs/api-contract.md, раздел «Эндпоинты волны P4»):
 //   - q — подстрока без учёта регистра по email ИЛИ displayName студента,
 //     тримится, пустое значение фильтра не включает;
 //   - from/to — ГГГГ-ММ-ДД (UTC), границы включительно, to — «до конца суток»;

@@ -1,7 +1,7 @@
 package contract_test
 
 // T81 — публичный профиль преподавателя (волна P9).
-// Контракт — Task/00-api-contract.md, раздел «T81 — Публичный профиль
+// Контракт — docs/api-contract.md, раздел «T81 — Публичный профиль
 // преподавателя» (заморожен):
 //   GET /api/v1/teachers/{id} — публичный, без авторизации;
 //   200 {"teacher":{id,displayName,coursesCount,studentsCount,avgRating,

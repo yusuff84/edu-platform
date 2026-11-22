@@ -1,5 +1,5 @@
 // Просмотр урока: все четыре kind (video_text, live, quiz, code).
-// Формы полей строго по контракту Task/00-api-contract.md:
+// Формы полей строго по контракту docs/api-contract.md:
 //   - текст урока — bodyMd (markdown-строка контракта);
 //   - квиз — quiz.questions[] c полем text, ответы { [questionId]: index варианта };
 //   - эфир — liveUrl + startsAt;

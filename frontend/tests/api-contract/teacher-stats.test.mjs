@@ -1,6 +1,6 @@
 // T78: контрактные тесты клиента аналитики преподавателя (P9/T77).
 // Эндпоинты: GET /teacher/stats и GET /teacher/stats/courses?limit=…
-// Формы ответов — строго по разделу «Волна P9» Task/00-api-contract.md.
+// Формы ответов — строго по разделу «Волна P9» docs/api-contract.md.
 
 import { after, before, beforeEach, test } from 'node:test';
 import assert from 'node:assert/strict';

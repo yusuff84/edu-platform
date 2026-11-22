@@ -1,7 +1,7 @@
 package contract_test
 
 // T69 — ответы преподавателя на отзывы и разбивка оценок (волна P8).
-// Контракт — Task/00-api-contract.md, раздел «T69 — ответы преподавателя на
+// Контракт — docs/api-contract.md, раздел «T69 — ответы преподавателя на
 // отзывы + разбивка оценок» (заморожен):
 //   - PUT/DELETE /teacher/courses/{id}/reviews/{reviewId}/reply (владелец/admin);
 //   - Review во всех видах ответов получает teacherReply/teacherReplyAt;

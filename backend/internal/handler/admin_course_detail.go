@@ -2,7 +2,7 @@ package handler
 
 // T55 — детали курса «одним экраном» для супер-админа: GET /admin/courses/{id}.
 //
-// Ответ строго по замороженному разделу T55 контракта (Task/00-api-contract.md):
+// Ответ строго по замороженному разделу T55 контракта (docs/api-contract.md):
 //   course  — форма элемента GET /admin/courses (T25, adminCourseItem из
 //             admin_console.go) плюс coverPath (T54; null, если обложки нет);
 //   modules — программа курса: модули по position, уроки внутри каждого

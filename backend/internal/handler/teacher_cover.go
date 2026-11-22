@@ -1,7 +1,7 @@
 package handler
 
 // T54 — обложка курса: POST/DELETE /teacher/courses/{id}/cover.
-// Контракт — Task/00-api-contract.md, раздел «T54 — обложка курса (cover)»
+// Контракт — docs/api-contract.md, раздел «T54 — обложка курса (cover)»
 // (заморожен). Файлы сохраняет storage.SaveLocal в uploads/covers/ — каталог
 // уже раздаётся статикой маршрутом /uploads/* (см. NewRouter в middleware.go).
 //

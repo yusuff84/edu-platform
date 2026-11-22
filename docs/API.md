@@ -1,9 +1,7 @@
 # API edu-platform — сводка для разработчиков
 
-Машино-читаемый контракт: [`specs/001-it-courses-mvp/contracts/openapi.yaml`](../specs/001-it-courses-mvp/contracts/openapi.yaml)
-(OpenAPI 3.0). Он покрывает базовый MVP; админские расширения, OAuth,
-mock-страница оплаты и часть post-MVP полей описаны в этом документе и
-`Task/00-api-contract.md`. При расхождении источник истины — код и
+Подробный контракт по разделам — [`api-contract.md`](api-contract.md); здесь — сводка
+эндпоинтов, форм запросов/ответов и кодов ошибок. При расхождении источник истины — код и
 контрактные тесты.
 
 ## Общие правила
@@ -34,7 +32,7 @@ Metadata сессии — подсказка из запроса, а не док
 Секретные ссылки передаются в email как `/reset-password#token=...` и
 `/verify-email#token=...`; токен не попадает в URL HTTP-запроса и access log.
 Без SMTP ссылки не выдаются через API. Примеры настройки и локальный SMTP —
-[`Task/T83-account-security.md`](../Task/T83-account-security.md).
+[api-contract.md (раздел T83)](api-contract.md).
 
 Изменения после ревью 17.11.2026:
 
@@ -76,7 +74,7 @@ Metadata сессии — подсказка из запроса, а не док
 | CSRF | не-GET запросы требуют `Origin`/`Referer` из `ALLOWED_ORIGINS`; вебхуки провайдеров проверяются подписью и исключены из проверки |
 
 Формы моделей (`User`, `Course`, `CourseItem`, `LessonView`, `ModuleView`,
-конверты `{items,total}`) — в `Task/00-api-contract.md`, пп. 5–20.
+конверты `{items,total}`) — в `api-contract.md`, пп. 5–20.
 
 ## Эндпоинты по группам
 
@@ -253,7 +251,7 @@ Metadata сессии — подсказка из запроса, а не док
 > Ученику оба эндпоинта — `403` (группа `/teacher` — только teacher/admin).
 
 > В бэклоге T13: `GET/PATCH/DELETE /teacher/courses[...]`, PATCH модулей/уроков,
-> reorder — в `Task/T13-integration-wiring.md`.
+> reorder — в api-contract.md (раздел T13).
 
 ### Админ (`admin` — только роль admin)
 

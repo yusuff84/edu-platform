@@ -1,5 +1,0 @@
-FROM skillex-runner:20261118-5b628dcc
-USER root
-COPY artifacts/runner /usr/local/bin/runner
-RUN chmod 0755 /usr/local/bin/runner
-USER runner:runner

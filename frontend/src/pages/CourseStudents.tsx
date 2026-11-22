@@ -1,5 +1,5 @@
 // T29: экран «Ученики курса» кабинета учителя (/teach/:id/students).
-// Контракт — Task/T22-teacher-students.md (бэкенд пишется параллельно), поля
+// Контракт — docs/api-contract.md (раздел T22) (бэкенд пишется параллельно), поля
 // читаются буквально: studentId, email, displayName, enrolledAt, status,
 // completedLessons, totalLessons, percent, lastActivityAt.
 //

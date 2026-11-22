@@ -2,7 +2,7 @@ package handler
 
 // T69 — публичный ответ преподавателя на отзыв:
 // PUT/DELETE /teacher/courses/{id}/reviews/{reviewId}/reply.
-// Контракт — Task/00-api-contract.md, раздел «T69 — ответы преподавателя на
+// Контракт — docs/api-contract.md, раздел «T69 — ответы преподавателя на
 // отзывы + разбивка оценок» (заморожен).
 //
 // Маршруты регистрируются RegisterTeacherReviewReplyRoutes внутри

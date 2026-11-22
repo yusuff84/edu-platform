@@ -159,9 +159,11 @@ test('teacher creates content and administrator publishes it through the UI', as
     await admin.locator('#login-password').fill(password);
     await admin.getByRole('button', { name: 'Войти', exact: true }).click();
     await expect(admin.locator('.user-email')).toHaveText('admin@e2e.test');
-    await admin.goto('/admin');
-    const row = admin.locator('.admin-queue-card').filter({ hasText: title });
-    await row.getByRole('button', { name: 'Одобрить', exact: true }).click();
+    await admin.goto('/admin/moderation');
+    const row = admin.locator('.acn-qcard').filter({ hasText: title });
+    await row.getByRole('button', { name: 'Одобрить и опубликовать' }).click();
+    // Окно подтверждения: комментарий необязателен.
+    await admin.getByRole('dialog').getByRole('button', { name: 'Одобрить и опубликовать' }).click();
     await expect(row).toHaveCount(0);
   } finally { await adminContext.close(); }
 });

@@ -18,19 +18,6 @@ import (
 	"edu-platform/backend/internal/repo"
 )
 
-// qaFindQuestion — вопрос из ListLessonQuestions по id.
-func qaFindQuestion(t *testing.T, s *repo.PostgresStore, courseID, questionID, lessonID string) *repo.LessonQuestion {
-	t.Helper()
-	items, _ := s.ListLessonQuestions(courseID, lessonID, 1, 100)
-	for _, q := range items {
-		if q.ID == questionID {
-			return q
-		}
-	}
-	t.Fatalf("вопрос %s не найден в курсе %s", questionID, courseID)
-	return nil
-}
-
 // TestPostgresLessonQARoundtrip — полный жизненный цикл вопроса и ответов.
 func TestPostgresLessonQARoundtrip(t *testing.T) {
 	s := testStore(t)

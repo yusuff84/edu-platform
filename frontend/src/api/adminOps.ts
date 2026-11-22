@@ -50,10 +50,6 @@ export function adminLogoutUser(id: string) {
   return apiFetch<void>(`/admin/users/${encodeURIComponent(id)}/logout-all`, json('POST'));
 }
 
-export function adminUserCourses(id: string) {
-  return apiFetch<{ items: AdminUserCourse[] }>(`/admin/users/${encodeURIComponent(id)}/courses`);
-}
-
 const pairPath = (studentId: string, courseId: string, action: string): string =>
   `/admin/enrollments/${encodeURIComponent(studentId)}/courses/${encodeURIComponent(courseId)}/${action}`;
 

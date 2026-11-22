@@ -22,7 +22,7 @@ type registerRequest struct {
 	InviteToken string `json:"inviteToken"`
 }
 
-// userResponse — единый формат пользователя для контракта API (Task/00-api-contract.md).
+// userResponse — единый формат пользователя для контракта API (docs/api-contract.md).
 // DisplayName — всегда строка (пустая, если не задана), чтобы фронт получал "", а не null.
 type userResponse struct {
 	ID            string    `json:"id"`

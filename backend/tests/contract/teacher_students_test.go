@@ -2,7 +2,7 @@ package contract_test
 
 // Контрактные тесты T22 — ученики курса и статистика для учителя:
 // GET /teacher/courses/{id}/students и GET /teacher/courses/{id}/stats.
-// Форма ответов — Task/00-api-contract.md (T22); фронтенд T29 пишется
+// Форма ответов — docs/api-contract.md (T22); фронтенд T29 пишется
 // параллельно и ждёт ровно эти имена полей: studentId, email, displayName,
 // enrolledAt, status, completedLessons, totalLessons, percent, lastActivityAt.
 // items — всегда массив (не null), lastActivityAt — null у не начинавшего.
