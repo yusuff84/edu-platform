@@ -42,6 +42,22 @@ API-порт Compose привязан к 127.0.0.1. Публичный траф�
 
 ## Резервная копия и восстановление
 
+### Production (Linux, Docker)
+
+Ежедневная копия на сервере: `scripts/backup-server.sh` — дамп Postgres из контейнера `skillex-db-1`
+(custom format), архив тома `skillex_uploads`, `SHA256SUMS`; хранится 14 дней в `/opt/skillex/backups/daily/`.
+Расписание: `sudo scripts/backup-server.sh --install-cron` (cron 03:30, лог `/var/log/skillex-backup.log`).
+
+Восстановление на отдельном стенде (проверка копии):
+
+```sh
+cd /opt/skillex/backups/daily/<дата-время> && sha256sum -c SHA256SUMS
+docker exec -i <db-контейнер-стенда> sh -c 'pg_restore -U "$POSTGRES_USER" -d "$POSTGRES_DB" --no-owner' < database.dump
+docker run --rm -v <uploads-том-стенда>:/uploads -v "$PWD":/in alpine:3.20 tar -xzf /in/uploads.tar.gz -C /uploads
+```
+
+### Windows / ручной режим
+
 Нужны PostgreSQL client tools в PATH. Пароли хранить в переменных окружения/секретах, не в скриптах или manifest. Версия pg_dump должна быть совместима с сервером. Для согласованной копии БД и обложек на время копирования остановить изменения данных или использовать согласованный snapshot хранилищ.
 
 ```powershell
