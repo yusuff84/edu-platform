@@ -137,17 +137,23 @@ func (a *App) AdminModerateCourse(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "Курс не находится на модерации")
 		return
 	}
+	var target repo.CourseStatus
 	switch strings.ToLower(strings.TrimSpace(req.Decision)) {
 	case "approve":
-		a.Store.SetCourseStatus(c.ID, repo.CoursePublished, strings.TrimSpace(req.Comment))
+		target = repo.CoursePublished
 	case "reject":
 		if strings.TrimSpace(req.Comment) == "" {
 			writeErr(w, http.StatusBadRequest, "При отклонении нужен комментарий для учителя")
 			return
 		}
-		a.Store.SetCourseStatus(c.ID, repo.CourseDraft, strings.TrimSpace(req.Comment))
+		target = repo.CourseDraft
 	default:
 		writeErr(w, http.StatusBadRequest, "Решение: approve или reject")
+		return
+	}
+	// Результат записи проверяем: раньше сбой хранилища давал 200 с прежним статусом.
+	if !a.Store.SetCourseStatus(c.ID, target, strings.TrimSpace(req.Comment)) {
+		writeErr(w, http.StatusInternalServerError, "Не удалось сохранить решение модерации")
 		return
 	}
 	updated, _ := a.Store.GetCourseByID(c.ID)

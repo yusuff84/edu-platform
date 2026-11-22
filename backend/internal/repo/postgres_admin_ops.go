@@ -15,15 +15,25 @@ func (s *PostgresStore) SetUserEmail(id, email string) error {
 	}
 	ctx, cancel := s.ctx()
 	defer cancel()
-	tag, err := s.pool.Exec(ctx, `UPDATE users SET email=$2, email_verified_at=NULL WHERE id=$1::uuid`,
-		id, normEmail(email))
+	// Одним выражением со сменой адреса гасим выданные письмами токены:
+	// иначе ссылка подтверждения, ушедшая на старый адрес, подтверждала бы
+	// новый, а ссылка сброса пароля на старом адресе продолжала бы работать.
+	var updated int
+	err := s.pool.QueryRow(ctx,
+		`WITH upd AS (
+		   UPDATE users SET email=$2, email_verified_at=NULL WHERE id=$1::uuid RETURNING id
+		 ), del AS (
+		   DELETE FROM account_tokens WHERE user_id IN (SELECT id FROM upd)
+		 )
+		 SELECT count(*)::int FROM upd`,
+		id, normEmail(email)).Scan(&updated)
 	if err != nil {
 		if isUniqueViolation(err) {
 			return ErrAlreadyExists
 		}
 		return fmt.Errorf("postgres SetUserEmail: %w", err)
 	}
-	if tag.RowsAffected() == 0 {
+	if updated == 0 {
 		return ErrNotFound
 	}
 	return nil

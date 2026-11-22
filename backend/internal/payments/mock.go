@@ -96,7 +96,7 @@ func MockWebhookSecret() string {
 	return strings.TrimSpace(os.Getenv("MOCK_WEBHOOK_SECRET"))
 }
 
-// VerifyWebhook: у mock нет внешней подписи. Если задан MOCK_WEBHOOK_SECRET
+// VerifyWebhook проверяет вебхук mock: внешней подписи у него нет. Если задан MOCK_WEBHOOK_SECRET
 // (или передан secret явно), требуем заголовок X-Mock-Signature —
 // hex HMAC-SHA256 по сырому телу. Без секрета проверять нечего — это
 // допустимо только в dev; в production handler не вызывает mock-провайдера

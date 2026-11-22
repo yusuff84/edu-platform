@@ -111,8 +111,10 @@ func TestPostgresPromoCodesCRUD(t *testing.T) {
 	}
 
 	// Атомарный инкремент usedCount.
-	if !s.IncrementPromoCodeUsage(p1.ID) || !s.IncrementPromoCodeUsage(p1.ID) {
-		t.Fatal("IncrementPromoCodeUsage вернул false для существующего кода")
+	for i := 1; i <= 2; i++ {
+		if !s.IncrementPromoCodeUsage(p1.ID) {
+			t.Fatalf("IncrementPromoCodeUsage (вызов %d) вернул false для существующего кода", i)
+		}
 	}
 	if got, _ := s.GetPromoCodeByID(p1.ID); got == nil || got.UsedCount != 2 {
 		t.Fatalf("usedCount: %+v, ждали 2", got)

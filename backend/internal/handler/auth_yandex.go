@@ -123,11 +123,11 @@ func (a *App) YandexAuthCallback(w http.ResponseWriter, r *http.Request) {
 			writeErr(w, http.StatusBadGateway, "Профиль Яндекса не содержит идентификатора пользователя")
 			return
 		}
-		email = "yandex-" + profile.ExternalID + "@oauth.invalid"
+		email = "yandex-" + profile.ExternalID + oauthSyntheticDomain
 	}
 
-	u, ok := a.Store.GetUserByEmail(email)
-	if !ok {
+	u, existed := a.Store.GetUserByEmail(email)
+	if !existed {
 		u, err = a.createOAuthUser(email)
 		if err != nil {
 			writeErr(w, http.StatusInternalServerError, "Не удалось создать пользователя, попробуйте позже")
@@ -143,10 +143,42 @@ func (a *App) YandexAuthCallback(w http.ResponseWriter, r *http.Request) {
 		writeBlockedUser(w)
 		return
 	}
+	// Яндекс подтвердил владение адресом. Если учётка с этим email не была
+	// подтверждена, её мог заранее зарегистрировать кто угодно (регистрация
+	// не требует подтверждения почты): раньше вход через Яндекс просто
+	// открывал владельцу почты эту учётку, а пароль и сессии регистратора
+	// продолжали действовать. Теперь email помечается подтверждённым, пароль
+	// заменяется случайным (владелец может задать свой через «Забыли
+	// пароль»), прежние сессии и письма-токены завершаются. Синтетический
+	// адрес @oauth.invalid не подтверждается.
+	if u.EmailVerifiedAt == nil && !strings.HasSuffix(email, oauthSyntheticDomain) {
+		hash := u.PasswordHash // новый OAuth-пользователь: пароль уже случайный
+		if existed {
+			if hash, err = randomPasswordHash(); err != nil {
+				writeErr(w, http.StatusInternalServerError, "Не удалось войти, попробуйте позже")
+				return
+			}
+		}
+		if err := a.Store.ClaimEmailOwnership(u.ID, hash); err != nil {
+			writeErr(w, http.StatusInternalServerError, "Не удалось войти, попробуйте позже")
+			return
+		}
+		fresh, found := a.Store.GetUserByID(u.ID)
+		if !found {
+			writeErr(w, http.StatusInternalServerError, "Не удалось войти, попробуйте позже")
+			return
+		}
+		u = fresh
+	}
 	// Имя из профиля Яндекса — только при первом входе (не затираем
 	// ручную правку пользователя).
-	if u.DisplayName == "" && profile.DisplayName != "" {
-		a.Store.SetUserDisplayName(u.ID, profile.DisplayName)
+	// Те же правила, что у PATCH /me/profile: пробелы схлопываются, не
+	// длиннее 60 символов.
+	if name := []rune(strings.Join(strings.Fields(profile.DisplayName), " ")); u.DisplayName == "" && len(name) > 0 {
+		if len(name) > 60 {
+			name = name[:60]
+		}
+		a.Store.SetUserDisplayName(u.ID, string(name))
 	}
 	if !a.startSession(w, r, u) {
 		return
@@ -160,15 +192,11 @@ func (a *App) YandexAuthCallback(w http.ResponseWriter, r *http.Request) {
 // поэтому генерируем случайный — вход по паролю невозможен, но bcrypt-хеш
 // валиден (пользователь как будто «забыл пароль»).
 func (a *App) createOAuthUser(email string) (*repo.User, error) {
-	raw := make([]byte, 32)
-	if _, err := rand.Read(raw); err != nil {
-		return nil, errors.New("не удалось сгенерировать пароль")
-	}
-	hash, err := bcrypt.GenerateFromPassword([]byte(base64.RawURLEncoding.EncodeToString(raw)), bcrypt.DefaultCost)
+	hash, err := randomPasswordHash()
 	if err != nil {
 		return nil, err
 	}
-	u, err := a.Store.CreateUser(email, string(hash), repo.RoleStudent)
+	u, err := a.Store.CreateUser(email, hash, repo.RoleStudent)
 	if err != nil {
 		// Гонка: параллельный callback того же email уже создал пользователя.
 		if existing, found := a.Store.GetUserByEmail(email); found {
@@ -177,6 +205,22 @@ func (a *App) createOAuthUser(email string) (*repo.User, error) {
 		return nil, err
 	}
 	return u, nil
+}
+
+// oauthSyntheticDomain — домен адресов для профилей Яндекса без почты.
+const oauthSyntheticDomain = "@oauth.invalid"
+
+// randomPasswordHash — bcrypt-хеш случайного неизвестного никому пароля.
+func randomPasswordHash() (string, error) {
+	raw := make([]byte, 32)
+	if _, err := rand.Read(raw); err != nil {
+		return "", errors.New("не удалось сгенерировать пароль")
+	}
+	hash, err := bcrypt.GenerateFromPassword([]byte(base64.RawURLEncoding.EncodeToString(raw)), bcrypt.DefaultCost)
+	if err != nil {
+		return "", err
+	}
+	return string(hash), nil
 }
 
 // oauthMessage достаёт русский текст из OAuthError, не таща сетевые детали.

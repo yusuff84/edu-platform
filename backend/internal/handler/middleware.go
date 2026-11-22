@@ -107,7 +107,7 @@ func NewRouter(app *App) http.Handler {
 	// T13: обслуживание уже загруженных файлов (обложки курсов и т.п.,
 	// см. internal/storage). Загрузочного эндпоинта в MVP нет — раздаются
 	// только файлы, которые уже лежат в каталоге uploads/.
-	r.Handle("/uploads/*", http.StripPrefix("/uploads/", http.FileServer(http.Dir("uploads"))))
+	r.Handle("/uploads/*", http.StripPrefix("/uploads/", uploadsHandler(http.Dir("uploads"))))
 	r.Route("/api/v1", func(r chi.Router) {
 		// T10: глобальный мягкий лимит от флуда + CSRF-проверка меняющих методов.
 		r.Use(app.rateLimit("global", app.Config.RateLimitGlobalPerMin))
@@ -258,6 +258,30 @@ func NewRouter(app *App) http.Handler {
 		app.RegisterAdminHubRoutes(r)
 	})
 	return r
+}
+
+// uploadsHandler раздаёт загруженные файлы без листинга каталогов: голый
+// http.FileServer отдавал по /uploads/, /uploads/covers/ и /uploads/media/
+// список всех файлов (в том числе обложек ещё не опубликованных курсов).
+// nosniff не даёт браузеру «угадывать» тип файла вопреки Content-Type.
+func uploadsHandler(root http.FileSystem) http.Handler {
+	files := http.FileServer(root)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "" || strings.HasSuffix(r.URL.Path, "/") {
+			http.NotFound(w, r)
+			return
+		}
+		if f, err := root.Open(r.URL.Path); err == nil {
+			st, statErr := f.Stat()
+			_ = f.Close()
+			if statErr == nil && st.IsDir() {
+				http.NotFound(w, r)
+				return
+			}
+		}
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		files.ServeHTTP(w, r)
+	})
 }
 
 func healthz(w http.ResponseWriter, _ *http.Request) {
@@ -466,6 +490,19 @@ func (a *App) optionalUser(r *http.Request) *repo.User {
 	}
 	u, ok := a.Store.GetUserByID(sess.UserID)
 	if !ok {
+		return nil
+	}
+	return u
+}
+
+// viewerUser — зритель публичной страницы: как optionalUser, но
+// заблокированный пользователь считается гостем. requireAuth не пускает
+// заблокированного никуда, поэтому и публичные страницы не должны открывать
+// ему контент купленного курса или черновики по старой сессии (/auth/me
+// по-прежнему читает optionalUser и отвечает заблокированному 403).
+func (a *App) viewerUser(r *http.Request) *repo.User {
+	u := a.optionalUser(r)
+	if u == nil || u.Status == repo.UserBlocked {
 		return nil
 	}
 	return u
@@ -788,7 +825,10 @@ func (a *App) cors(mux *chi.Mux) func(http.Handler) http.Handler {
 
 // ---- pagination helper ----
 
-func paginate(total, page, limit int) (items int, safePage, safeLimit int) {
+// paginate нормализует page/limit (limit 1..100, по умолчанию 20) и
+// возвращает начало страницы в срезе длины total (не больше total).
+// Смещение считает repo.PageOffset: огромный page не переполняет int.
+func paginate(total, page, limit int) (start int, safePage, safeLimit int) {
 	if limit <= 0 {
 		limit = 20
 	}
@@ -798,13 +838,9 @@ func paginate(total, page, limit int) (items int, safePage, safeLimit int) {
 	if page <= 0 {
 		page = 1
 	}
-	start := (page - 1) * limit
+	start = repo.PageOffset(page, limit)
 	if start > total {
 		start = total
-	}
-	end := start + limit
-	if end > total {
-		end = total
 	}
 	return start, page, limit
 }

@@ -46,9 +46,10 @@ func (a *App) TeacherGetCourse(w http.ResponseWriter, r *http.Request) {
 // витринный метод для GET /teacher/courses/{id}.
 func (a *App) courseDetail(c *repo.Course) map[string]any {
 	mods := a.Store.ListModulesByCourse(c.ID)
+	byModule := a.lessonsByModule(c.ID)
 	mv := make([]moduleView, 0, len(mods))
 	for _, m := range mods {
-		lessons := a.Store.ListLessonsByModule(m.ID)
+		lessons := byModule[m.ID]
 		lv := make([]lessonView, 0, len(lessons))
 		for _, l := range lessons {
 			lv = append(lv, lessonToView(l, true))
@@ -114,6 +115,10 @@ func (a *App) TeacherUpdateCourse(w http.ResponseWriter, r *http.Request) {
 	if req.PriceCents != nil {
 		if *req.PriceCents < 0 {
 			writeErr(w, http.StatusBadRequest, "Цена не может быть отрицательной")
+			return
+		}
+		if *req.PriceCents > maxPriceCents {
+			writeErr(w, http.StatusBadRequest, priceTooLargeErr)
 			return
 		}
 		upd.PriceCents = req.PriceCents

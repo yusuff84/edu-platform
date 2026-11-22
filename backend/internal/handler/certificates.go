@@ -31,14 +31,8 @@ func (a *App) RegisterCertificateRoutes(r chi.Router) {
 // CompleteLesson; ошибки выдачи не должны ломать ответ о прогрессе — только
 // пишутся в лог.
 func (a *App) issueCertificateIfCourseCompleted(studentID string, c *repo.Course) {
-	lessons := a.Store.ListLessonsByCourse(c.ID)
-	if len(lessons) == 0 {
+	if _, _, allDone := a.courseProgressState(studentID, c); !allDone {
 		return
-	}
-	for _, l := range lessons {
-		if !a.Store.IsLessonCompleted(studentID, l.ID) {
-			return
-		}
 	}
 	if _, err := a.Store.IssueCertificate(studentID, c.ID); err != nil {
 		log.Printf("T67: не удалось выдать сертификат user=%s course=%s: %v",

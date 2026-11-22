@@ -301,7 +301,7 @@ func (s *Store) ListInvites(page, limit int) ([]*TeacherInvite, int) {
 	})
 
 	total := len(matched)
-	start := (page - 1) * limit
+	start := PageOffset(page, limit)
 	if start > total {
 		start = total
 	}
@@ -1158,7 +1158,7 @@ func (s *Store) ListPaymentsJournal(f PaymentFilter) ([]PaymentJournalRow, int, 
 		totals.TeacherAmountCents += p.TeacherAmountCents
 	}
 
-	start := (page - 1) * limit
+	start := PageOffset(page, limit)
 	if start > total {
 		start = total
 	}
@@ -1726,7 +1726,7 @@ func (s *Store) ListLessonQuestions(courseID, lessonID string, page, limit int) 
 		return matched[i].CreatedAt.After(matched[j].CreatedAt)
 	})
 	total := len(matched)
-	start := (page - 1) * limit
+	start := PageOffset(page, limit)
 	if start > total {
 		start = total
 	}
@@ -2050,12 +2050,6 @@ func (s *Store) TeacherOverview(teacherID string, all bool) (*TeacherOverview, e
 	return out, nil
 }
 
-// TeacherCourseStats возвращает разбивку по курсам области видимости
-// (in-memory; в Postgres — один агрегирующий запрос). Входят курсы любого
-// статуса; students/avgPercent считаются по активным записям, revenueCents —
-// по succeeded-платежам. Порядок строго по контракту T77: revenueCents desc,
-// затем students desc, затем title (без учёта регистра; id — детерминированный
-// tie-break для одинаковых названий). limit — 50 по умолчанию, максимум 200.
 // TeacherCourseStatsTotal — число курсов в области видимости аналитики до
 // применения limit (T77). Считается по тому же scope, что и разбивка.
 func (s *Store) TeacherCourseStatsTotal(teacherID string, all bool) int {
@@ -2064,6 +2058,12 @@ func (s *Store) TeacherCourseStatsTotal(teacherID string, all bool) int {
 	return len(teacherStatsScopeLocked(s, teacherID, all))
 }
 
+// TeacherCourseStats возвращает разбивку по курсам области видимости
+// (in-memory; в Postgres — один агрегирующий запрос). Входят курсы любого
+// статуса; students/avgPercent считаются по активным записям, revenueCents —
+// по succeeded-платежам. Порядок строго по контракту T77: revenueCents desc,
+// затем students desc, затем title (без учёта регистра; id — детерминированный
+// tie-break для одинаковых названий). limit — 50 по умолчанию, максимум 200.
 func (s *Store) TeacherCourseStats(teacherID string, all bool, limit int) []*TeacherCourseStat {
 	limit = clampTeacherStatsLimit(limit)
 

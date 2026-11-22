@@ -103,7 +103,7 @@ func openStore(cfg *config.Config) (repo.StoreAPI, func(), error) {
 	}
 	if err := pool.Ping(ctx); err != nil {
 		pool.Close()
-		return fallbackToMemory(cfg, fmt.Errorf("Postgres по DATABASE_URL недоступен: %w", err))
+		return fallbackToMemory(cfg, fmt.Errorf("postgres по DATABASE_URL недоступен: %w", err))
 	}
 
 	dir, err := findMigrationsDir()

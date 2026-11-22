@@ -207,9 +207,8 @@ func (y *YandexClient) FetchProfile(ctx context.Context, accessToken string) (Pr
 	if name == "" {
 		name = strings.TrimSpace(info.RealName)
 	}
-	if name == "" {
-		name = email
-	}
+	// Email именем не подставляем: displayName публичен (вопросы к урокам,
+	// сертификаты), и адрес ученика оказывался бы виден всем.
 	return Profile{ExternalID: externalID, Email: email, DisplayName: name}, nil
 }
 

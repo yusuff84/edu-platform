@@ -281,7 +281,7 @@ func (s *PostgresStore) ListInvites(page, limit int) ([]*TeacherInvite, int) {
 		return nil, 0
 	}
 
-	offset := (page - 1) * limit
+	offset := PageOffset(page, limit)
 	rows, err := s.pool.Query(ctx,
 		`SELECT `+inviteCols+` FROM teacher_invites ORDER BY created_at DESC LIMIT $1 OFFSET $2`,
 		limit, offset)
@@ -387,7 +387,6 @@ const courseCols = `id::text, teacher_id::text, slug, title, description, catego
 	created_at, updated_at`
 
 func (s *PostgresStore) CreateCourse(c *Course) *Course {
-	now := time.Now().UTC()
 	currency := strings.ToUpper(strings.TrimSpace(c.Currency))
 	if currency == "" {
 		currency = "RUB"
@@ -405,19 +404,15 @@ func (s *PostgresStore) CreateCourse(c *Course) *Course {
 		 VALUES ($1::uuid,$2,$3,$4,$5,$6,$7,'draft')
 		 RETURNING `+courseCols,
 		c.TeacherID, c.Slug, c.Title, c.Description, category, c.PriceCents, currency)
-	if nc, err := scanCourse(row.Scan); err == nil {
-		*c = *nc
-		return c
-	} else {
+	nc, err := scanCourse(row.Scan)
+	if err != nil {
+		// Раньше здесь возвращался «курс» со случайным id, которого нет в БД:
+		// handler отвечал 201, а дальше все операции с ним давали 404.
 		log.Printf("postgres CreateCourse: %v", err)
-		c.ID = uuid.NewString()
-		c.Category = category
-		c.Currency = currency
-		c.Status = CourseDraft
-		c.CreatedAt = now
-		c.UpdatedAt = now
-		return c
+		return nil
 	}
+	*c = *nc
+	return c
 }
 
 func (s *PostgresStore) GetCourseByID(id string) (*Course, bool) {
@@ -630,8 +625,7 @@ func (s *PostgresStore) CreateModule(courseID, title string) *Module {
 		 RETURNING id::text, position`, courseID, title).Scan(&m.ID, &m.Position)
 	if err != nil {
 		log.Printf("postgres CreateModule: %v", err)
-		m.ID = uuid.NewString()
-		m.Position = 1
+		return nil
 	}
 	return m
 }
@@ -726,8 +720,8 @@ const lessonCols = `l.id::text, l.module_id::text, l.title, l.kind, l.position,
 func (s *PostgresStore) CreateLesson(l *Lesson) *Lesson {
 	ctx, cancel := s.ctx()
 	defer cancel()
-	var quiz, code any = lessonToJSON(l.Quiz), lessonToJSON(l.CodeTask)
-	var body, video, live any = nilIfEmpty(l.BodyMD), nilIfEmpty(l.VideoURL), nilIfEmpty(l.LiveURL)
+	quiz, code := lessonToJSON(l.Quiz), lessonToJSON(l.CodeTask)
+	body, video, live := nilIfEmpty(l.BodyMD), nilIfEmpty(l.VideoURL), nilIfEmpty(l.LiveURL)
 	var starts any
 	if l.StartsAt != nil {
 		starts = *l.StartsAt
@@ -747,9 +741,7 @@ func (s *PostgresStore) CreateLesson(l *Lesson) *Lesson {
 		Scan(&nl.ID, &nl.Position, &nl.CreatedAt)
 	if err != nil {
 		log.Printf("postgres CreateLesson: %v", err)
-		nl.ID = uuid.NewString()
-		nl.Position = 1
-		nl.CreatedAt = time.Now().UTC()
+		return nil
 	}
 	*l = *nl
 	return l
@@ -1205,7 +1197,7 @@ func (s *PostgresStore) ListPaymentsJournal(f PaymentFilter) ([]PaymentJournalRo
 	// Страница строк: платежи + название курса + данные студента (T16, п.3).
 	// LEFT JOIN users: строка журнала не должна исчезнуть из-за пользователя,
 	// иначе total/ totals из агрегата разошлись бы со списком.
-	offset := (page - 1) * limit
+	offset := PageOffset(page, limit)
 	rows, err := s.pool.Query(ctx,
 		fmt.Sprintf(`SELECT %s, c.title, COALESCE(u.email,''), COALESCE(u.display_name,'') FROM payments p
 		 JOIN courses c ON c.id = p.course_id
@@ -1244,7 +1236,7 @@ func (s *PostgresStore) CreateReview(studentID, courseID string, rating int, bod
 	ctx, cancel := s.ctx()
 	defer cancel()
 	r := &Review{StudentID: studentID, CourseID: courseID, Rating: rating, Body: body}
-	var bodyParam any = nilIfEmpty(body)
+	bodyParam := nilIfEmpty(body)
 	err := s.pool.QueryRow(ctx,
 		`INSERT INTO reviews (student_id, course_id, rating, body) VALUES ($1::uuid,$2::uuid,$3,$4)
 		 RETURNING id::text, created_at`, studentID, courseID, rating, bodyParam).
@@ -1557,8 +1549,8 @@ func (s *PostgresStore) DeleteCourse(id string) error {
 func (s *PostgresStore) UpdateLesson(l *Lesson) error {
 	ctx, cancel := s.ctx()
 	defer cancel()
-	var quiz, code any = lessonToJSON(l.Quiz), lessonToJSON(l.CodeTask)
-	var body, video, live any = nilIfEmpty(l.BodyMD), nilIfEmpty(l.VideoURL), nilIfEmpty(l.LiveURL)
+	quiz, code := lessonToJSON(l.Quiz), lessonToJSON(l.CodeTask)
+	body, video, live := nilIfEmpty(l.BodyMD), nilIfEmpty(l.VideoURL), nilIfEmpty(l.LiveURL)
 	var starts any
 	if l.StartsAt != nil {
 		starts = *l.StartsAt
@@ -1924,7 +1916,7 @@ func (s *PostgresStore) ListLessonQuestions(courseID, lessonID string, page, lim
 		log.Printf("postgres ListLessonQuestions count: %v", err)
 		return empty, 0
 	}
-	offset := (page - 1) * limit
+	offset := PageOffset(page, limit)
 	query := fmt.Sprintf(
 		`SELECT %s
 		 FROM lesson_questions q
@@ -2253,13 +2245,6 @@ func (s *PostgresStore) TeacherOverview(teacherID string, all bool) (*TeacherOve
 	return out, nil
 }
 
-// TeacherCourseStats возвращает разбивку по курсам одним агрегирующим
-// запросом: по каждому курсу области видимости — активные ученики, средний
-// прогресс (LATERAL по записям), succeeded-выручка и рейтинг из карточки
-// курса. Порядок — revenueCents desc, students desc, title без учёта
-// регистра (id — детерминированный tie-break); limit 50 по умолчанию,
-// максимум 200. Ошибки БД логируются и дают пустой список — как у остальных
-// методов StoreAPI без error в сигнатуре.
 // TeacherCourseStatsTotal — общее число курсов в области видимости аналитики
 // до применения limit (T77). Отдельный COUNT вместо выборки всех строк.
 func (s *PostgresStore) TeacherCourseStatsTotal(teacherID string, all bool) int {
@@ -2280,6 +2265,13 @@ func (s *PostgresStore) TeacherCourseStatsTotal(teacherID string, all bool) int 
 	return total
 }
 
+// TeacherCourseStats возвращает разбивку по курсам одним агрегирующим
+// запросом: по каждому курсу области видимости — активные ученики, средний
+// прогресс (LATERAL по записям), succeeded-выручка и рейтинг из карточки
+// курса. Порядок — revenueCents desc, students desc, title без учёта
+// регистра (id — детерминированный tie-break); limit 50 по умолчанию,
+// максимум 200. Ошибки БД логируются и дают пустой список — как у остальных
+// методов StoreAPI без error в сигнатуре.
 func (s *PostgresStore) TeacherCourseStats(teacherID string, all bool, limit int) []*TeacherCourseStat {
 	teacherID, ok := teacherStatsTeacherID(teacherID, all)
 	if !ok {

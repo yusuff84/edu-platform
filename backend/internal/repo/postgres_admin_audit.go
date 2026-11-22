@@ -34,7 +34,7 @@ func (s *PostgresStore) ListAuditEntries(q string, page, limit int) ([]*AuditEnt
 	}
 	rows, err := s.pool.Query(ctx,
 		`SELECT id::text, coalesce(actor_id::text,''), actor_email, action, ip, created_at FROM admin_audit`+where+
-			` ORDER BY created_at DESC LIMIT $2 OFFSET $3`, like, limit, (page-1)*limit)
+			` ORDER BY created_at DESC LIMIT $2 OFFSET $3`, like, limit, PageOffset(page, limit))
 	if err != nil {
 		log.Printf("postgres ListAuditEntries: %v", err)
 		return out, total

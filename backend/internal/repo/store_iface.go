@@ -21,6 +21,12 @@ type StoreAPI interface {
 	ListAccountSessions(userID string) ([]*Session, error)
 	RevokeAccountSession(userID, publicID string) (bool, error)
 	RevokeOtherAccountSessions(userID, keepSessionID string) error
+	// ClaimEmailOwnership фиксирует, что владение email подтверждено извне
+	// (вход через Яндекс): ставит email_verified_at (если не стоял), заменяет
+	// хеш пароля на passwordHash и завершает все сессии и письма-токены
+	// пользователя — одной транзакцией. ErrNotFound — нет пользователя или он
+	// заблокирован.
+	ClaimEmailOwnership(userID, passwordHash string) error
 	AcquireBillingLock(context.Context) (func(), error)
 	HasCourseBillingHistory(string) (bool, error)
 	// Users
@@ -66,6 +72,7 @@ type StoreAPI interface {
 	// ErrNotFound — приглашения нет; ErrConflict — статус не sent.
 	RevokeInvite(id string) (*TeacherInvite, error)
 	// Courses
+	// CreateCourse создаёт черновик; nil — хранилище не сохранило курс.
 	CreateCourse(c *Course) *Course
 	GetCourseByID(id string) (*Course, bool)
 	GetCourseBySlug(slug string) (*Course, bool)
@@ -101,6 +108,7 @@ type StoreAPI interface {
 	// ErrNotFound — исходного курса нет.
 	CloneCourse(courseID string) (*Course, error)
 	// Modules
+	// CreateModule добавляет модуль в конец; nil — ошибка хранилища.
 	CreateModule(courseID, title string) *Module
 	GetModule(id string) (*Module, bool)
 	ListModulesByCourse(courseID string) []*Module
@@ -113,6 +121,7 @@ type StoreAPI interface {
 	// транзакцией (T19; идемпотентность порядка).
 	ReorderModules(courseID string, items []PositionItem) error
 	// Lessons
+	// CreateLesson добавляет урок в конец модуля; nil — ошибка хранилища.
 	CreateLesson(l *Lesson) *Lesson
 	GetLesson(id string) (*Lesson, bool)
 	ListLessonsByModule(moduleID string) []*Lesson

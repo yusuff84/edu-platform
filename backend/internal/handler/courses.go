@@ -45,11 +45,26 @@ func toCourseItem(c *repo.Course) courseItem {
 // favoriteCourseIDs — множество избранных курсов текущего зрителя. nil для
 // гостя: все isFavorite остаются false, лишнего запроса в хранилище нет.
 func (a *App) favoriteCourseIDs(r *http.Request) map[string]bool {
-	u := a.optionalUser(r)
+	return a.favoritesOf(a.viewerUser(r))
+}
+
+// favoritesOf — избранное уже известного зрителя (nil — гость).
+func (a *App) favoritesOf(u *repo.User) map[string]bool {
 	if u == nil {
 		return nil
 	}
 	return a.Store.FavoriteCourseIDs(u.ID)
+}
+
+// lessonsByModule раскладывает уроки курса по модулям одним запросом
+// ListLessonsByCourse (порядок внутри модуля — по позиции) вместо
+// ListLessonsByModule на каждый модуль (N+1 на странице курса).
+func (a *App) lessonsByModule(courseID string) map[string][]*repo.Lesson {
+	out := make(map[string][]*repo.Lesson)
+	for _, l := range a.Store.ListLessonsByCourse(courseID) {
+		out[l.ModuleID] = append(out[l.ModuleID], l)
+	}
+	return out
 }
 
 // toCourseItemFor — карточка курса с признаком избранного для зрителя.
@@ -229,7 +244,7 @@ func (a *App) GetCourse(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusNotFound, "Курс не найден")
 		return
 	}
-	viewer := a.optionalUser(r)
+	viewer := a.viewerUser(r)
 	full := viewer != nil && (viewer.ID == c.TeacherID || viewer.Role == repo.RoleAdmin)
 	canLearn := false
 	if viewer != nil {
@@ -242,9 +257,10 @@ func (a *App) GetCourse(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	mods := a.Store.ListModulesByCourse(c.ID)
+	byModule := a.lessonsByModule(c.ID)
 	mv := make([]moduleView, 0, len(mods))
 	for _, m := range mods {
-		lessons := a.Store.ListLessonsByModule(m.ID)
+		lessons := byModule[m.ID]
 		lv := make([]lessonView, 0, len(lessons))
 		for _, l := range lessons {
 			view := lessonToView(l, full)
@@ -256,7 +272,7 @@ func (a *App) GetCourse(w http.ResponseWriter, r *http.Request) {
 		}
 		mv = append(mv, moduleView{ID: m.ID, Title: m.Title, Position: m.Position, Lessons: lv})
 	}
-	favs := a.favoriteCourseIDs(r)
+	favs := a.favoritesOf(viewer)
 	writeJSON(w, http.StatusOK, map[string]any{
 		"course":  courseWithFavorite{Course: c, IsFavorite: favs[c.ID]},
 		"modules": mv,

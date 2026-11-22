@@ -7,9 +7,10 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-// All purchase, refund and webhook operations share this lock. PostgreSQL
-// advisory locks coordinate replicas as well as concurrent requests. A session
-// connection is retained until unlock; failed unlocks discard the connection.
+// AcquireBillingLock takes the billing lock shared by all purchase, refund and
+// webhook operations. PostgreSQL advisory locks coordinate replicas as well as
+// concurrent requests. A session connection is retained until unlock; failed
+// unlocks discard the connection.
 func (s *Store) AcquireBillingLock(ctx context.Context) (func(), error) {
 	select {
 	case s.billingToken <- struct{}{}:

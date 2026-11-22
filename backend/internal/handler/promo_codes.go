@@ -16,6 +16,7 @@ package handler
 
 import (
 	"errors"
+	"math"
 	"net/http"
 	"regexp"
 	"strings"
@@ -92,6 +93,11 @@ func (a *App) TeacherCreatePromoCode(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.MaxUses < 0 {
 		writeErr(w, http.StatusBadRequest, promoMaxUsesErr)
+		return
+	}
+	// promo_codes.max_uses — INT4: большее значение падало в Postgres (500).
+	if req.MaxUses > math.MaxInt32 {
+		writeErr(w, http.StatusBadRequest, "Лимит использований слишком большой")
 		return
 	}
 	var expiresAt *time.Time

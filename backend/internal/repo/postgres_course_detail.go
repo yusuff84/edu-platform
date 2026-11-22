@@ -122,10 +122,9 @@ func (s *PostgresStore) AdminCourseDetail(courseID string) (*AdminCourseDetailDa
 			log.Printf("postgres AdminCourseDetail scan: %v", err)
 			return nil, false
 		}
-		m, ok := modByID[modID]
-		if !ok {
+		if _, ok := modByID[modID]; !ok {
 			// courseID не сканируем заново: он равен аргументу запроса.
-			m = &Module{ID: modID, CourseID: courseID, Title: modTitle, Position: modPos}
+			m := &Module{ID: modID, CourseID: courseID, Title: modTitle, Position: modPos}
 			modByID[modID] = m
 			d.Modules = append(d.Modules, m)
 		}

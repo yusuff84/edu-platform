@@ -130,6 +130,14 @@ func (a *App) AdminCreateUser(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, msg)
 		return
 	}
+	// Имя — по тем же правилам, что PATCH /admin/users/{id}/profile: пробелы
+	// схлопываются, не длиннее 60 символов (раньше при создании длина не
+	// проверялась вовсе).
+	displayName := strings.Join(strings.Fields(req.DisplayName), " ")
+	if utf8.RuneCountInString(displayName) > 60 {
+		writeErr(w, http.StatusBadRequest, "Имя не длиннее 60 символов")
+		return
+	}
 	if _, exists := a.Store.GetUserByEmail(email); exists {
 		writeErr(w, http.StatusConflict, "Пользователь с таким email уже есть")
 		return
@@ -148,9 +156,9 @@ func (a *App) AdminCreateUser(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, "Не удалось создать пользователя")
 		return
 	}
-	if name := strings.TrimSpace(req.DisplayName); name != "" {
-		a.Store.SetUserDisplayName(u.ID, name)
-		u.DisplayName = name
+	if displayName != "" {
+		a.Store.SetUserDisplayName(u.ID, displayName)
+		u.DisplayName = displayName
 	}
 	a.auditAdmin(r, "Создан пользователь %s (роль %s)", u.Email, role)
 	writeJSON(w, http.StatusCreated, map[string]any{"user": a.adminUserItemOf(u), "password": generated})
@@ -277,17 +285,13 @@ func (a *App) AdminUserCourses(w http.ResponseWriter, r *http.Request) {
 		if !ok {
 			continue
 		}
-		lessons := a.Store.ListLessonsByCourse(c.ID)
-		done := 0
-		for _, l := range lessons {
-			if a.Store.IsLessonCompleted(u.ID, l.ID) {
-				done++
-			}
-		}
+		// Два счётчика вместо IsLessonCompleted на каждый урок курса.
 		items = append(items, adminUserCourse{
 			CourseID: c.ID, CourseTitle: c.Title, Status: e.Status,
-			EnrolledAt: e.CreatedAt.UTC().Format("2006-01-02T15:04:05Z07:00"),
-			CompletedLessons: done, TotalLessons: len(lessons), CertificateNumber: certs[c.ID],
+			EnrolledAt:        e.CreatedAt.UTC().Format("2006-01-02T15:04:05Z07:00"),
+			CompletedLessons:  a.Store.CountCompletedLessons(u.ID, c.ID),
+			TotalLessons:      a.Store.CountLessonsByCourse(c.ID),
+			CertificateNumber: certs[c.ID],
 		})
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"user": a.adminUserItemOf(u), "items": items})
@@ -532,4 +536,3 @@ func (a *App) AdminPutSiteSettings(w http.ResponseWriter, r *http.Request) {
 	a.auditAdmin(r, "Изменены тексты сайта")
 	writeJSON(w, http.StatusOK, map[string]any{"settings": a.Store.GetSiteSettings()})
 }
-

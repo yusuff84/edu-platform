@@ -5,7 +5,27 @@
 // поэтому замена на SQL не потребует менять handler/service слои.
 package repo
 
-import "time"
+import (
+	"math"
+	"time"
+)
+
+// maxPageOffset — смещение «за концом любой выборки» для заведомо далёких страниц.
+const maxPageOffset = math.MaxInt32
+
+// PageOffset возвращает смещение страницы (page с 1) без переполнения int:
+// page < 1 или limit <= 0 — 0; огромный page (например, 9223372036854775807
+// из query-параметра) раньше давал отрицательное смещение — панику на срезе
+// in-memory и ошибку OFFSET в Postgres. Теперь это просто пустая страница.
+func PageOffset(page, limit int) int {
+	if page <= 1 || limit <= 0 {
+		return 0
+	}
+	if page-1 > maxPageOffset/limit {
+		return maxPageOffset
+	}
+	return (page - 1) * limit
+}
 
 type Role string
 

@@ -107,6 +107,36 @@ func (s *PostgresStore) ConsumeAccountToken(hash, purpose, passwordHash string, 
 	return tx.Commit(ctx)
 }
 
+// ClaimEmailOwnership — см. StoreAPI: email подтверждён внешним провайдером.
+func (s *PostgresStore) ClaimEmailOwnership(userID, passwordHash string) error {
+	if !validUUID(userID) {
+		return ErrNotFound
+	}
+	ctx, cancel := s.ctx()
+	defer cancel()
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+	tag, err := tx.Exec(ctx,
+		`UPDATE users SET password_hash=$2, email_verified_at=COALESCE(email_verified_at, now())
+		 WHERE id=$1::uuid AND status!='blocked'`, userID, passwordHash)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	if _, err := tx.Exec(ctx, `DELETE FROM sessions WHERE user_id=$1::uuid`, userID); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(ctx, `DELETE FROM account_tokens WHERE user_id=$1::uuid`, userID); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
+}
+
 func (s *PostgresStore) CreateAccountSession(userID, expectedHash string, ttl time.Duration, userAgent, ip string) (*Session, error) {
 	ctx, cancel := s.ctx()
 	defer cancel()

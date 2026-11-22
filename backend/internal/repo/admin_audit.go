@@ -48,7 +48,7 @@ func (s *Store) ListAuditEntries(q string, page, limit int) ([]*AuditEntry, int)
 		matched = append(matched, &c)
 	}
 	total := len(matched)
-	start := (page - 1) * limit
+	start := PageOffset(page, limit)
 	if start >= total {
 		return []*AuditEntry{}, total
 	}

@@ -239,6 +239,9 @@ func (a *App) lessonInCourse(l *repo.Lesson, courseID string) bool {
 // проверяет общий validateQuiz из teacher.go (контракт P7): текст вопроса,
 // не менее двух непустых вариантов, правильный ответ в границах.
 func validateLessonContent(l *repo.Lesson) string {
+	if msg := validateLessonLinks(l); msg != "" {
+		return msg
+	}
 	switch l.Kind {
 	case repo.LessonVideoText:
 		if strings.TrimSpace(l.BodyMD) == "" && strings.TrimSpace(l.VideoURL) == "" {

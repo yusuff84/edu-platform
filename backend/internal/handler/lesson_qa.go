@@ -61,13 +61,11 @@ func courseVisibleForQA(c *repo.Course, u *repo.User) bool {
 
 // courseHasLesson — принадлежит ли урок курсу (через модуль). Для фильтра
 // lessonId и проверки «урок не из курса» (404 «Урок не найден в этом курсе»).
+// Точечная проверка (урок → модуль) вместо выборки всех уроков курса с
+// текстами и тестами на каждый запрос публичной ленты.
 func (a *App) courseHasLesson(courseID, lessonID string) bool {
-	for _, l := range a.Store.ListLessonsByCourse(courseID) {
-		if l.ID == lessonID {
-			return true
-		}
-	}
-	return false
+	l, ok := a.Store.GetLesson(lessonID)
+	return ok && a.lessonInCourse(l, courseID)
 }
 
 // canParticipateInQA — активная запись на курс, владелец курса или admin
@@ -108,7 +106,7 @@ func (a *App) ListLessonQuestions(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	if !courseVisibleForQA(c, a.optionalUser(r)) {
+	if !courseVisibleForQA(c, a.viewerUser(r)) {
 		writeErr(w, http.StatusNotFound, "Курс не найден")
 		return
 	}

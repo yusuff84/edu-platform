@@ -143,7 +143,7 @@ func (s *PostgresStore) ListAllCourses(f CourseFilter) ([]*Course, int) {
 		return nil, 0
 	}
 
-	offset := (page - 1) * limit
+	offset := PageOffset(page, limit)
 	rows, err := s.pool.Query(ctx, fmt.Sprintf(
 		`SELECT %s FROM courses c LEFT JOIN users u ON u.id = c.teacher_id
 		 WHERE 1=1%s ORDER BY %s %s, c.created_at DESC LIMIT %d OFFSET %d`,
@@ -232,7 +232,7 @@ func (s *PostgresStore) ListEnrollmentRows(f EnrollmentFilter) ([]EnrollmentRow,
 		return nil, 0
 	}
 
-	offset := (page - 1) * limit
+	offset := PageOffset(page, limit)
 	rows, err := s.pool.Query(ctx, fmt.Sprintf(`
 		SELECT e.id::text, e.student_id::text, e.course_id::text, e.status, e.created_at,
 		       COALESCE(u.email, ''), COALESCE(u.display_name, ''), COALESCE(c.title, ''),

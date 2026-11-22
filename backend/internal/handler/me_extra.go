@@ -215,10 +215,16 @@ func (a *App) MyPayments(w http.ResponseWriter, r *http.Request) {
 		end = len(all)
 	}
 	items := make([]myPaymentItem, 0, end-start)
+	// Название курса — один запрос на курс, а не на каждый платёж страницы
+	// (повторные попытки оплаты одного курса — частый случай).
+	titles := make(map[string]string)
 	for _, p := range all[start:end] {
-		title := ""
-		if c, found := a.Store.GetCourseByID(p.CourseID); found {
-			title = c.Title
+		title, known := titles[p.CourseID]
+		if !known {
+			if c, found := a.Store.GetCourseByID(p.CourseID); found {
+				title = c.Title
+			}
+			titles[p.CourseID] = title
 		}
 		items = append(items, myPaymentItem{
 			ID: p.ID, CourseID: p.CourseID, CourseTitle: title,

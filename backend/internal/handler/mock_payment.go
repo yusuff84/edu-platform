@@ -23,7 +23,10 @@ import (
 func (a *App) MockPaymentPage(w http.ResponseWriter, r *http.Request) {
 	id := strings.TrimSpace(chi.URLParam(r, "id"))
 	data := payments.MockConfirmData{ID: id, IDJSON: jsString(id)}
-	if p, ok := a.Store.GetPaymentByProviderID(id); ok {
+	// Только mock-платежи и только там, где mock разрешён: раньше страница
+	// и в production показывала сумму, курс и статус любого платежа
+	// (YooKassa/Stripe) по его id у провайдера.
+	if p, ok := a.Store.GetPaymentByProviderID(id); ok && p.Provider == "mock" && !a.mockPaymentsDisabled() {
 		description := ""
 		if c, found := a.Store.GetCourseByID(p.CourseID); found {
 			description = c.Title

@@ -105,6 +105,32 @@ func (s *Store) ConsumeAccountToken(hash, purpose, passwordHash string, now time
 	return nil
 }
 
+// ClaimEmailOwnership — см. StoreAPI: email подтверждён внешним провайдером.
+func (s *Store) ClaimEmailOwnership(userID, passwordHash string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	u, ok := s.users[userID]
+	if !ok || u.Status == UserBlocked {
+		return ErrNotFound
+	}
+	if u.EmailVerifiedAt == nil {
+		now := time.Now().UTC()
+		u.EmailVerifiedAt = &now
+	}
+	u.PasswordHash = passwordHash
+	for id, session := range s.sessions {
+		if session.UserID == userID {
+			delete(s.sessions, id)
+		}
+	}
+	for key, token := range s.accountTokens {
+		if token.UserID == userID {
+			delete(s.accountTokens, key)
+		}
+	}
+	return nil
+}
+
 func (s *Store) CreateAccountSession(userID, expectedHash string, ttl time.Duration, userAgent, ip string) (*Session, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

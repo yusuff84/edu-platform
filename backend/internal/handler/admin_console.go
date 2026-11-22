@@ -245,7 +245,10 @@ func (a *App) AdminArchiveCourse(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusConflict, "Курс уже в архиве")
 		return
 	}
-	a.Store.SetCourseStatus(c.ID, repo.CourseArchived, c.ModerationComment)
+	if !a.Store.SetCourseStatus(c.ID, repo.CourseArchived, c.ModerationComment) {
+		writeErr(w, http.StatusInternalServerError, "Не удалось архивировать курс")
+		return
+	}
 	updated, _ := a.Store.GetCourseByID(c.ID)
 	writeJSON(w, http.StatusOK, map[string]any{"course": updated})
 }
@@ -266,7 +269,10 @@ func (a *App) AdminUnpublishCourse(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusConflict, "Снять с публикации можно только опубликованный курс")
 		return
 	}
-	a.Store.SetCourseStatus(c.ID, repo.CourseDraft, c.ModerationComment)
+	if !a.Store.SetCourseStatus(c.ID, repo.CourseDraft, c.ModerationComment) {
+		writeErr(w, http.StatusInternalServerError, "Не удалось снять курс с публикации")
+		return
+	}
 	updated, _ := a.Store.GetCourseByID(c.ID)
 	writeJSON(w, http.StatusOK, map[string]any{"course": updated})
 }
@@ -289,7 +295,10 @@ func (a *App) AdminUnarchiveCourse(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusConflict, "Вернуть из архива можно только архивный курс")
 		return
 	}
-	a.Store.SetCourseStatus(c.ID, repo.CourseDraft, c.ModerationComment)
+	if !a.Store.SetCourseStatus(c.ID, repo.CourseDraft, c.ModerationComment) {
+		writeErr(w, http.StatusInternalServerError, "Не удалось вернуть курс из архива")
+		return
+	}
 	updated, _ := a.Store.GetCourseByID(c.ID)
 	writeJSON(w, http.StatusOK, map[string]any{"course": updated})
 }

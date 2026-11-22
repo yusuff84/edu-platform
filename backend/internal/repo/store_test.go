@@ -138,3 +138,18 @@ func TestListPaymentsJournalClampAndTotals(t *testing.T) {
 		t.Fatalf("фильтр pending: rows=%d total=%d err=%v", len(rows), total, err)
 	}
 }
+
+// PageOffset: огромный page не переполняет int (раньше (page-1)*limit
+// уходил в минус — паника среза in-memory и ошибка OFFSET в Postgres).
+func TestPageOffset(t *testing.T) {
+	cases := []struct{ page, limit, want int }{
+		{0, 20, 0}, {1, 20, 0}, {2, 20, 20}, {3, 0, 0},
+		{9223372036854775807, 20, maxPageOffset},
+		{9223372036854775807, 100, maxPageOffset},
+	}
+	for _, c := range cases {
+		if got := PageOffset(c.page, c.limit); got != c.want {
+			t.Errorf("PageOffset(%d, %d) = %d, ждали %d", c.page, c.limit, got, c.want)
+		}
+	}
+}

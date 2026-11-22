@@ -87,14 +87,14 @@ type EnrollmentRow struct {
 // оставался нулевым.
 type AdminTotals struct {
 	UsersTotal, UsersStudents, UsersTeachers, UsersAdmins, UsersBlocked int
-	UsersNew7                                                          int
-	CoursesTotal, CoursesDraft, CoursesReview, CoursesPublished        int
-	CoursesArchived                                                    int
-	PaymentsCount, PaidCents, PlatformFeeCents, TeacherCents           int
-	PaidLast30Cents                                                    int
-	EnrollmentsTotal, EnrollmentsActive                                int
-	ReviewsTotal                                                       int
-	AvgRating                                                          float64
+	UsersNew7                                                           int
+	CoursesTotal, CoursesDraft, CoursesReview, CoursesPublished         int
+	CoursesArchived                                                     int
+	PaymentsCount, PaidCents, PlatformFeeCents, TeacherCents            int
+	PaidLast30Cents                                                     int
+	EnrollmentsTotal, EnrollmentsActive                                 int
+	ReviewsTotal                                                        int
+	AvgRating                                                           float64
 }
 
 // clampPageLimit приводит пагинацию к безопасным границам 1-based
@@ -313,7 +313,7 @@ func (s *Store) ListAllCourses(f CourseFilter) ([]*Course, int) {
 	})
 
 	total := len(matched)
-	start := (page - 1) * limit
+	start := PageOffset(page, limit)
 	if start > total {
 		start = total
 	}
@@ -404,7 +404,7 @@ func (s *Store) ListEnrollmentRows(f EnrollmentFilter) ([]EnrollmentRow, int) {
 	sort.Slice(matched, func(i, j int) bool { return matched[i].CreatedAt.After(matched[j].CreatedAt) })
 
 	total := len(matched)
-	start := (page - 1) * limit
+	start := PageOffset(page, limit)
 	if start > total {
 		start = total
 	}

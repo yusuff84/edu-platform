@@ -278,7 +278,7 @@ func hubPageLimit(r *http.Request, def int) (int, int) {
 }
 
 func pageSlice[T any](items []T, page, limit int) []T {
-	start := (page - 1) * limit
+	start := repo.PageOffset(page, limit)
 	if start >= len(items) {
 		return []T{}
 	}
@@ -319,10 +319,10 @@ type adminQuestionItem struct {
 	Answered     bool   `json:"answered"`
 }
 
-func (a *App) allQuestions(courseID string) []adminQuestionItem {
+func (a *App) allQuestions(courses []*repo.Course, courseID string) []adminQuestionItem {
 	out := make([]adminQuestionItem, 0)
 	emails := map[string]string{}
-	for _, c := range a.allCourses() {
+	for _, c := range courses {
 		if courseID != "" && c.ID != courseID {
 			continue
 		}
@@ -354,7 +354,7 @@ func (a *App) AdminAllQuestions(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	status := q.Get("status")
 	page, limit := hubPageLimit(r, 20)
-	all := a.allQuestions(q.Get("courseId"))
+	all := a.allQuestions(a.allCourses(), q.Get("courseId"))
 	items := make([]adminQuestionItem, 0, len(all))
 	unanswered := 0
 	for _, it := range all {
@@ -390,6 +390,7 @@ func (a *App) AdminAllReviews(w http.ResponseWriter, r *http.Request) {
 	courseID := q.Get("courseId")
 	noReply := q.Get("noReply") == "1"
 	items := make([]hubReviewItem, 0)
+	users := map[string]*repo.User{}
 	for _, c := range a.allCourses() {
 		if courseID != "" && c.ID != courseID {
 			continue
@@ -402,7 +403,12 @@ func (a *App) AdminAllReviews(w http.ResponseWriter, r *http.Request) {
 				continue
 			}
 			it := hubReviewItem{Review: rv, CourseTitle: c.Title, CourseSlug: c.Slug}
-			if u, ok := a.Store.GetUserByID(rv.StudentID); ok {
+			u, cached := users[rv.StudentID]
+			if !cached {
+				u, _ = a.Store.GetUserByID(rv.StudentID)
+				users[rv.StudentID] = u
+			}
+			if u != nil {
 				it.StudentEmail, it.StudentName = u.Email, u.DisplayName
 			}
 			if needle != "" && !strings.Contains(strings.ToLower(rv.Body+" "+it.StudentEmail+" "+it.StudentName+" "+c.Title), needle) {
@@ -545,15 +551,17 @@ func (a *App) AdminOverview(w http.ResponseWriter, r *http.Request) {
 			newLeads++
 		}
 	}
+	// Список курсов читается один раз на всю сводку (раньше — дважды).
+	courses := a.allCourses()
 	unanswered := 0
-	for _, q := range a.allQuestions("") {
+	for _, q := range a.allQuestions(courses, "") {
 		if !q.Answered {
 			unanswered++
 		}
 	}
 	noReply := 0
 	lowRating := 0
-	for _, c := range a.allCourses() {
+	for _, c := range courses {
 		for _, rv := range a.Store.ListReviewsByCourse(c.ID) {
 			if rv.TeacherReply == "" {
 				noReply++

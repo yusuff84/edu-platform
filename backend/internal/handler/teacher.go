@@ -1,7 +1,9 @@
 package handler
 
 import (
+	"math"
 	"net/http"
+	"net/url"
 	"regexp"
 	"strings"
 	"time"
@@ -13,6 +15,13 @@ import (
 )
 
 var slugRe = regexp.MustCompile(`^[a-z0-9-]{3,120}$`)
+
+// maxPriceCents — верхняя граница цены: courses.price_cents — INT4. Большее
+// значение раньше падало в Postgres и давало 500 вместо понятной 400.
+const (
+	maxPriceCents    = math.MaxInt32
+	priceTooLargeErr = "Цена слишком большая"
+)
 
 // makeSlug строит уникальный slug (T41): кастомный транслитерируется
 // (translitSlug) и обязан попасть в slugRe, пустой — собирается из названия
@@ -76,6 +85,10 @@ func (a *App) TeacherCreateCourse(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "Цена не может быть отрицательной")
 		return
 	}
+	if req.PriceCents > maxPriceCents {
+		writeErr(w, http.StatusBadRequest, priceTooLargeErr)
+		return
+	}
 	slug, valid := a.makeSlug(req.Slug, req.Title)
 	if !valid {
 		writeErr(w, http.StatusBadRequest, "Некорректный или занятый slug (латиница, цифры, дефис, 3–120 символов)")
@@ -104,6 +117,10 @@ func (a *App) TeacherCreateCourse(w http.ResponseWriter, r *http.Request) {
 		PriceCents:  req.PriceCents,
 		Currency:    currency,
 	})
+	if c == nil {
+		writeErr(w, http.StatusInternalServerError, "Не удалось создать курс, попробуйте позже")
+		return
+	}
 	writeJSON(w, http.StatusCreated, c)
 }
 
@@ -157,6 +174,10 @@ func (a *App) TeacherCreateModule(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	m := a.Store.CreateModule(c.ID, strings.TrimSpace(req.Title))
+	if m == nil {
+		writeErr(w, http.StatusInternalServerError, "Не удалось создать модуль, попробуйте позже")
+		return
+	}
 	a.Store.TouchCourse(c.ID)
 	writeJSON(w, http.StatusCreated, m)
 }
@@ -343,6 +364,10 @@ func (a *App) TeacherCreateLesson(w http.ResponseWriter, r *http.Request) {
 			l.StartsAt = &parsed
 		}
 	}
+	if msg := validateLessonLinks(l); msg != "" {
+		writeErr(w, http.StatusBadRequest, msg)
+		return
+	}
 	switch req.Kind {
 	case repo.LessonVideoText:
 		if strings.TrimSpace(l.BodyMD) == "" && l.VideoURL == "" {
@@ -387,8 +412,39 @@ func (a *App) TeacherCreateLesson(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	l = a.Store.CreateLesson(l)
+	if l == nil {
+		writeErr(w, http.StatusInternalServerError, "Не удалось создать урок, попробуйте позже")
+		return
+	}
 	a.Store.TouchCourse(c.ID)
 	writeJSON(w, http.StatusCreated, l)
+}
+
+// lessonLinkErr — текст 400 для ссылки урока с недопустимой схемой.
+const lessonLinkErr = "Ссылка урока должна начинаться с http:// или https://"
+
+// validateLessonLinks отклоняет videoUrl/liveUrl со схемой, отличной от
+// http(s): фронтенд вставляет liveUrl в href, videoUrl — в src, и ссылка
+// вида javascript:… выполнялась бы у ученика по клику (хранимый XSS от
+// автора курса). Адреса без схемы («zoom.us/j/1», «/uploads/media/…»)
+// по-прежнему допустимы. Возвращает текст ошибки или пустую строку.
+func validateLessonLinks(l *repo.Lesson) string {
+	for _, raw := range []string{l.VideoURL, l.LiveURL} {
+		raw = strings.TrimSpace(raw)
+		if raw == "" {
+			continue
+		}
+		u, err := url.Parse(raw)
+		if err != nil {
+			return lessonLinkErr
+		}
+		switch strings.ToLower(u.Scheme) {
+		case "", "http", "https":
+		default:
+			return lessonLinkErr
+		}
+	}
+	return ""
 }
 
 // TeacherSubmitCourse — POST /teacher/courses/{id}/submit: guard минимум 1 модуль и 1 урок.
@@ -406,7 +462,10 @@ func (a *App) TeacherSubmitCourse(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "Курс пуст: добавьте минимум 1 модуль и 1 урок")
 		return
 	}
-	a.Store.SetCourseStatus(c.ID, repo.CourseReview, "")
+	if !a.Store.SetCourseStatus(c.ID, repo.CourseReview, "") {
+		writeErr(w, http.StatusInternalServerError, "Не удалось отправить курс на модерацию")
+		return
+	}
 	updated, _ := a.Store.GetCourseByID(c.ID)
 	writeJSON(w, http.StatusOK, updated)
 }

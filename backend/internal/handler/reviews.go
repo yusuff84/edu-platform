@@ -5,11 +5,15 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/go-chi/chi/v5"
 
 	"edu-platform/backend/internal/repo"
 )
+
+// reviewBodyMaxRunes — предел текста отзыва (как у ответа преподавателя).
+const reviewBodyMaxRunes = 2000
 
 // resolveCourse ищет курс по id, а затем по slug (для /courses/{id}/reviews).
 func (a *App) resolveCourse(idOrSlug string) (*repo.Course, bool) {
@@ -105,7 +109,14 @@ func (a *App) CreateReview(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "Оценка должна быть от 1 до 5")
 		return
 	}
-	rev, err := a.Store.CreateReview(u.ID, c.ID, req.Rating, strings.TrimSpace(req.Body))
+	body := strings.TrimSpace(req.Body)
+	// Текст отзыва публичный: тот же предел, что у ответа преподавателя и
+	// вопросов к урокам (раньше ограничивал только 1 МБ тела запроса).
+	if utf8.RuneCountInString(body) > reviewBodyMaxRunes {
+		writeErr(w, http.StatusBadRequest, "Отзыв не длиннее 2000 символов")
+		return
+	}
+	rev, err := a.Store.CreateReview(u.ID, c.ID, req.Rating, body)
 	if err != nil {
 		if errors.Is(err, repo.ErrAlreadyExists) {
 			writeErr(w, http.StatusConflict, "Вы уже оставили отзыв на этот курс")

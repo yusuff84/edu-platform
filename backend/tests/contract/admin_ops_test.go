@@ -47,6 +47,9 @@ func TestAdminOps(t *testing.T) {
 		t.Fatalf("старая сессия должна быть завершена: %d", rec.Code)
 	}
 	studentCookies = loginUser(t, router, "ops-student@example.com", "brand-new-pass")
+	if rec := doRequest(t, router, http.MethodGet, "/api/v1/me/courses", nil, studentCookies); rec.Code != http.StatusOK {
+		t.Fatalf("вход с новым паролем должен давать рабочую сессию: %d %s", rec.Code, rec.Body.String())
+	}
 
 	// Профиль: email и имя; занятый email — 409.
 	rec = doRequest(t, router, http.MethodPatch, "/api/v1/admin/users/"+studentID+"/profile", map[string]any{"displayName": "Иван Петров", "email": "ivan@example.com"}, admin)
@@ -72,7 +75,7 @@ func TestAdminOps(t *testing.T) {
 	var uc struct {
 		Items []struct {
 			CompletedLessons, TotalLessons int
-			CertificateNumber            string
+			CertificateNumber              string
 		} `json:"items"`
 	}
 	decodeBody(t, rec, &uc)

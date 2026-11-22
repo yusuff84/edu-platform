@@ -42,6 +42,12 @@ func (s *Store) SetUserEmail(id, email string) error {
 	u.Email = key
 	u.EmailVerifiedAt = nil
 	s.usersByEmail[key] = u
+	// Письма, выданные на прежний адрес, больше не действуют (как в Postgres).
+	for k, token := range s.accountTokens {
+		if token.UserID == id {
+			delete(s.accountTokens, k)
+		}
+	}
 	return nil
 }
 

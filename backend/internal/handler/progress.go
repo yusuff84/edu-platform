@@ -14,19 +14,32 @@ import (
 
 // courseProgress считает прогресс ученика по курсу и следующий урок.
 func (a *App) courseProgress(studentID string, c *repo.Course) (percent int, next map[string]any) {
+	percent, next, _ = a.courseProgressState(studentID, c)
+	return percent, next
+}
+
+// courseProgressState — прогресс, следующий урок и признак «пройдены все
+// уроки» (уроков ≥ 1). Пройденные уроки читаются одним запросом
+// ListCompletedLessonIDs, а не IsLessonCompleted на каждый урок (N+1 на
+// /me/courses и на каждом завершении урока).
+func (a *App) courseProgressState(studentID string, c *repo.Course) (percent int, next map[string]any, allDone bool) {
 	lessons := a.Store.ListLessonsByCourse(c.ID)
 	if len(lessons) == 0 {
-		return 0, nil
+		return 0, nil, false
+	}
+	completed := make(map[string]bool)
+	for _, id := range a.Store.ListCompletedLessonIDs(studentID, c.ID) {
+		completed[id] = true
 	}
 	done := 0
 	for _, l := range lessons {
-		if a.Store.IsLessonCompleted(studentID, l.ID) {
+		if completed[l.ID] {
 			done++
 		} else if next == nil {
 			next = map[string]any{"lessonId": l.ID, "title": l.Title, "kind": l.Kind}
 		}
 	}
-	return done * 100 / len(lessons), next
+	return done * 100 / len(lessons), next, done == len(lessons)
 }
 
 // MyCourses — GET /me/courses: курсы ученика с прогрессом.
@@ -86,15 +99,8 @@ func (a *App) CompleteLesson(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusNotFound, "Урок не найден")
 		return
 	}
-	// Урок должен принадлежать курсу.
-	belongs := false
-	for _, cl := range a.Store.ListLessonsByCourse(c.ID) {
-		if cl.ID == l.ID {
-			belongs = true
-			break
-		}
-	}
-	if !belongs {
+	// Урок должен принадлежать курсу (точечно через модуль урока).
+	if !a.lessonInCourse(l, c.ID) {
 		writeErr(w, http.StatusBadRequest, "Урок не принадлежит этому курсу")
 		return
 	}

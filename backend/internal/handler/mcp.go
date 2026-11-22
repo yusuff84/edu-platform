@@ -26,6 +26,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"io"
+	"math"
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
@@ -39,6 +40,11 @@ import (
 )
 
 const mcpProtocolVersion = "2025-06-18"
+
+// mcpMaxBody — предел тела POST /mcp (= лимиту nginx на запрос). Раньше тело
+// молча обрезалось на 4 МБ, и обещанная в upload_media загрузка до 3 МБ
+// (≈4 МБ в base64 + конверт JSON-RPC) превращалась в «Parse error».
+const mcpMaxBody = 6 << 20
 
 // RegisterMCPRoutes — MCP-эндпоинт и управление токенами в админке.
 func (a *App) RegisterMCPRoutes(r chi.Router) {
@@ -166,9 +172,13 @@ func (a *App) MCPHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	a.Store.TouchAPIToken(tok.ID)
-	body, err := io.ReadAll(io.LimitReader(r.Body, 4<<20))
+	body, err := io.ReadAll(io.LimitReader(r.Body, mcpMaxBody+1))
 	if err != nil {
 		writeErr(w, http.StatusBadRequest, "Некорректное тело запроса")
+		return
+	}
+	if len(body) > mcpMaxBody {
+		writeErr(w, http.StatusRequestEntityTooLarge, "MCP: запрос больше 6 МБ — большие файлы загружайте через POST /api/v1/mcp/media")
 		return
 	}
 	body = bytes.TrimSpace(body)
@@ -325,7 +335,7 @@ func mcpTools() []map[string]any {
 			obj(map[string]any{"course_id": str("UUID курса")}, "course_id")),
 		tool("upload_media", "Загрузить картинку или видео", "Загружает файл для урока и возвращает url для Markdown (![подпись](url)) или video_url. PNG, JPEG, WebP, GIF или MP4 до 3 МБ в base64 (больше — POST /api/v1/mcp/media multipart с тем же токеном, до 5,5 МБ).",
 			obj(map[string]any{"data_base64": str("Файл в base64 (можно с префиксом data:...;base64,)")}, "data_base64")),
-		tool("set_course_cover", "Обложка курса", "Ставит обложку курса (опубликованного тоже, кроме архива). Картинка PNG, JPEG или WebP до 5 МБ в base64; лучше 16:10, например 1600×1000, без текста — название курса сайт накладывает сам снизу слева.",
+		tool("set_course_cover", "Обложка курса", "Ставит обложку курса (опубликованного тоже, кроме архива). Картинка PNG, JPEG или WebP до 4 МБ в base64 (запрос целиком — до 6 МБ); лучше 16:10, например 1600×1000, без текста — название курса сайт накладывает сам снизу слева.",
 			obj(map[string]any{"course_id": str("UUID курса"), "image_base64": str("Картинка в base64 (можно с префиксом data:image/...;base64,)")}, "course_id", "image_base64")),
 	}
 }
@@ -367,6 +377,14 @@ func argStr(args map[string]any, k string) (string, bool) {
 func argInt(args map[string]any, k string) (int, bool) {
 	switch v := args[k].(type) {
 	case float64:
+		// Вне диапазона INT4 — значение, которое отклонит валидация обработчика
+		// (int(1e300) зависит от платформы, а price_rub*100 переполнял int).
+		switch {
+		case v > math.MaxInt32:
+			return math.MaxInt32 + 1, true
+		case v < math.MinInt32:
+			return math.MinInt32 - 1, true
+		}
 		return int(v), true
 	case int:
 		return v, true
@@ -525,7 +543,9 @@ func (a *App) mcpCallTool(ctx context.Context, u *repo.User, name string, args m
 		_ = mw.Close()
 		code, out = a.mcpInvokeRaw(ctx, u, a.TeacherUploadCover, http.MethodPost, map[string]string{"id": cid}, &buf, mw.FormDataContentType())
 	default:
-		return `{"error":"Неизвестный инструмент: ` + name + `"}`, true
+		// Имя экранируется: кавычка в name раньше ломала JSON ответа.
+		b, _ := json.Marshal(map[string]string{"error": "Неизвестный инструмент: " + name})
+		return string(b), true
 	}
 	if len(out) == 0 {
 		out = []byte(`{"ok":true}`)

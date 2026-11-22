@@ -3,6 +3,7 @@ package handler
 import (
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 	"unicode/utf8"
 
@@ -106,6 +107,16 @@ func (a *App) Register(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, userResponseOf(u))
 }
 
+// dummyPasswordHash — bcrypt-хеш для выравнивания времени входа по
+// несуществующему email (считается один раз, при первом таком входе).
+var dummyPasswordHash = sync.OnceValue(func() []byte {
+	hash, err := bcrypt.GenerateFromPassword([]byte("skillex-timing-equalizer"), bcrypt.DefaultCost)
+	if err != nil {
+		return nil
+	}
+	return hash
+})
+
 type loginRequest struct {
 	Email    string `json:"email"`
 	Password string `json:"password"`
@@ -119,6 +130,9 @@ func (a *App) Login(w http.ResponseWriter, r *http.Request) {
 	}
 	u, ok := a.Store.GetUserByEmail(req.Email)
 	if !ok {
+		// Та же работа bcrypt, что для существующего email: иначе по времени
+		// ответа видно, зарегистрирован ли адрес.
+		_ = bcrypt.CompareHashAndPassword(dummyPasswordHash(), []byte(req.Password))
 		writeErr(w, http.StatusUnauthorized, "Неверный email или пароль")
 		return
 	}
