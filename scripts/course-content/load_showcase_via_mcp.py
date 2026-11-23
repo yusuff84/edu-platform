@@ -29,7 +29,7 @@ def main():
         if c['slug'] in existing:
             print(f'пропуск {c["slug"]}: уже есть')
             continue
-        course = mcp.tool('create_course', title=c['title'], description=c['description'], price_rub=0,
+        course = mcp.tool('create_course', title=c['title'], description=c['description'], price_rub=c.get('price_rub', 0),
                           category=c['category'], slug=c['slug'])
         cid = course['id']
         n = 0

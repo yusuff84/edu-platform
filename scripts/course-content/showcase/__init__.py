@@ -14,6 +14,7 @@ PLACEHOLDER = (
 COURSES = [
     {
         'slug': 'python-s-nulya',
+        'price_rub': 25000,
         'title': 'Python с нуля',
         'category': 'programming',
         'description': 'Первый язык программирования без страха: переменные, условия, циклы, функции и работа '
@@ -30,6 +31,7 @@ COURSES = [
     },
     {
         'slug': 'web-razrabotka',
+        'price_rub': 22000,
         'title': 'Веб-разработка: HTML, CSS и JavaScript',
         'category': 'programming',
         'description': 'Как устроены сайты и как сделать свой: разметка, стили, адаптивная вёрстка и '
@@ -44,6 +46,7 @@ COURSES = [
     },
     {
         'slug': 'vr-ar-razrabotka',
+        'price_rub': 14000,
         'title': 'VR и AR: разработка виртуальной реальности',
         'category': 'programming',
         'description': 'Создаём VR-сцены и AR-приложения на Unity: 3D-пространство, взаимодействие с объектами, '
@@ -59,6 +62,7 @@ COURSES = [
     },
     {
         'slug': 'robototehnika-arduino',
+        'price_rub': 24000,
         'title': 'Робототехника и Arduino',
         'category': 'other',
         'description': 'Собираем электронные устройства и роботов: схемы, датчики, моторы и программирование '
@@ -74,6 +78,7 @@ COURSES = [
     },
     {
         'slug': 'kiberbezopasnost',
+        'price_rub': 20000,
         'title': 'Кибербезопасность для начинающих',
         'category': 'other',
         'description': 'Как атакуют компьютеры и сети и как от этого защищаться: уязвимости, шифрование, '
@@ -89,6 +94,7 @@ COURSES = [
     },
     {
         'slug': 'internet-marketolog',
+        'price_rub': 16000,
         'title': 'Интернет-маркетолог с нуля',
         'category': 'marketing',
         'description': 'Как привлекать клиентов в интернете: целевая аудитория, воронка продаж, контекстная '
@@ -103,6 +109,7 @@ COURSES = [
     },
     {
         'slug': 'smm-specialist',
+        'price_rub': 17000,
         'title': 'SMM-специалист',
         'category': 'marketing',
         'description': 'Ведение соцсетей бренда: стратегия, контент-план, визуал, тексты, работа с блогерами '
@@ -117,6 +124,7 @@ COURSES = [
     },
     {
         'slug': 'analiz-dannyh-sql',
+        'price_rub': 12000,
         'title': 'Анализ данных и SQL',
         'category': 'data',
         'description': 'Учимся находить ответы в данных: запросы SQL, таблицы, сводные отчёты, визуализация '
@@ -132,6 +140,7 @@ COURSES = [
     },
     {
         'slug': 'neyroseti-ii',
+        'price_rub': 11000,
         'title': 'Нейросети и ИИ на практике',
         'category': 'ai',
         'description': 'Как работают нейросети и как применять их в учёбе и работе: промпты, генерация текстов '
@@ -146,6 +155,7 @@ COURSES = [
     },
     {
         'slug': 'ux-ui-dizajn',
+        'price_rub': 23000,
         'title': 'UX/UI-дизайн в Figma',
         'category': 'design',
         'description': 'Проектируем удобные интерфейсы сайтов и приложений: исследование пользователей, '
