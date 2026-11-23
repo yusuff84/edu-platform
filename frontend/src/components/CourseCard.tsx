@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import type { MouseEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -69,6 +70,11 @@ export default function CourseCard({ course }: { course: CourseItem }): JSX.Elem
   // на вход, запрос избранного для него не отправляем.
   const meQuery = useQuery(meQueryOptions);
   const user = meQuery.data;
+
+  // Обложка-картинка (светлая иллюстрация) — плитка в светлом варианте: белая
+  // растушёвка снизу и тёмный заголовок. Если файл не загрузился — прежний вид.
+  const [coverFailed, setCoverFailed] = useState(false);
+  const hasPhoto = Boolean(course.coverPath) && !coverFailed;
 
   // Публичные виды курса отдают isFavorite (T73-extension): сердечко верное
   // сразу, ещё до загрузки общего списка. Когда список ['favorites'] уже
@@ -161,20 +167,18 @@ export default function CourseCard({ course }: { course: CourseItem }): JSX.Elem
       </button>
       {/* Без aria-label: доступное имя собирается из видимого текста карточки
           (название, рейтинг, цена), иначе Lighthouse видит несовпадение. */}
-      <Link className="tile" to={`/courses/${course.slug}`}>
+      <Link className={`tile${hasPhoto ? ' has-photo' : ''}`} to={`/courses/${course.slug}`}>
         {/* T57: есть coverPath (T54) — подложку рисует настоящий кадр; из-за
             градиента-подложки и onError плитка не «ломается», если файл
             недоступен (показывается прежний вид). */}
         <div className={`cover ${coverFor(course.slug || course.id)}`}>
-          {course.coverPath && (
+          {hasPhoto && (
             <img
               className="tile-cover-img"
               src={coverUrl(course.coverPath)}
               alt=""
               loading="lazy"
-              onError={(e) => {
-                e.currentTarget.style.display = 'none';
-              }}
+              onError={() => setCoverFailed(true)}
             />
           )}
         </div>

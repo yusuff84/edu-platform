@@ -258,6 +258,26 @@
   object-fit: cover;
 }
 
+/* Плитка с обложкой-иллюстрацией на белом фоне: вместо тёмного затемнения —
+   белая растушёвка снизу, заголовок и метка тёмные. */
+.tile.has-photo .cover::after {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0) 50%, rgba(255, 255, 255, 0.9) 76%, #fff 100%);
+}
+
+.tile.has-photo .tag {
+  color: var(--fg);
+  opacity: 0.7;
+}
+
+.tile.has-photo .tile-title {
+  color: var(--fg);
+}
+
+.tile.has-photo .tile-title small {
+  color: var(--muted);
+  opacity: 1;
+}
+
 /* Course overview: blue study-track hero and clean syllabus rows. */
 .course-overview .crumbs { margin-bottom: 20px; }
 .course-overview-hero {
