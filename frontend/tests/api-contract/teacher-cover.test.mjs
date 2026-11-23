@@ -203,7 +203,7 @@ test('coverUrl: пустое и nullish — undefined (плитка как ра�
 
 test('coverUrl: подставляет origin тестовой базы из .env.test', () => {
   const origin = new URL(TEST_BASE).origin; // http://127.0.0.1:8799
-  assert.equal(cover.coverUrl('/uploads/covers/a.png'), `${origin}/uploads/covers/a.png`);
+  assert.equal(cover.coverUrl('/uploads/covers/a.png'), `${origin}/uploads/covers/a.png?v=2`);
   assert.equal(cover.coverUrl('/uploads/covers/a.png').startsWith(TEST_BASE), false,
     'путь не должен склеиваться с /api/v1');
 });

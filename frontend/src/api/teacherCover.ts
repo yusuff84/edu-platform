@@ -83,6 +83,9 @@ export function removeCover(courseId: string): Promise<void> {
   }).then((res) => toResult<void>(res));
 }
 
+/** Меняется, когда нужно сбросить у посетителей закешированные обложки. */
+const COVER_CACHE_VERSION = '2';
+
 /**
  * Путь из coverPath ("/uploads/covers/<имя>") → URL для <img>.
  * Если BASE — абсолютный URL (тест-сборка или кастомный деплой), путь
@@ -92,5 +95,9 @@ export function removeCover(courseId: string): Promise<void> {
 export function coverUrl(coverPath: string | null | undefined): string | undefined {
   if (!coverPath) return undefined;
   const m = /^https?:\/\/[^/]+/.exec(BASE);
-  return m ? `${m[0]}${coverPath}` : coverPath;
+  const url = m ? `${m[0]}${coverPath}` : coverPath;
+  // Файл обложки перезаписывается под тем же именем, а браузеры кешировали
+  // старую картинку. Теперь /uploads/ отдаётся с Cache-Control: no-cache
+  // (nginx.conf); метка версии разово сбрасывает уже закешированные копии.
+  return `${url}${url.includes('?') ? '&' : '?'}v=${COVER_CACHE_VERSION}`;
 }
